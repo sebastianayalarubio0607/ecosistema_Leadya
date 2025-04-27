@@ -13,12 +13,14 @@ return new class extends Migration
     {
         Schema::create('integrations', function (Blueprint $table) {
             $table->id();
-            $table->string('name')->unique();
+            $table->string('name')->nullable();
             $table->string('description')->nullable();
-            $table->foreignId('integrationtypes_id')->constrained('integrationtypes')->onDelete('cascade');
+            $table->foreignId('integrationtype_id')->nullable()->constrained('integrationtypes')->onDelete('cascade');
+            $table->boolean('status')->nullable()->default(true);
+            $table->foreignId('customer_id')->nullable() ->constrained('customers')->onDelete('cascade');
             $table->string('url')->nullable();
-            $table->string('tokent')->nullable();
-            $table->boolean('status')->default(true);
+            $table->mediumText('tokent')->nullable();
+            
             $table->timestamps();
         });
     }
