@@ -9,16 +9,12 @@ class IntegrationType extends Model
 {
     use HasFactory;
 
-    protected $table = 'integrationtypes'; // 👈 AÑADE ESTO
+    // <<< Esta línea es OBLIGATORIA en tu caso
+    protected $table = 'integrationtypes';
 
     protected $fillable = [
         'name',
         'description',
         'status',
     ];
-
-    public function integrations()
-    {
-        return $this->hasMany(Integration::class);
-    }
 }

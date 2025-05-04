@@ -1,6 +1,5 @@
 <?php
 
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\LeadController;
@@ -9,20 +8,31 @@ use App\Http\Controllers\IntegrationTypeController;
 use App\Http\Controllers\LeadIntegrationController;
 use App\Http\Middleware\ApiAuthMiddleware;
 
-/*
-Route::get('/user', function (Request $request) {
-    return $request->user();
-})->middleware('auth:sanctum');
-*/
+//Route::apiResource('customers', CustomerController::class);
 
-// Rutas públicas
-Route::apiResource('customers', CustomerController::class);
-Route::post('/customers/{id}/regenerate-token', [CustomerController::class, 'regenerateToken']);
-Route::apiResource('leads', LeadController::class);
-// Rutas protegidas por el ApiAuthMiddleware
+// Usamos el middleware por alias registrado en Kernel
 Route::middleware([ApiAuthMiddleware::class])->group(function () {
     
-    Route::apiResource('integrations', IntegrationController::class);
+    Route::apiResource('customers', CustomerController::class);
+    Route::post('/customers/{id}/regenerate-token', [CustomerController::class, 'regenerateToken']);
     Route::apiResource('integration-types', IntegrationTypeController::class);
+    Route::apiResource('leads', LeadController::class);
+    Route::apiResource('integrations', IntegrationController::class);
     Route::apiResource('lead-integrations', LeadIntegrationController::class);
+});
+
+
+
+
+Route::middleware([ApiAuthMiddleware::class])->group(function () {
+    Route::get('/test-auth', function () {
+        return response()->json([
+            'message' => 'Autenticación exitosa',
+            'cliente' => request()->get('authenticated_customer')
+        ]);
+    });
+});
+
+Route::get('/prueba-sin-auth', function () {
+    return response()->json(['ok' => true]);
 });
