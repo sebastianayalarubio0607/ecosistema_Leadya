@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 
-class customer extends Model
+class Customer extends Model
 {
     protected $table = 'customers'; // Nombre de la tabla
     protected $fillable = ['name', 'description', 'token', 'status']; // Campos que se pueden asignar masivamente
