@@ -17,6 +17,9 @@ return new class extends Migration
             $table->string('description')->nullable();
             $table->string('token')->nullable();
             $table->boolean('status')->nullable();
+            $table->string('fb_pixel_id')->nullable();
+            $table->string('fb_access_token', 500)->nullable();
+            $table->string('fb_test_event_code')->nullable();
             $table->timestamps();
         });
     }

@@ -4,12 +4,14 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\FacebookConversionLog;
 
 class Lead extends Model
 {
     use HasFactory;
 
     protected $fillable = [
+        'id',
         'name',
         'last_Name',
         'position',
@@ -36,6 +38,8 @@ class Lead extends Model
         'customer_id',
         'integration_id',
         'message',
+        'fbp',
+        'fbc'
     ];
 
     // Relaciones
@@ -52,5 +56,10 @@ class Lead extends Model
     public function leadIntegrations()
     {
         return $this->hasMany(LeadIntegration::class);
+    }
+
+    public function fbConversionLogs()
+    {
+        return $this->hasMany(FacebookConversionLog::class);
     }
 }

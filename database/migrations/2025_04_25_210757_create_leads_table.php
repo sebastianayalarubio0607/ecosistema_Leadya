@@ -39,7 +39,8 @@ return new class extends Migration
             $table->mediumText('page_url')->nullable();
             $table->string('campaign_origin')->nullable();
 
-
+            $table->string('fbp')->nullable();
+            $table->string('fbc')->nullable();
 
 
 
