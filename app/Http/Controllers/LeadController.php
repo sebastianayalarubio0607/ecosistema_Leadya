@@ -104,10 +104,12 @@ class LeadController extends Controller
             SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
         }
         else if ($lead->campaign_origin == 'Gads'){
-            
+
         }
 
+        else if ($lead->campaign_origin == 'Tiktok'){
 
+        }
 
         /**
          * Procesa las integraciones para el lead y devuelve las integraciones procesadas.
