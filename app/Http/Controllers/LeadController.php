@@ -105,7 +105,6 @@ class LeadController extends Controller
         }
 
 
-
         /**
          * Procesa las integraciones para el lead y devuelve las integraciones procesadas.
          */
