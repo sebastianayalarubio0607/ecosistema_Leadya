@@ -5,9 +5,9 @@ namespace Database\Factories;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\IntegrationType>
+ * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Integrationtype>
  */
-class IntegrationTypeFactory extends Factory
+class Integrationtype extends Factory
 {
     public function definition(): array
     {
