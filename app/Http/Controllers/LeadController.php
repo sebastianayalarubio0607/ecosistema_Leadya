@@ -9,6 +9,8 @@ use Illuminate\Http\Request;
 use App\Http\Services\Customer\CustomerService;
 use App\Http\Services\Lead\LeadService;
 use App\Http\Services\Integration\IntegrationService;
+use App\Jobs\ProcessLeadIntegrationsJob;
+use App\Jobs\SendLeadToFacebook;
 
 
 class LeadController extends Controller
@@ -95,18 +97,18 @@ class LeadController extends Controller
 
 
 
-       // if ($lead->campaign_origin == 'fb') {
+        if ($lead->campaign_origin == 'fb') {
 
             // Dispara el job en cola (no bloquea la respuesta HTTP)
-        //    SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
-       // }
+           SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
+        }
 
 
         /**
          * Procesa las integraciones para el lead y devuelve las integraciones procesadas.
          */
 
-       // ProcessLeadIntegrationsJob::dispatch($lead, $integrations);
+        ProcessLeadIntegrationsJob::dispatch($lead, $integrations);
 
 
 
