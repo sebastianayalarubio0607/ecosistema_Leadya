@@ -27,7 +27,7 @@ class Integration extends Model
 
     public function integrationType()
     {
-        return $this->belongsTo(IntegrationType::class, 'integrationtype_id');
+        return $this->belongsTo(Integrationtype::class, 'integrationtype_id');
     }
 
     public function leadIntegrations()
