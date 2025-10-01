@@ -9,10 +9,7 @@ use Illuminate\Http\Request;
 use App\Http\Services\Customer\CustomerService;
 use App\Http\Services\Lead\LeadService;
 use App\Http\Services\Integration\IntegrationService;
-use App\Jobs\SendLeadToFacebook;
-use App\Jobs\ProcessLeadIntegrationsJob;
-use PhpParser\Node\Stmt\Return_;
-use App\Jobs\ProcessLeadIntegrations;
+
 
 class LeadController extends Controller
 {
