@@ -14,7 +14,7 @@ use Carbon\Carbon;
 /**
  * Servicio para manejar integraciones google sheets.
  */
-class GooglesheetsIntegrationService
+class GoogleSheetsIntegrationService
 {
     
     /** Procesa la integración del lead según el tipo de integración.
