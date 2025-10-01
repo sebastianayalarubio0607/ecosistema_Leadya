@@ -3,12 +3,12 @@
 namespace Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
-use App\Models\Integrationtype;
+use App\Models\IntegrationType;
 
-class IntegrationtypeFactory extends Factory
+class IntegrationTypeFactory extends Factory
 {
     // Tell Laravel which model this factory is for
-    protected $model = Integrationtype::class;
+    protected $model = IntegrationType::class;
 
     public function definition(): array
     {

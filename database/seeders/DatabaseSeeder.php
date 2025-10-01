@@ -5,7 +5,7 @@ namespace Database\Seeders;
 use App\Models\User;
 use App\Models\Integration;
 use App\Models\Customer;
-use App\Models\Integrationtype;
+use App\Models\IntegrationType;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -31,10 +31,10 @@ class DatabaseSeeder extends Seeder
         $customers = Customer::factory()->leadsYa()->create();
 
         //  // Crear tipos de integración
-        //$types = Integrationtype::factory()->googleSheets()->create();
+       // $types = IntegrationType::factory()->googleSheets()->create();
 
         // Crear integraciones ligadas a clientes y tipos
-       // $integrations = Integration::factory()->googleSheetsPrueba()->create();
+      // $integrations = Integration::factory()->googleSheetsPrueba()->create();
         
     }
 }
