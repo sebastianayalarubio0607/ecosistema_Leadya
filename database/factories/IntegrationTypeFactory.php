@@ -3,20 +3,22 @@
 namespace Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
+use App\Models\Integrationtype;
 
-/**
- * @extends \Illuminate\Database\Eloquent\Factories\Factory<\App\Models\Integrationtype>
- */
-class Integrationtype extends Factory
+class IntegrationtypeFactory extends Factory
 {
+    // Tell Laravel which model this factory is for
+    protected $model = Integrationtype::class;
+
     public function definition(): array
     {
         return [
             'name' => $this->faker->unique()->word(),
             'description' => $this->faker->optional()->sentence(),
             'status' => $this->faker->boolean(),
-            'created_at' => now(),
-            'updated_at' => now(),
+            // Usually you can omit timestamps; Eloquent fills them automatically.
+            // 'created_at' => now(),
+            // 'updated_at' => now(),
         ];
     }
 
@@ -34,3 +36,4 @@ class Integrationtype extends Factory
         ]);
     }
 }
+
