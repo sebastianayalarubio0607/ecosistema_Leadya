@@ -31,10 +31,10 @@ class DatabaseSeeder extends Seeder
         $customers = Customer::factory()->leadsYa()->create();
 
         //  // Crear tipos de integración
-        $types = Integrationtype::factory()->googleSheets()->create();
+        //$types = Integrationtype::factory()->googleSheets()->create();
 
         // Crear integraciones ligadas a clientes y tipos
-        $integrations = Integration::factory()->googleSheetsPrueba()->create();
+       // $integrations = Integration::factory()->googleSheetsPrueba()->create();
         
     }
 }
