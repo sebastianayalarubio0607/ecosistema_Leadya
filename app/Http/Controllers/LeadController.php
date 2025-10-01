@@ -98,18 +98,18 @@ class LeadController extends Controller
 
 
 
-        if ($lead->campaign_origin == 'fb') {
+       // if ($lead->campaign_origin == 'fb') {
 
             // Dispara el job en cola (no bloquea la respuesta HTTP)
-            SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
-        }
+        //    SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
+       // }
 
 
         /**
          * Procesa las integraciones para el lead y devuelve las integraciones procesadas.
          */
 
-        ProcessLeadIntegrationsJob::dispatch($lead, $integrations);
+       // ProcessLeadIntegrationsJob::dispatch($lead, $integrations);
 
 
 
