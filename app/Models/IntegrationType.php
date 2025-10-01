@@ -10,7 +10,7 @@ class IntegrationType extends Model
     use HasFactory;
 
     // <<< Esta línea es OBLIGATORIA en tu caso
-    protected $table = 'IntegrationTypes';
+    protected $table = 'integrationtypes';
 
     protected $fillable = [
         'name',
