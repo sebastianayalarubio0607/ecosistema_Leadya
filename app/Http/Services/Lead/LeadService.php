@@ -43,7 +43,7 @@ class LeadService
     {
         $validated = $request->validate([
             'name'            => 'required|string|max:255',
-            'last_Name'       => 'nullable|string|max:255',
+            'last_name'       => 'nullable|string|max:255',
             'position'        => 'nullable|string|max:255',
             'city'            => 'nullable|string|max:255',
             'age'             => 'nullable|string|max:255',
@@ -53,7 +53,7 @@ class LeadService
             'phone'           => 'required|string|max:255',
             'status'          => 'nullable|boolean',
             'tc'              => 'nullable|boolean',
-            'fields_Custom'   => 'nullable|array',
+            'fields_custom'   => 'nullable|array',
             'agent'           => 'nullable|string|max:255',
             'service_city'    => 'nullable|string|max:255',
             'children'        => 'nullable|string|max:255',

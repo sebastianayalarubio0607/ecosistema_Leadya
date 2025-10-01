@@ -29,7 +29,7 @@ class LetyIntegrationService
             'Content-Type' => 'application/x-www-form-urlencoded',
         ])->asForm()->post($url, [
             'name' => $lead->name,
-            'last_Name' => $lead->last_Name,
+            'last_name' => $lead->last_name,
             'position' => $lead->position,
             'city' => $lead->city,
             'age' => $lead->age,
@@ -39,7 +39,7 @@ class LetyIntegrationService
             'phone' => $lead->phone,
             'status' => $lead->status,
             'tc' => $lead->tc,
-            'fields_Custom' => json_encode($lead->fields_Custom),
+            'fields_custom' => json_encode($lead->fields_Custom),
             'agent' => $lead->agent,
             'service_city' => $lead->service_city,
             'children' => $lead->children,

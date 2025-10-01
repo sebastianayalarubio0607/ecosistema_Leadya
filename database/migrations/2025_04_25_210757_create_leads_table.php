@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('leads', function (Blueprint $table) {
             $table->id();
             $table->string('name')->nullable();
-            $table->string('last_Name')->nullable();
+            $table->string('last_name')->nullable();
             $table->string('position')->nullable();
             $table->string('city')->nullable();
             $table->string('age')->nullable();
@@ -24,7 +24,7 @@ return new class extends Migration
             $table->string('phone')->nullable();
             $table->boolean('status')->nullable();
             $table->boolean('tc')->nullable();
-            $table->json('fields_Custom')->nullable();
+            $table->json('fields_custom')->nullable();
 
 
             $table->string('agent')->nullable();
