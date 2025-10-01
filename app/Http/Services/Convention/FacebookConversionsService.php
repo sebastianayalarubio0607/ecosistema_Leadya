@@ -110,7 +110,7 @@ class FacebookConversionsService
         $email   = $lead->email ?? null;
         $phone   = $lead->phone ?? null;
         $fname   = $lead->name ?? null;
-        $lname   = $lead->last_Name ?? null;
+        $lname   = $lead->last_name ?? null;
         $city    = $lead->city ?? null;
         $country = $lead->country ?? null;
         $fbp     = $lead->fbp ?? null;

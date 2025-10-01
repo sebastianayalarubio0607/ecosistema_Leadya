@@ -34,7 +34,7 @@ return new class extends Migration
             $table->string('effective_lead')->nullable();
             $table->string('reference')->nullable();
             $table->string('service')->nullable();
-            $table->mediumText('remote_iP')->nullable();
+            $table->mediumText('remote_ip')->nullable();
             $table->string('page')->nullable();
             $table->mediumText('page_url')->nullable();
             $table->string('campaign_origin')->nullable();
