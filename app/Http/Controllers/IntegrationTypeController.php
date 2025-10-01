@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Integrationtype;
+use App\Models\IntegrationType;
 use Illuminate\Http\Request;
 
-class IntegrationtypeController extends Controller
+class IntegrationTypeController extends Controller
 {
     // Listar todos los tipos de integración
     public function index(Request $request)
@@ -18,10 +18,10 @@ class IntegrationtypeController extends Controller
 
         if ($customerId == 1) {
             // Admin: devolver todos
-            $types = Integrationtype::all();
+            $types = IntegrationType::all();
         } else {
             // Cliente normal: devolver solo sus tipos de integración
-            $types = Integrationtype::where('customer_id', $customerId)->get();
+            $types = IntegrationType::where('customer_id', $customerId)->get();
         }
 
         return response()->json($types);
@@ -43,7 +43,7 @@ class IntegrationtypeController extends Controller
             'status' => 'required|boolean',
         ]);
 
-        $type = Integrationtype::create([
+        $type = IntegrationType::create([
             'name' => $validated['name'],
             'description' => $validated['description'] ?? null,
             'status' => $validated['status'],
@@ -65,7 +65,7 @@ class IntegrationtypeController extends Controller
             return response()->json(['message' => 'Missing X-Customer-ID header'], 400);
         }
 
-        $type = Integrationtype::find($id);
+        $type = IntegrationType::find($id);
 
         if (!$type) {
             return response()->json(['message' => 'Integration Type not found'], 404);
@@ -88,7 +88,7 @@ class IntegrationtypeController extends Controller
             return response()->json(['message' => 'Missing X-Customer-ID header'], 400);
         }
 
-        $type = Integrationtype::find($id);
+        $type = IntegrationType::find($id);
 
         if (!$type) {
             return response()->json(['message' => 'Integration Type not found'], 404);
@@ -122,7 +122,7 @@ class IntegrationtypeController extends Controller
             return response()->json(['message' => 'Missing X-Customer-ID header'], 400);
         }
 
-        $type = Integrationtype::find($id);
+        $type = IntegrationType::find($id);
 
         if (!$type) {
             return response()->json(['message' => 'Integration Type not found'], 404);

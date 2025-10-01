@@ -4,7 +4,7 @@ namespace Database\Factories;
 
 use Illuminate\Database\Eloquent\Factories\Factory;
 use App\Models\Integration;
-use App\Models\Integrationtype;
+use App\Models\IntegrationType;
 use App\Models\Customer;
 
 /**
@@ -17,7 +17,7 @@ class IntegrationFactory extends Factory
         return [
             'name' => $this->faker->words(2, true), // Ej: "Google Sheets"
             'description' => $this->faker->optional()->sentence(),
-            'Integrationtype_id' => Integrationtype::factory(), // Relación con factory de Integrationtype
+            'IntegrationType_id' => IntegrationType::factory(), // Relación con factory de IntegrationType
             'status' => $this->faker->boolean(),
             'customer_id' => Customer::factory(), // Relación con factory de Customer
             'url' => $this->faker->optional()->url(),
@@ -35,7 +35,7 @@ class IntegrationFactory extends Factory
         return $this->state(fn () => [
             'name' => 'google_sheets prueba',
             'description' => 'prueba',
-            'Integrationtype_id' => 1, // debe existir en la BD
+            'IntegrationType_id' => 1, // debe existir en la BD
             'status' => 1,
             'customer_id' => 1, // debe existir en la BD
             'url' => 'https://script.google.com/macros/s/AKfycbzmFZUxTWwBGWUEO-c7KpjUpmANZnYJOWFyyEDaXS5vscmxMYHSt5kR3rHoFd0uJdcv/exec',
