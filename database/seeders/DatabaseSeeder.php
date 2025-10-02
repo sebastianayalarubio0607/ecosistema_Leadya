@@ -18,12 +18,7 @@ class DatabaseSeeder extends Seeder
     {
         // User::factory(10)->create();
 
-        User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@test.com',
-        ]);
-
-
+        $user = User::factory()->primerUsuario()->create();
 
 
 
@@ -31,11 +26,9 @@ class DatabaseSeeder extends Seeder
         $customers = Customer::factory()->leadsYa()->create();
 
         //  // Crear tipos de integración
-       // $types = IntegrationType::factory()->googleSheets()->create();
+        $types = IntegrationType::factory()->googleSheets()->create();
 
         // Crear integraciones ligadas a clientes y tipos
-      // $integrations = Integration::factory()->googleSheetsPrueba()->create();
-        
+        $integrations = Integration::factory()->googleSheetsPrueba()->create();
     }
 }
-

@@ -4,6 +4,11 @@ namespace App\Http\Controllers;
 
 
 use App\Models\Lead;
+use App\Models\LeadIntegration;
+use App\Models\Integration;
+
+
+
 use Illuminate\Http\Request;
 
 use App\Http\Services\Customer\CustomerService;
@@ -93,7 +98,8 @@ class LeadController extends Controller
         */
         $integrations = $this->integrationService->getActiveIntegrations($lead->customer_id);
 
-
+    
+//return $integrations;
 
 
 

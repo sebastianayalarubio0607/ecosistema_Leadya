@@ -36,7 +36,7 @@ class IntegrationService
     {
         return Integration::where('customer_id', $customer_id)
             ->where('status', 1)
-            ->with(['integrationType' => function ($query) {
+            ->with(['integrationtype' => function ($query) {
                 // Aquí puedes agregar filtros adicionales si lo necesitas
             }])
             ->get();
@@ -68,7 +68,7 @@ class IntegrationService
     protected function sendToIntegration(Lead $lead, Integration $integration, LeadIntegration $leadIntegration)
     {
         try {
-            $type = strtolower($integration->integrationType->name ?? 'webhook');
+            $type = strtolower($integration->integrationtype->name ?? 'webhook');
 
             // Mapa de integraciones y sus manejadores
             $handlers = [
@@ -119,7 +119,7 @@ class IntegrationService
             'integration_id'   => $leadIntegration->integration_id,
             'customer_id'      => $lead->customer_id,
             'integration_url'  => $integration->url,
-            'integration_type' => $integration->integrationType->name ?? 'desconocido',
+            'integration_type' => $integration->integrationtype->name ?? 'desconocido',
             'error_message'    => $e->getMessage(),
             'exception_class'  => get_class($e),
             'timestamp'        => now()->toDateTimeString(),

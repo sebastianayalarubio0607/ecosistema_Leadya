@@ -25,15 +25,29 @@ class UserFactory extends Factory
     {
         return [
             'name' => fake()->name(),
-            'email' => 'sebastian.ayala@leadsya.com',
+            'email' => fake()->unique()->safeEmail(),
             'email_verified_at' => now(),
-            'password' => static::$password ??= Hash::make('Temp.1122'),
+            'password' => static::$password ??= Hash::make('password'),
             'remember_token' => Str::random(10),
         ];
     }
 
     /**
-     * Indicate that the model's email address should be unverified.
+     * Estado para crear el primer usuario fijo
+     */
+    public function primerUsuario(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'name' => 'sebastian ayala',
+            'email' => 'sebastian.ayala@leadsya.com',
+            'email_verified_at' => now(),
+            'password' => static::$password ??= Hash::make('Temp.1122'),
+            'remember_token' => Str::random(10),
+        ]);
+    }
+
+    /**
+     * Indicar que el correo no está verificado
      */
     public function unverified(): static
     {

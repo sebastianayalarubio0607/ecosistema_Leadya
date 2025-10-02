@@ -12,7 +12,7 @@ class Integration extends Model
     protected $fillable = [
         'name',
         'description',
-        'IntegrationType_id',
+        'integrationtype_id',
         'customer_id',
         'url',
         'tokent',
@@ -25,9 +25,9 @@ class Integration extends Model
         return $this->belongsTo(Customer::class);
     }
 
-    public function IntegrationType()
+    public function integrationtype()
     {
-        return $this->belongsTo(IntegrationType::class, 'IntegrationType_id');
+        return $this->belongsTo(Integrationtype::class, 'integrationtype_id');
     }
 
     public function leadIntegrations()
