@@ -27,6 +27,10 @@ class DatabaseSeeder extends Seeder
 
         //  // Crear tipos de integración
         $types = IntegrationType::factory()->googleSheets()->create();
+                //  // Crear tipos de integración
+        $types = IntegrationType::factory()->kommo()->create();
+                //  // Crear tipos de integración
+        $types = IntegrationType::factory()->lety()->create();
 
         // Crear integraciones ligadas a clientes y tipos
         $integrations = Integration::factory()->googleSheetsPrueba()->create();

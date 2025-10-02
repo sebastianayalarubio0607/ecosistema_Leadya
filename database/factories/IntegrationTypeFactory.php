@@ -35,5 +35,25 @@ class IntegrationtypeFactory extends Factory
             'updated_at' => '2025-09-18 19:33:02',
         ]);
     }
+        public function kommo(): static
+    {
+        return $this->state(fn () => [
+            'name' => 'kommo',
+            'description' => null,
+            'status' => 1,
+            'created_at' => '2025-09-18 19:32:39',
+            'updated_at' => '2025-09-18 19:33:02',
+        ]);
+    }
+        public function lety(): static
+    {
+        return $this->state(fn () => [
+            'name' => 'lety',
+            'description' => null,
+            'status' => 1,
+            'created_at' => '2025-09-18 19:32:39',
+            'updated_at' => '2025-09-18 19:33:02',
+        ]);
+    }
 }
 
