@@ -12,17 +12,17 @@ class IntegrationController extends Controller
     {
         $customerId = $request->header('X-Customer-ID');
 
-        if (!$customerId) {
+        if (! $customerId) {
             return response()->json(['message' => 'Missing X-Customer-ID header'], 400);
         }
 
         if ($customerId == 1) {
             // Admin: devolver todas
-            $integrations = Integration::with('integrationType')->get();
+            $integrations = Integration::with('integrationtype')->get();
         } else {
             // Cliente normal: sólo sus integraciones
             $integrations = Integration::where('customer_id', $customerId)
-                ->with('integrationType')
+                ->with('integrationtype')
                 ->get();
         }
 
@@ -39,12 +39,17 @@ class IntegrationController extends Controller
             'integrationtype_id' => 'required|exists:integrationtypes,id',
             'url' => 'required|url',
             'tokent' => 'nullable|string',
-            'status' => 'required|boolean'
+            'status' => 'required|boolean',
+            'crm_Id_phone' => ['nullable', 'string', 'max:255'],
+            'crm_Id_service' => ['nullable', 'string', 'max:255'],
+            'crm_Id_fuente' => ['nullable', 'string', 'max:255'],
+            'crm_Id_email' => ['nullable', 'string', 'max:255'],
+
         ]);
-        
+
         $customerId = $request->header('X-Customer-ID');
 
-        if (!$customerId) {
+        if (! $customerId) {
             return response()->json(['message' => 'Missing X-Customer-ID header'], 400);
         }
 
@@ -60,7 +65,7 @@ class IntegrationController extends Controller
 
         return response()->json([
             'message' => 'Integration created successfully',
-            'data' => $integration
+            'data' => $integration,
         ], 201);
     }
 
@@ -70,10 +75,10 @@ class IntegrationController extends Controller
         $customerId = $request->header('X-Customer-ID');
 
         $integration = ($customerId == 1)
-            ? Integration::with('integrationType')->find($id) // Admin: ver cualquier integración
-            : Integration::where('customer_id', $customerId)->with('integrationType')->find($id);
+            ? Integration::with('integrationtype')->find($id) // Admin: ver cualquier integración
+            : Integration::where('customer_id', $customerId)->with('integrationtype')->find($id);
 
-        if (!$integration) {
+        if (! $integration) {
             return response()->json(['message' => 'Integration not found'], 404);
         }
 
@@ -89,7 +94,7 @@ class IntegrationController extends Controller
             ? Integration::find($id)
             : Integration::where('customer_id', $customerId)->find($id);
 
-        if (!$integration) {
+        if (! $integration) {
             return response()->json(['message' => 'Integration not found'], 404);
         }
 
@@ -100,13 +105,17 @@ class IntegrationController extends Controller
             'url' => 'required|url',
             'tokent' => 'nullable|string',
             'status' => 'required|boolean',
+            'crm_Id_phone' => ['nullable', 'string', 'max:255'],
+            'crm_Id_service' => ['nullable', 'string', 'max:255'],
+            'crm_Id_fuente' => ['nullable', 'string', 'max:255'],
+            'crm_Id_email' => ['nullable', 'string', 'max:255'],
         ]);
 
         $integration->update($validated);
 
         return response()->json([
             'message' => 'Integration updated successfully',
-            'data' => $integration
+            'data' => $integration,
         ]);
     }
 
@@ -119,7 +128,7 @@ class IntegrationController extends Controller
             ? Integration::find($id)
             : Integration::where('customer_id', $customerId)->find($id);
 
-        if (!$integration) {
+        if (! $integration) {
             return response()->json(['message' => 'Integration not found'], 404);
         }
 

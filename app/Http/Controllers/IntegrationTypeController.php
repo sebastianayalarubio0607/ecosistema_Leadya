@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\integrationtype;
+use App\Models\Integrationtype;
 use Illuminate\Http\Request;
 
 class IntegrationtypeController extends Controller

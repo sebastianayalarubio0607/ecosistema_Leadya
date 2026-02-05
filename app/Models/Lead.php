@@ -4,7 +4,6 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\FacebookConversionLog;
 
 class Lead extends Model
 {
@@ -40,22 +39,36 @@ class Lead extends Model
         'message',
         'fbp',
         'fbc',
+        'plataforma',
+        'lenguaje',
+        'geo',
+        'crm_id',
+        'crm_state',
     ];
 
     protected $casts = [
-      'status'        => 'boolean',
-        'tc'            => 'boolean',
-        'age'           => 'integer',
+        'status' => 'boolean',
+        'tc' => 'boolean',
+        'age' => 'integer',
         'fields_custom' => 'array', // si la columna es JSON; si es TEXT, quita este c
     ];
 
-
     // Compatibilidad con payloads legacy (acepta last_Name / fields_Custom)
-    public function setLastNameAttribute($value)      { $this->attributes['last_name'] = $value; }
-    public function setFieldsCustomAttribute($value)  { $this->attributes['fields_custom'] = is_array($value) ? json_encode($value) : $value; }
-    public function getFieldsCustomAttribute($value)  { return is_string($value) ? json_decode($value, true) ?? [] : ($value ?? []); }
+    public function setLastNameAttribute($value)
+    {
+        $this->attributes['last_name'] = $value;
+    }
 
-    
+    public function setFieldsCustomAttribute($value)
+    {
+        $this->attributes['fields_custom'] = is_array($value) ? json_encode($value) : $value;
+    }
+
+    public function getFieldsCustomAttribute($value)
+    {
+        return is_string($value) ? json_decode($value, true) ?? [] : ($value ?? []);
+    }
+
     // Relaciones
     public function customer()
     {
@@ -75,5 +88,10 @@ class Lead extends Model
     public function fbConversionLogs()
     {
         return $this->hasMany(FacebookConversionLog::class);
+    }
+
+    public function crmState()
+    {
+        return $this->belongsTo(CrmState::class, 'crm_state', 'id');
     }
 }

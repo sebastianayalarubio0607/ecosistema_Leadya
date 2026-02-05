@@ -17,6 +17,11 @@ class Integration extends Model
         'url',
         'tokent',
         'status',
+        'crm_Id_phone',
+        'crm_Id_service',
+        'crm_Id_fuente',
+        'crm_Id_email',
+        'public_key',
     ];
 
     // Relaciones
@@ -35,4 +40,3 @@ class Integration extends Model
         return $this->hasMany(LeadIntegration::class);
     }
 }
-

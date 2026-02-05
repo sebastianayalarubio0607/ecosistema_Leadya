@@ -19,6 +19,10 @@ class CustomerFactory extends Factory
             // O si prefieres simular:
             'token' => hash('sha256', $this->faker->uuid()),
 
+
+
+            
+
             'status' => $this->faker->boolean(),
             'fb_pixel_id' => $this->faker->optional()->regexify('[0-9]{15,16}'),
             'fb_access_token' => $this->faker->optional()->sha256(),
