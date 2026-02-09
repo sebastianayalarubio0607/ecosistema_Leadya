@@ -16,7 +16,7 @@ class FacebookConversionsService
      * @param  int  $customerId  El ID del cliente asociado al lead.
      * @return array Resultado del envío con detalles.
      */
-    public function sendLeadEvent(Lead $lead, int $customerId, string $event_name): array
+    public function sendLeadEvent(Lead $lead, int $customerId): array
     {
         
         /* Recupera credenciales del cliente */
@@ -39,9 +39,7 @@ class FacebookConversionsService
             ];
         }
 
-        if($event_name==null || $event_name==''){
-            $event_name='Lead';
-        }
+
 
         /* Construye el payload */
         [$userData, $customData] = $this->buildPayload($lead);
