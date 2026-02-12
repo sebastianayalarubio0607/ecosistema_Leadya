@@ -44,6 +44,8 @@ class Lead extends Model
         'geo',
         'crm_id',
         'crm_state',
+        'meta_id_ad',
+        'value',
     ];
 
     protected $casts = [
@@ -51,6 +53,7 @@ class Lead extends Model
         'tc' => 'boolean',
         'age' => 'integer',
         'fields_custom' => 'array', // si la columna es JSON; si es TEXT, quita este c
+        'value' => 'decimal:2',
     ];
 
     // Compatibilidad con payloads legacy (acepta last_Name / fields_Custom)

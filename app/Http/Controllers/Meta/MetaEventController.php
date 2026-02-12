@@ -18,7 +18,7 @@ class MetaEventController extends Controller
         }
 
         $items = $query
-            ->withCount('funnels')
+            ->withCount('crmStates') // ✅ antes funnels
             ->orderByDesc('id')
             ->paginate(15)
             ->appends($request->query());
@@ -35,7 +35,7 @@ class MetaEventController extends Controller
     {
         $data = $request->validate([
             'nombre'  => ['required', 'string', 'max:255'],
-            'estados' => ['required', 'string', 'max:50'], // si quieres: in:activo,inactivo
+            'estados' => ['required', 'string', 'max:50'],
         ]);
 
         $item = MetaEvent::create($data);
@@ -47,7 +47,10 @@ class MetaEventController extends Controller
 
     public function show(MetaEvent $meta_event)
     {
-        $meta_event->load(['funnels' => fn ($q) => $q->orderByDesc('id')]);
+        $meta_event->load([
+            'crmStates' => fn ($q) => $q->orderBy('name'),
+            'crmStates.qualificationModel', // opcional (si lo muestras)
+        ]);
 
         return view('meta.meta-events.show', ['item' => $meta_event]);
     }

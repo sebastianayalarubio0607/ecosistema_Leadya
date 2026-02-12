@@ -21,11 +21,9 @@ Route::post('leads-formualario', [LeadController::class, 'store']);
 // Usamos el middleware por alias registrado en Kernel
 Route::middleware([ApiAuthMiddleware::class])->group(function () {
     
-    Route::apiResource('customers', CustomerController::class);
-    Route::apiResource('integration-types', IntegrationTypeController::class);
+
     Route::apiResource('leads', LeadController::class);
-    Route::apiResource('integrations', IntegrationController::class);
-    Route::apiResource('lead-integrations', LeadIntegrationController::class);
+
 });
 
 

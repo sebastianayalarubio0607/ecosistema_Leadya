@@ -12,8 +12,8 @@ class MetaEvent extends Model
         'estados',
     ];
 
-    public function funnels(): HasMany
+    public function crmStates(): HasMany
     {
-        return $this->hasMany(Funnel::class, 'meta_event_id');
+        return $this->hasMany(CrmState::class, 'meta_event_id');
     }
 }
