@@ -1,11 +1,7 @@
 @extends('meta.layout')
 
 @section('title', 'Meta Events')
-<<<<<<< HEAD
 @section('subtitle', 'Eventos de Meta (relación: Meta Event → Funnels)')
-=======
-@section('subtitle', 'Eventos de conversión + relación con CRM States')
->>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba
 
 @section('header_actions')
     <a href="{{ route('meta.meta-events.create') }}"

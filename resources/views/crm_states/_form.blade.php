@@ -76,7 +76,6 @@
         </a>
     </div>
 </div>
-<<<<<<< HEAD
 
 @if(!$isEdit)
 <script>
@@ -96,5 +95,3 @@
   })();
 </script>
 @endif
-=======
->>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba

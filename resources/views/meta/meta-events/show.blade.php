@@ -1,11 +1,7 @@
 @extends('meta.layout')
 
 @section('title', 'Ver Meta Event')
-<<<<<<< HEAD
 @section('subtitle', 'Detalle del evento y funnels asociados')
-=======
-@section('subtitle', 'Detalle del evento y CRM States asociados')
->>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba
 
 @section('header_actions')
     <div class="flex gap-2">
@@ -43,7 +39,6 @@
             <table class="min-w-full text-sm">
                 <thead class="bg-white/5 text-white/70">
                     <tr>
-<<<<<<< HEAD
                         <th class="text-left px-3 py-2">Funnels asociados</th>
                         <th class="text-left px-3 py-2">Estado</th>
                     </tr>
@@ -57,26 +52,6 @@
                     @empty
                         <tr>
                             <td colspan="2" class="px-3 py-8 text-center text-white/60">No hay funnels asociados.</td>
-=======
-                        <th class="text-left px-3 py-2">CRM State ID</th>
-                        <th class="text-left px-3 py-2">Nombre</th>
-                        <th class="text-left px-3 py-2">Qualification</th>
-                    </tr>
-                </thead>
-
-                <tbody class="divide-y divide-white/10 text-white/80">
-                    @forelse($item->crmStates as $s)
-                        <tr class="hover:bg-white/5">
-                            <td class="px-3 py-2">{{ $s->id }}</td>
-                            <td class="px-3 py-2">{{ $s->name }}</td>
-                            <td class="px-3 py-2">{{ $s->qualificationModel?->name ?? $s->qualification ?? '—' }}</td>
-                        </tr>
-                    @empty
-                        <tr>
-                            <td colspan="3" class="px-3 py-8 text-center text-white/60">
-                                No hay CRM States asociados.
-                            </td>
->>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba
                         </tr>
                     @endforelse
                 </tbody>

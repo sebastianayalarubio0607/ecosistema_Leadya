@@ -445,11 +445,7 @@
                             class="text-white/80 font-semibold">{{ $totalLeads }}</span></div>
                 </div>
 
-<<<<<<< HEAD
                 <div class="flex gap-2 overflow-x-auto pb-2">
-=======
-                <div class="flex gap-4 overflow-x-auto pb-2">
->>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba
                     @foreach ($funnelCards as $card)
                         @php
                             $count = (int) ($card['count'] ?? 0);
@@ -470,11 +466,7 @@
                             );
                         @endphp
 
-<<<<<<< HEAD
                         <a href="{{ $url }}" class="w-[20%] block">
-=======
-                        <a href="{{ $url }}" class="min-w-[170px] block">
->>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba
                             <div class="text-center text-xs text-white/60 mb-2">{{ $pct }}%</div>
 
                             <div
@@ -501,30 +493,19 @@
 
         </div>
 
-<<<<<<< HEAD
         <h2 class="text-white font-bold texto-5xl ">Datos del CRM</h2>
 
-=======
->>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
             {{-- Leads por Cualificación (cards clicables) --}}
             <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 ">
                 <div class="flex items-center justify-between mb-3">
-<<<<<<< HEAD
                     <h3 class="text-white font-semibold">Leads agrupados por Cualificación</h3>
-=======
-                    <h3 class="text-white font-semibold">Leads por Cualificación</h3>
->>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba
                     <div class="text-xs text-white/50">Total: <span
                             class="text-white/80 font-semibold">{{ $totalLeads }}</span></div>
                 </div>
 
-<<<<<<< HEAD
                 <div class="flex gap-3 overflow-x-auto pb-2">
-=======
-                <div class="flex gap-4 overflow-x-auto pb-2">
->>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba
                     @foreach ($qualCards as $card)
                         @php
                             $count = (int) ($card['count'] ?? 0);
@@ -545,11 +526,7 @@
                             );
                         @endphp
 
-<<<<<<< HEAD
                         <a href="{{ $url }}" class="w-[20%] block">
-=======
-                        <a href="{{ $url }}" class="min-w-[170px] block">
->>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba
                             <div class="text-center text-xs text-white/60 mb-2">{{ $pct }}%</div>
 
                             <div
@@ -576,20 +553,12 @@
             {{-- Leads por Estado (cards clicables) --}}
             <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4">
                 <div class="flex items-center justify-between mb-3">
-<<<<<<< HEAD
                     <h3 class="text-white font-semibold">Leads agrupados por Estado del CRM</h3>
-=======
-                    <h3 class="text-white font-semibold">Leads por Estado</h3>
->>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba
                     <div class="text-xs text-white/50">Total: <span
                             class="text-white/80 font-semibold">{{ $totalLeads }}</span></div>
                 </div>
 
-<<<<<<< HEAD
                 <div class="flex gap-3 overflow-x-auto pb-2">
-=======
-                <div class="flex gap-4 overflow-x-auto pb-2">
->>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba
                     @foreach ($crmCards as $card)
                         @php
                             $count = (int) ($card['count'] ?? 0);
@@ -610,11 +579,7 @@
                             );
                         @endphp
 
-<<<<<<< HEAD
                         <a href="{{ $url }}" class="w-[20%] block">
-=======
-                        <a href="{{ $url }}" class="min-w-[170px] block">
->>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba
                             <div class="text-center text-xs text-white/60 mb-2">{{ $pct }}%</div>
 
                             <div
