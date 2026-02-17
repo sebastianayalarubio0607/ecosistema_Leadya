@@ -5,6 +5,7 @@ namespace App\Http\Controllers\CrmState;
 use App\Http\Controllers\Controller;
 use App\Models\CrmState;
 use App\Models\Integration;
+use App\Models\MetaEvent;
 use App\Models\Qualification;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
@@ -17,10 +18,13 @@ class CrmStateWebController extends Controller
         $q = $request->get('q');
 
         $crmstates = CrmState::query()
-            ->with('qualificationModel:id,name')
+            ->with([
+                'qualificationModel:id,name',
+                'metaEvent:id,nombre',
+            ])
             ->when($q, function ($query) use ($q) {
                 $query->where('id', 'like', "%{$q}%")
-                      ->orWhere('name', 'like', "%{$q}%");
+                    ->orWhere('name', 'like', "%{$q}%");
             })
             ->orderByDesc('id')
             ->paginate(15)
@@ -39,7 +43,9 @@ class CrmStateWebController extends Controller
 
         $qualifications = Qualification::orderBy('name')->get(['id', 'name']);
 
-        return view('crm_states.create', compact('crmstate', 'integrations', 'qualifications'));
+        $metaEvents = MetaEvent::orderBy('nombre')->get(['id', 'nombre', 'estados']);
+
+        return view('crm_states.create', compact('crmstate', 'integrations', 'qualifications', 'metaEvents'));
     }
 
     public function store(Request $request)
@@ -54,12 +60,13 @@ class CrmStateWebController extends Controller
 
         $validator = Validator::make($data, [
             'integration_id' => ['required', 'exists:integrations,id'],
-            'external_id'    => ['required', 'string', 'max:50', 'regex:/^[A-Za-z0-9_-]+$/'], // status_id de CRM suele ser numérico
+            'external_id'    => ['required', 'string', 'max:50', 'regex:/^[A-Za-z0-9_-]+$/'],
             'id'             => ['required', 'string', 'max:255', Rule::unique('crm_state', 'id')],
             'name'           => ['required', 'string', 'max:255'],
             'qualification'  => ['required', 'exists:qualification,id'],
+            'meta_event_id'  => ['nullable', 'exists:meta_events,id'],
         ], [
-           'external_id.regex' => 'El ID ingresado solo puede tener letras, números, guion (-) y guion bajo (_).',
+            'external_id.regex' => 'El ID ingresado solo puede tener letras, números, guion (-) y guion bajo (_).',
         ]);
 
         $validator->validate();
@@ -68,6 +75,7 @@ class CrmStateWebController extends Controller
             'id' => $finalId,
             'name' => $request->string('name'),
             'qualification' => $request->input('qualification'),
+            'meta_event_id' => $request->input('meta_event_id'),
         ]);
 
         return redirect()
@@ -77,7 +85,10 @@ class CrmStateWebController extends Controller
 
     public function show(CrmState $crmstate)
     {
-        $crmstate->load('qualificationModel:id,name');
+        $crmstate->load([
+            'qualificationModel:id,name',
+            'metaEvent:id,nombre,estados',
+        ]);
 
         [$integrationId, $externalId] = $this->splitId($crmstate->id);
 
@@ -89,7 +100,10 @@ class CrmStateWebController extends Controller
 
     public function edit(CrmState $crmstate)
     {
-        $crmstate->load('qualificationModel:id,name');
+        $crmstate->load([
+            'qualificationModel:id,name',
+            'metaEvent:id,nombre,estados',
+        ]);
 
         [$integrationId, $externalId] = $this->splitId($crmstate->id);
 
@@ -97,8 +111,16 @@ class CrmStateWebController extends Controller
             ->find($integrationId);
 
         $qualifications = Qualification::orderBy('name')->get(['id', 'name']);
+        $metaEvents = MetaEvent::orderBy('nombre')->get(['id', 'nombre', 'estados']);
 
-        return view('crm_states.edit', compact('crmstate', 'integrationId', 'externalId', 'integration', 'qualifications'));
+        return view('crm_states.edit', compact(
+            'crmstate',
+            'integrationId',
+            'externalId',
+            'integration',
+            'qualifications',
+            'metaEvents'
+        ));
     }
 
     public function update(Request $request, CrmState $crmstate)
@@ -106,6 +128,7 @@ class CrmStateWebController extends Controller
         $validated = $request->validate([
             'name'          => ['required', 'string', 'max:255'],
             'qualification' => ['required', 'exists:qualification,id'],
+            'meta_event_id' => ['nullable', 'exists:meta_events,id'],
         ]);
 
         $crmstate->update($validated);
@@ -117,7 +140,6 @@ class CrmStateWebController extends Controller
 
     public function destroy(CrmState $crmstate)
     {
-        // Seguridad opcional: si hay leads usando ese estado, no borrar
         if (method_exists($crmstate, 'leads') && $crmstate->leads()->exists()) {
             return back()->with('success', 'No se puede eliminar: hay leads asociados a este estado.');
         }

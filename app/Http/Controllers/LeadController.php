@@ -83,15 +83,11 @@ class LeadController extends Controller
         $lead = $this->leadsService->createLead($lead);
 
         /*
-        * Buscar integraciones activas del customer se tiene en cuenta todas las redes sociuales y canales de marketing para enviar el lead a cada una de las integraciones activas del cliente, se obtiene el customer_id del lead creado para buscar sus integraciones activas
+        * Buscar integraciones activas del customer
         */
         $integrations = $this->integrationService->getActiveIntegrations($lead->customer_id);
 
-<<<<<<< HEAD
-        if (in_array($lead->campaign_origin, ['fb', 'meta','ig'], true)) {
-=======
-        if (in_array($lead->campaign_origin, ['fb', 'meta','ig','wa','mg','th'], true)) {
->>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba
+        if (in_array($lead->campaign_origin, ['fb', 'meta'], true)) {
             SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
         }
 
