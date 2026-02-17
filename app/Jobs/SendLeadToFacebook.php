@@ -28,19 +28,31 @@ class SendLeadToFacebook implements ShouldQueue
         $this->customerId = $customerId;
         $this->onQueue('tracking');
     }
-
+/**
+ * función que maneja el envío del lead a Facebook Conversions API
+ * @param  FacebookConversionsService  $svc  Servicio para enviar eventos a Facebook
+ * @return void
+ */
     public function handle(FacebookConversionsService $svc): void
     {
+        /**
+         * Recupera el lead por su ID
+         */
         $lead = Lead::find($this->leadId);
         if (!$lead) return;
 
+        /**
+         * Envía el lead a Facebook Conversions API
+         */
         // Usar el customerId del job, no el del lead
         $result = $svc->sendLeadEvent($lead, $this->customerId);
-
+/**
+ * Registra el resultado del envío en la tabla de logs de Facebook Conversions
+ */
         $baseLog = [
             'lead_id'       => $lead->id,
             'customer_id'   => $this->customerId, // 👈 corregido
-            'event_name'    => 'Lead',
+            'event_name'    => $lead->crmState?->metaEvent?->nombre ?: 'Lead',
             'event_time'    => $lead->created_at->now()->timestamp,// 👈 corregido
             'action_source' => 'website',
             'event_source_url' => $lead->page_url,

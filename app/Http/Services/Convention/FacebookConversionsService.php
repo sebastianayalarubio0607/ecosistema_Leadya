@@ -36,6 +36,8 @@ class FacebookConversionsService
                 'request' => null,
                 'pixel_id' => $pixelId,
                 'test_event_code' => $testCode,
+                'event_name' => $event_name,
+                'lead_id' => $lead->id,
             ];
         }
 
@@ -46,10 +48,11 @@ class FacebookConversionsService
         /* Construye el payload */
         [$userData, $customData] = $this->buildPayload($lead);
 
-        /* Endpoint con token en query */
-        $endpoint = "https://graph.facebook.com/v17.0/{$pixelId}/events?access_token={$accessToken}";
+        $endpoint = "https://graph.facebook.com/v24.0/{$pixelId}/events?access_token={$accessToken}";
 
-        /* Define el evento */
+        $event_time = $userData['created_at'];
+        $event_id   = "lead_{$lead->id}_{$event_time}";
+
         $event = [
             'event_name' => $event_name,
             'event_time' => $userData['created_at'],
@@ -72,7 +75,6 @@ class FacebookConversionsService
             ],
         ];
 
-        /* Payload final */
         $payload = [
             'data' => [$event],
         ];
@@ -82,13 +84,13 @@ class FacebookConversionsService
             $payload['test_event_code'] = $testCode;
         }
 
-        /* Envía la solicitud */
+
+
         $response = Http::asJson()
             ->timeout(15)
             ->retry(3, 500)
             ->post($endpoint, $payload);
 
-        /* Maneja la respuesta */
         if ($response->successful()) {
             return [
                 'ok' => true,
@@ -97,6 +99,9 @@ class FacebookConversionsService
                 'request' => $payload,
                 'pixel_id' => $pixelId,
                 'test_event_code' => $testCode,
+                'event_name' => $event_name,
+                'event_id' => $event_id,
+                'used_fallback_lead_event' => $usedFallbackLeadEvent,
             ];
         }
 
@@ -107,11 +112,15 @@ class FacebookConversionsService
             'request' => $payload,
             'pixel_id' => $pixelId,
             'test_event_code' => $testCode,
+            'event_name' => $event_name,
+            'event_id' => $event_id,
+            'used_fallback_lead_event' => $usedFallbackLeadEvent,
         ];
     }
 
     /**
-     * Construye el payload con la información del lead
+     * Construye user_data y custom_data base.
+     * ✅ NO normaliza IP: se envía la IPv4 tal cual venga (solo se limpia lista "ip,proxy,proxy")
      */
     protected function buildPayload(Lead $lead): array
     {
@@ -128,6 +137,7 @@ class FacebookConversionsService
         $created_at = optional($lead->created_at)->copy()->timezone('UTC')->timestamp ?? now()->timestamp;
         $userData = [];
 
+        $userData = [];
         $userData['created_at'] = $created_at;
 
         if ($email) {
@@ -175,6 +185,83 @@ class FacebookConversionsService
         ], fn ($v) => ! is_null($v) && $v !== '');
 
         return [$userData, $customData];
+    }
+
+    /**
+     * Si viene "ip, proxy1, proxy2", toma la primera.
+     * NO convierte, NO normaliza: solo limpia.
+     */
+    protected function extractFirstIp(?string $ip): ?string
+    {
+        $ip = trim((string) $ip);
+        if ($ip === '') return null;
+
+        if (str_contains($ip, ',')) {
+            $ip = trim(explode(',', $ip)[0]);
+        }
+
+        // opcional: solo devolver si es IP válida
+        if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+            return null;
+        }
+
+        return $ip;
+    }
+
+    protected function buildLeadKey(Lead $lead): string
+    {
+        $phone = trim((string) ($lead->phone ?? ''));
+        $service = trim((string) ($lead->service ?? ''));
+
+        $key = trim($phone . '_' . $service, '_');
+
+        return $key !== '' ? $key : (string) $lead->id;
+    }
+
+    protected function normalizeValue($value): float
+    {
+        if ($value === null || $value === '') return 0.0;
+
+        if (is_string($value)) {
+            $value = str_replace([',', ' '], ['', ''], $value);
+        }
+
+        return (float) $value;
+    }
+
+    /**
+     * Opcional: parámetros e-commerce si vienen en fields_custom.
+     */
+    protected function extractStandardEventCustomData(Lead $lead): array
+    {
+        $fc = $lead->fields_custom ?? [];
+        if (!is_array($fc)) $fc = [];
+
+        $allowed = [
+            'content_ids',
+            'contents',
+            'content_type',
+            'content_category',
+            'num_items',
+            'order_id',
+            'predicted_ltv',
+            'search_string',
+            'delivery_category',
+        ];
+
+        $out = [];
+        foreach ($allowed as $k) {
+            if (array_key_exists($k, $fc) && $fc[$k] !== null && $fc[$k] !== '') {
+                $out[$k] = $fc[$k];
+            }
+        }
+
+        return $out;
+    }
+
+    protected function filterNulls(array $data): array
+    {
+        return array_filter($data, static fn ($v) => !is_null($v) && $v !== '');
     }
 
     protected function normLower(?string $v): string

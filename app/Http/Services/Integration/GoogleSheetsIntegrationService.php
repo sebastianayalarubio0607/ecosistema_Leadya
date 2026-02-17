@@ -1,74 +1,59 @@
 <?php
+
 namespace App\Http\Services\Integration;
-//namespace App\Http\Services\GooglesheetsIntegrationService;
 
-/**
- * Servicio para manejar integraciones Google Sheets.
- */
-use App\Models\integration;
+use App\Models\Integration;
 use App\Models\Lead;
-use Illuminate\Support\Facades\Http;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Http;
 
-
-/**
- * Servicio para manejar integraciones google sheets.
- */
 class GoogleSheetsIntegrationService
 {
-    
-    /** Procesa la integración del lead según el tipo de integración.
-     *
-     * @param Lead $lead El lead a integrar.
-     * @return void
-     */
     public function sendToGoogleSheets(Lead $lead, Integration $integration)
     {
-       /*
-       * Log::info('Enviando lead a Google Sheets:', $lead->toArray());
-       */
+        $url = $integration->url;
 
-        $url =  $integration->url;
-        /**
-         * Log::info('URL de Google Sheets:', ['url' => $url]); 
-        */
+        // Para poder leer el nombre del cliente
+        $lead->loadMissing('customer');
+
+        // 1) TODO el lead automáticamente (incluye campos nuevos)
+        $payload = $lead->getAttributes();
+
+        // 2) Asegurar fields_custom (si es array/objeto)
+        $payload['fields_custom'] = $lead->fields_custom ?? [];
+
+        // 3) Hoja = nombre del cliente
+        $customerName = $lead->customer?->name ?? ('Customer_' . ($lead->customer_id ?? 'NA'));
+
+        // Guardar el form_name original por si lo necesitas
+        $payload['lead_form_name'] = $payload['form_name'] ?? null;
+
+        // Apps Script usa "form_name" para el nombre de la hoja
+        $payload['form_name'] = $customerName;
+
+        // Campos auxiliares (si no existen ya)
+        $payload['opening_hours'] = $payload['opening_hours'] ?? Carbon::now()->format('H:i:s');
+        $payload['opening_date']  = $payload['opening_date']  ?? Carbon::now()->format('Y-m-d');
+
+        // Normalizar para x-www-form-urlencoded
+        $payload = $this->normalizeForForm($payload);
+
         return Http::withHeaders([
             'Content-Type' => 'application/x-www-form-urlencoded',
-        ])->asForm()->post($url, [
-            'name' => $lead->name,
-            'last_name' => $lead->last_name,
-            'position' => $lead->position,
-            'city' => $lead->city,
-            'age' => $lead->age,
-            'company' => $lead->company,
-            'country' => $lead->country,
-            'email' => $lead->email,
-            'phone' => $lead->phone,
-            'status' => $lead->status,
-            'tc' => $lead->tc,
-            'fields_custom' => json_encode($lead->fields_Custom),
-            'agent' => $lead->agent,
-            'service_city' => $lead->service_city,
-            'children' => $lead->children,
-            'effective_lead' => $lead->effective_lead,
-            'reference' => $lead->reference,
-            'service' => $lead->service,
-            'remote_ip' => $lead->remote_ip,
-            'page' => $lead->page,
-            'page_url' => $lead->page_url,
-            'campaign_origin' => $lead->campaign_origin,
-            'customer_id' => $lead->customer_id,
-            'integration_id' => $lead->integration_id,
-            'message' => $lead->message,
-            'fbp' => $lead->fbp,
-            'fbc' => $lead->fbc,
-            'last_name' => $lead->last_name,
-            'remote_ip' => $lead->remote_ip,
-            'form_name' => $lead->form_name ?? 'DefaultForm',
-            'opening_hours' => Carbon::now()->format('H:i:s'),
-            'opening_date' => Carbon::now()->format('Y-m-d'),
-        ]);
+        ])->asForm()->post($url, $payload);
     }
 
-    
+    private function normalizeForForm(array $payload): array
+    {
+        foreach ($payload as $key => $value) {
+            if (is_null($value)) {
+                $payload[$key] = '';
+            } elseif (is_bool($value)) {
+                $payload[$key] = $value ? '1' : '0';
+            } elseif (is_array($value) || is_object($value)) {
+                $payload[$key] = json_encode($value, JSON_UNESCAPED_UNICODE);
+            }
+        }
+        return $payload;
+    }
 }

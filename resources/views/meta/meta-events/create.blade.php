@@ -1,7 +1,11 @@
 @extends('meta.layout')
 
 @section('title', 'Crear Meta Event')
+<<<<<<< HEAD
 @section('subtitle', 'Nuevo evento de Meta')
+=======
+@section('subtitle', 'Nuevo evento de conversión')
+>>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba
 
 @section('header_actions')
     <a href="{{ route('meta.meta-events.index') }}"
