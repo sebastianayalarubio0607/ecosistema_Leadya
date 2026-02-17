@@ -19,7 +19,7 @@ class SendLeadToFacebook implements ShouldQueue
     public int $leadId;
     public int $customerId;
 
-    public $tries = 1;
+    public $tries = 4;
     public $backoff = [60, 120, 300, 600];
 
     public function __construct(int $leadId, int $customerId)

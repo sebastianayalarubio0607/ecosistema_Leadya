@@ -54,7 +54,7 @@ class LeadService
             'status'          => 'nullable|boolean',
             'tc'              => 'nullable|boolean',
             'fields_custom'   => 'nullable|array',
-            'agent'           => 'nullable|string|max:255',
+            'agent'           => 'nullable|string|max:500',
             'service_city'    => 'nullable|string|max:255',
             'children'        => 'nullable|string|max:255',
             'opening_hours'   => 'nullable|string|max:255',
@@ -69,6 +69,10 @@ class LeadService
             'customer_id'    => 'required|integer|exists:customers,id',
             'fbp'             => 'nullable|string|max:255',
             'fbc'             => 'nullable|string|max:255',
+            'plataforma'      => 'nullable|string|max:255',
+            'lenguaje'        => 'nullable|string|max:255',
+            'geo'             => 'nullable|string|max:255',
+            
         ]);
 
         return $validated;

@@ -2,21 +2,13 @@
 
 namespace App\Http\Controllers;
 
-
-use App\Models\Lead;
-use App\Models\LeadIntegration;
-use App\Models\Integration;
-
-
-
-use Illuminate\Http\Request;
-
 use App\Http\Services\Customer\CustomerService;
-use App\Http\Services\Lead\LeadService;
 use App\Http\Services\Integration\IntegrationService;
+use App\Http\Services\Lead\LeadService;
 use App\Jobs\ProcessLeadIntegrationsJob;
 use App\Jobs\SendLeadToFacebook;
-
+use App\Models\Lead;
+use Illuminate\Http\Request;
 
 class LeadController extends Controller
 {
@@ -24,7 +16,9 @@ class LeadController extends Controller
      * Servicios inyectados
      */
     private $customerService;
+
     private $leadsService;
+
     private $integrationService;
 
     /**
@@ -49,7 +43,6 @@ class LeadController extends Controller
     /**
      * Display a listing of the resource.
      */
-
     public function index(Request $request)
     {
         /**
@@ -70,53 +63,38 @@ class LeadController extends Controller
         return response()->json($leads);
     }
 
-
     public function store(Request $request)
     {
 
-
         /**
-         *  valida si Aplicar el ID de cliente desde el encabezado de la solicitud o si no existe el header X-Customer-ID coge el del formulario 
-         * 
+         *  valida si Aplicar el ID de cliente desde el encabezado de la solicitud o si no existe el header X-Customer-ID coge el del formulario
          */
         $request = $this->customerService->applyCustomerIdFromHeader($request);
-
 
         /**
          * Valida los datos del lead.
          */
         $lead = $this->leadsService->validateLeadRequest($request);
 
+        
         /*
         * Crea el lead en la base de datos
         */
         $lead = $this->leadsService->createLead($lead);
-
 
         /*
         * Buscar integraciones activas del customer
         */
         $integrations = $this->integrationService->getActiveIntegrations($lead->customer_id);
 
-    
-//return $integrations;
-
-
-
-        if ($lead->campaign_origin == 'fb') {
-
-            // Dispara el job en cola (no bloquea la respuesta HTTP)
-           SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
+        if (in_array($lead->campaign_origin, ['fb', 'meta','ig'], true)) {
+            SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
         }
-
 
         /**
          * Procesa las integraciones para el lead y devuelve las integraciones procesadas.
          */
-
         ProcessLeadIntegrationsJob::dispatch($lead, $integrations);
-
-
 
         return response()->json([
             'message' => 'Lead creado con éxito',
@@ -126,20 +104,17 @@ class LeadController extends Controller
         ], 201);
     }
 
-
-
-
     public function show(Request $request, $id)
     {
         $customerId = $request->header('X-Customer-ID');
 
-        if (!$customerId) {
+        if (! $customerId) {
             return response()->json(['message' => 'Missing X-Customer-ID header'], 400);
         }
 
         $lead = Lead::with(['customer', 'integration'])->find($id);
 
-        if (!$lead) {
+        if (! $lead) {
             return response()->json(['message' => 'Lead not found'], 404);
         }
 
@@ -154,13 +129,13 @@ class LeadController extends Controller
     {
         $customerId = $request->header('X-Customer-ID');
 
-        if (!$customerId) {
+        if (! $customerId) {
             return response()->json(['message' => 'Missing X-Customer-ID header'], 400);
         }
 
         $lead = Lead::find($id);
 
-        if (!$lead) {
+        if (! $lead) {
             return response()->json(['message' => 'Lead not found'], 404);
         }
 
@@ -186,13 +161,13 @@ class LeadController extends Controller
     {
         $customerId = $request->header('X-Customer-ID');
 
-        if (!$customerId) {
+        if (! $customerId) {
             return response()->json(['message' => 'Missing X-Customer-ID header'], 400);
         }
 
         $lead = Lead::find($id);
 
-        if (!$lead) {
+        if (! $lead) {
             return response()->json(['message' => 'Lead not found'], 404);
         }
 

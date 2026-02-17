@@ -34,5 +34,11 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+    
+    'meta' => [
+        'access_token' => env('META_ACCESS_TOKEN'),
+        'log_webhook_url' => env('META_LOG_WEBHOOK_URL'),
+    ],
+    
 
 ];
