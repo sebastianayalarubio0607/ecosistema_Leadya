@@ -41,11 +41,7 @@
         $funnelCards = [];
         $funnelCards[] = [
             'id' => '__NULL__',
-<<<<<<< HEAD
             'name' => 'Por Responder',
-=======
-            'name' => 'Sin Funnel',
->>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba
             'count' => (int) ($metric['no_funnel_count'] ?? 0),
         ];
         foreach ($metric['funnels'] ?? [] as $f) {

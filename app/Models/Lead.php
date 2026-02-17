@@ -44,11 +44,6 @@ class Lead extends Model
         'geo',
         'crm_id',
         'crm_state',
-<<<<<<< HEAD
-=======
-        'meta_id_ad',
-        'value',
->>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba
     ];
 
     protected $casts = [
