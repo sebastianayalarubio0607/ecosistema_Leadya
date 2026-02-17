@@ -6,22 +6,17 @@
 <div class="space-y-4">
     <div>
         <label class="block mb-1 text-white/70">Nombre</label>
-        <input
-            name="nombre"
-            value="{{ old('nombre', $item?->nombre) }}"
-            class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
-            placeholder="Ej: Lead, Purchase, CompleteRegistration"
-        >
+        <input name="nombre" value="{{ old('nombre', $item?->nombre) }}"
+               class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
+               placeholder="Ej: Lead, Purchase, CompleteRegistration">
         @error('nombre') <div class="text-rose-300 text-xs mt-1">{{ $message }}</div> @enderror
     </div>
 
     <div>
         <label class="block mb-1 text-white/70">Estado</label>
         @php($val = old('estados', $item?->estados ?? 'activo'))
-        <select
-            name="estados"
-            class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white"
-        >
+        <select name="estados"
+                class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
             <option value="activo" @selected($val === 'activo')>activo</option>
             <option value="inactivo" @selected($val === 'inactivo')>inactivo</option>
         </select>

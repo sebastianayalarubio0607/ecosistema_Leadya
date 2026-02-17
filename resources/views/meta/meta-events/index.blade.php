@@ -1,7 +1,7 @@
 @extends('meta.layout')
 
 @section('title', 'Meta Events')
-@section('subtitle', 'Eventos de Meta (relación: Meta Event → Funnels)')
+@section('subtitle', 'Eventos de conversión + relación con CRM States')
 
 @section('header_actions')
     <a href="{{ route('meta.meta-events.create') }}"
@@ -38,11 +38,7 @@
                         <th class="text-left px-3 py-2">ID</th>
                         <th class="text-left px-3 py-2">Nombre</th>
                         <th class="text-left px-3 py-2">Estado</th>
-<<<<<<< HEAD
-                        <th class="text-left px-3 py-2">Funnels</th>
-=======
                         <th class="text-left px-3 py-2">CRM States</th>
->>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba
                         <th class="text-left px-3 py-2 w-56">Acciones</th>
                     </tr>
                 </thead>
@@ -53,11 +49,7 @@
                             <td class="px-3 py-2">{{ $it->id }}</td>
                             <td class="px-3 py-2">{{ $it->nombre }}</td>
                             <td class="px-3 py-2">{{ $it->estados }}</td>
-<<<<<<< HEAD
-                            <td class="px-3 py-2">{{ $it->funnels_count }}</td>
-=======
                             <td class="px-3 py-2">{{ $it->crm_states_count ?? ($it->crmStates_count ?? '—') }}</td>
->>>>>>> 3ac2fef11dafeeab5dedfae1f504ba67206b2bba
                             <td class="px-3 py-2">
                                 <div class="flex items-center gap-2">
                                     <a class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs"

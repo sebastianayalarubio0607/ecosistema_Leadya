@@ -1,7 +1,7 @@
 @extends('meta.layout')
 
 @section('title', 'Editar Meta Event')
-@section('subtitle', 'Actualizar evento de Meta')
+@section('subtitle', 'Actualizar evento de conversión')
 
 @section('header_actions')
     <a href="{{ route('meta.meta-events.show', $item) }}"
@@ -24,3 +24,4 @@
         </form>
     </div>
 @endsection
+

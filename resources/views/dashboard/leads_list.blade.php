@@ -69,7 +69,7 @@
                                 $fuente = $lead->campaign_origin;
                                 $medio  = $lead->plataforma;
 
-                                $fuenteLabel = ($fuente === null || $fuente === '') ? 'Por responder' : $fuente;
+                                $fuenteLabel = ($fuente === null || $fuente === '') ? 'Sin Fuente' : $fuente;
                                 $medioLabel  = ($medio === null || $medio === '') ? 'Sin Medio' : $medio;
 
                                 $phone = $phoneOf($lead);
