@@ -83,7 +83,7 @@ class LeadController extends Controller
         $lead = $this->leadsService->createLead($lead);
 
         /*
-        * Buscar integraciones activas del customer
+        * Buscar integraciones activas del customer se tiene en cuenta todas las redes sociuales y canales de marketing para enviar el lead a cada una de las integraciones activas del cliente, se obtiene el customer_id del lead creado para buscar sus integraciones activas
         */
         $integrations = $this->integrationService->getActiveIntegrations($lead->customer_id);
 
