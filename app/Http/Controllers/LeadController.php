@@ -87,7 +87,7 @@ class LeadController extends Controller
         */
         $integrations = $this->integrationService->getActiveIntegrations($lead->customer_id);
 
-        if (in_array($lead->campaign_origin, ['fb', 'meta'], true)) {
+        if (in_array($lead->campaign_origin, ['fb', 'meta','ig','wa','mg','th'], true)) {
             SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
         }
 
