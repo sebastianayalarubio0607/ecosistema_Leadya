@@ -13,7 +13,7 @@ class FacebookConversionsService
      * Si quieres un default "quemado", déjalo aquí.
      * Si está vacío, no se envía.
      */
-    private const DEFAULT_TEST_EVENT_CODE = 'TEST66994';
+    private const DEFAULT_TEST_EVENT_CODE = 'TEST83521';
 
     private const DEFAULT_CURRENCY = 'COP';
 

@@ -5,186 +5,63 @@
         </div>
     </x-slot>
 
-    @php
-        $customerId = $customerId ?? null;
-
-        $selectedChannel = request('campaign_origin', '');
-        $selectedPlatform = request('plataforma', '');
-
-        $channels = $metric['channels'] ?? [];
-        $platforms = $metric['platforms'] ?? [];
-
-        $totalLeads = (int) ($metric['count'] ?? 0);
-
-        // Cards CRM State
-        $crmCards = [];
-        $crmCards[] = [
-            'id' => '__NULL__',
-            'name' => 'Sin Estado',
-            'count' => (int) ($metric['pending_count'] ?? 0),
-        ];
-        foreach ($metric['crm_states'] ?? [] as $s) {
-            $crmCards[] = $s;
-        }
-
-        // Cards Qualification
-        $qualCards = [];
-        foreach ($metric['qualifications'] ?? [] as $q) {
-            $qualCards[] = [
-                'id' => $q['id'] === null ? '__NULL__' : $q['id'],
-                'name' => $q['name'],
-                'count' => $q['count'],
-            ];
-        }
-
-        // ✅ NUEVO: Cards Funnel
-        $funnelCards = [];
-        $funnelCards[] = [
-            'id' => '__NULL__',
-            'name' => 'Sin Funnel',
-            'count' => (int) ($metric['no_funnel_count'] ?? 0),
-        ];
-        foreach ($metric['funnels'] ?? [] as $f) {
-            $funnelCards[] = $f;
-        }
-
-        // ✅ NUEVO: Calificados / Ventas
-        $qualifiedCount = (int) ($metric['qualified_count'] ?? 0);
-        $qualifiedFunnelId = $metric['qualified_funnel_id'] ?? null;
-
-        $salesCount = (int) ($metric['sales_count'] ?? 0);
-        $salesFunnelId = $metric['sales_funnel_id'] ?? null;
-
-        // Donut helper
-        $prepareDonut = function (array $data, string $dimension) {
-            if (empty($data)) {
-                return ['keys' => [], 'labels' => [], 'values' => [], 'pairs' => [], 'total' => 0];
-            }
-
-            arsort($data);
-            $top = array_slice($data, 0, 4, true);
-            $rest = array_slice($data, 4, null, true);
-
-            if (!empty($rest)) {
-                $top['__OTHER__'] = array_sum($rest);
-            }
-
-            $keys = array_keys($top);
-            $values = array_values($top);
-
-            $labelMap = function ($k) use ($dimension) {
-                if ($k === '__OTHER__') {
-                    return 'Otros';
-                }
-                if ($k === '__NULL__') {
-                    return $dimension === 'campaign_origin' ? 'Sin Fuente' : 'Sin Medio';
-                }
-                return $k;
-            };
-
-            $labels = array_map($labelMap, $keys);
-
-            $pairs = [];
-            foreach ($keys as $i => $k) {
-                $pairs[] = ['key' => $k, 'label' => $labels[$i], 'count' => (int) $values[$i]];
-            }
-
-            return [
-                'keys' => $keys,
-                'labels' => $labels,
-                'values' => $values,
-                'pairs' => $pairs,
-                'total' => array_sum($values),
-            ];
-        };
-
-        $channelsDonut = $prepareDonut($channels, 'campaign_origin');
-        $platformsDonut = $prepareDonut($platforms, 'plataforma');
-
-        $baseParamsCommon = \Illuminate\Support\Arr::except(request()->query(), [
-            'crm_state',
-            'qualification',
-            'campaign_origin',
-            'plataforma',
-            'group_type',
-            'group_id',
-            'page',
-        ]);
-
-        $baseForChannels = route(
-            'dashboard.leads.list',
-            \Illuminate\Support\Arr::except(request()->query(), [
-                'campaign_origin',
-                'crm_state',
-                'qualification',
-                'group_type',
-                'group_id',
-                'page',
-            ]),
-        );
-
-        $baseForPlatforms = route(
-            'dashboard.leads.list',
-            \Illuminate\Support\Arr::except(request()->query(), [
-                'plataforma',
-                'crm_state',
-                'qualification',
-                'group_type',
-                'group_id',
-                'page',
-            ]),
-        );
-    @endphp
-
     <div class="p-6  mx-auto space-y-6">
 
         {{-- FILTROS --}}
         <div class="grid grid-cols-12 md:grid-cols-12 gap-4">
 
-
             <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 col-span-3">
                 <div class="text-sm text-white/60">Cliente seleccionado</div>
-                <div class="text-lg font-semibold text-white">{{ $selectedCustomer?->name ?? 'Todos los clientes' }}
-                </div>
-                @if ($selectedCustomer)
-                    <div class="text-xs text-white/50">customer_id: {{ $selectedCustomer->id }}</div>
+                <div class="text-lg font-semibold text-white">{{ $ui['header']['selected_customer_name'] }}</div>
+                @if (!empty($ui['header']['selected_customer_id']))
+                    <div class="text-xs text-white/50">customer_id: {{ $ui['header']['selected_customer_id'] }}</div>
                 @endif
             </div>
 
-
             <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 col-span-9">
-                <form method="GET" action="{{ route('dashboard.leads') }}"
+                <form method="GET" action="{{ $ui['filters']['action'] }}"
                     class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
 
-                    @if (request()->has('integration_id'))
-                        <input type="hidden" name="integration_id" value="{{ request('integration_id') }}">
+                    @if (!empty($ui['filters']['integration_id']))
+                        <input type="hidden" name="integration_id" value="{{ $ui['filters']['integration_id'] }}">
                     @endif
 
-                    <div class="md:col-span-6">
+                    <div class="md:col-span-4">
                         <label class="block mb-1 text-white/70">Cliente</label>
                         <select name="customer_id"
                             class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
                             <option value="">-- Todos los clientes --</option>
-                            @foreach ($customers as $c)
-                                <option value="{{ $c->id }}" @selected((string) $customerId === (string) $c->id)>
-                                    {{ $c->name }} (ID: {{ $c->id }})
+                            @foreach ($ui['filters']['customer_options'] as $opt)
+                                <option value="{{ $opt['value'] }}" @selected($opt['selected'])>
+                                    {{ $opt['label'] }}
                                 </option>
                             @endforeach
                         </select>
                     </div>
 
+                    <div class="md:col-span-4">
+                        <label class="block mb-1 text-white/70">Desde</label>
+                        <input type="datetime-local" name="from" value="{{ $ui['filters']['from_value'] }}"
+                            max="{{ $ui['filters']['now_max'] }}"
+                            class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" />
 
+                    </div>
 
+                    <div class="md:col-span-4">
+                        <label class="block mb-1 text-white/70">Hasta</label>
+                        <input type="datetime-local" name="to" value="{{ $ui['filters']['to_value'] }}"
+                            max="{{ $ui['filters']['now_max'] }}"
+                            class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" />
+                    </div>
 
                     <div class="md:col-span-3">
                         <label class="block mb-1 text-white/70">Fuente</label>
                         <select name="campaign_origin"
                             class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
                             <option value="">Todos</option>
-                            @foreach (array_keys($channels) as $ch)
-                                @php $label = ($ch === '__NULL__') ? 'Sin Fuente' : $ch; @endphp
-                                <option value="{{ $ch }}" @selected((string) $selectedChannel === (string) $ch)>
-                                    {{ $label }}
+                            @foreach ($ui['filters']['channel_options'] as $opt)
+                                <option value="{{ $opt['value'] }}" @selected($opt['selected'])>
+                                    {{ $opt['label'] }}
                                 </option>
                             @endforeach
                         </select>
@@ -195,10 +72,9 @@
                         <select name="plataforma"
                             class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
                             <option value="">Todos</option>
-                            @foreach (array_keys($platforms) as $pl)
-                                @php $label = ($pl === '__NULL__') ? 'Sin Medio' : $pl; @endphp
-                                <option value="{{ $pl }}" @selected((string) $selectedPlatform === (string) $pl)>
-                                    {{ $label }}
+                            @foreach ($ui['filters']['platform_options'] as $opt)
+                                <option value="{{ $opt['value'] }}" @selected($opt['selected'])>
+                                    {{ $opt['label'] }}
                                 </option>
                             @endforeach
                         </select>
@@ -221,54 +97,57 @@
         </div>
 
         {{-- RESUMEN --}}
-        <div class="grid grid-cols-1 md:grid-cols-6 gap-4">
+        <h2 class="text-2xl text-white font-bold">Resumen  -  {{ $ui['header']['selected_customer_name'] }} </h2>
 
 
 
-            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4">
-                <div class="text-sm text-white/60">Leads en últimos 7 días</div>
-                <div class="text-3xl font-bold text-white">{{ $metric['count'] ?? 0 }}</div>
-                <div class="text-xs text-white/50">Calculado: {{ $metric['calculated_at'] ?? '-' }}</div>
+
+        <div class="grid grid-cols-1 md:grid-cols-7 gap-4">
+
+            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 col-span-1">
+                <div class="text-sm text-white/60">Leads en el periodo seleccionado</div>
+                <div class="text-3xl font-bold text-white">{{ $ui['summary']['count'] }}</div>
+                Periodo: </br>
+                <span class="text-xs text-white/80 font-semibold">{{ $ui['summary']['period_label'] }}</span>
             </div>
 
-            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4">
+            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 col-span-1">
                 <div class="text-sm text-white/60">Leads gestionados</div>
-                <div class="text-3xl font-bold text-white">{{ $metric['managed_count'] ?? 0 }}</div>
+                <div class="text-3xl font-bold text-white">{{ $ui['summary']['managed'] }}</div>
             </div>
 
-            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4">
+            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 col-span-1">
                 <div class="text-sm text-white/60">Leads por gestionar</div>
-                <div class="text-3xl font-bold text-white">{{ $metric['pending_count'] ?? 0 }}</div>
+                <div class="text-3xl font-bold text-white">{{ $ui['summary']['pending'] }}</div>
+            </div>
+
+            <div class="col-span-1">
+                @if ($ui['special']['not_effective_url'])
+                    <a href="{{ $ui['special']['not_effective_url'] }}"
+                        class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 hover:bg-white/5 transition block">
+                        <div class="text-sm text-white/60">Leads no Efectivos </div>
+                        <div class="text-3xl font-bold text-white">{{ $ui['summary']['not_effective'] }}</div>
+                        <div
+                            class="mt-3 inline-flex items-center justify-between w-full px-3 py-2 rounded-xl bg-white/10 text-white/80 text-sm border border-white/10">
+                            <span>Ver lista</span><span class="text-white/50">›</span>
+                        </div>
+                    </a>
+                @else
+                    <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4">
+                        <div class="text-sm text-white/60">Leads no Efectivos </div>
+                        <div class="text-3xl font-bold text-white">{{ $ui['summary']['not_effective'] }}</div>
+                        <div class="text-xs text-white/50 mt-1">{{ $ui['special']['not_effective_missing'] }}</div>
+                    </div>
+                @endif
             </div>
 
 
-            @php
-                $baseClick = \Illuminate\Support\Arr::except(request()->query(), [
-                    'crm_state',
-                    'qualification',
-                    'group_type',
-                    'group_id',
-                    'page',
-                ]);
-                $qualifiedUrl = $qualifiedFunnelId
-                    ? route(
-                        'dashboard.leads.list',
-                        array_merge($baseClick, ['group_type' => 'funnel', 'group_id' => $qualifiedFunnelId]),
-                    )
-                    : null;
-                $salesUrl = $salesFunnelId
-                    ? route(
-                        'dashboard.leads.list',
-                        array_merge($baseClick, ['group_type' => 'funnel', 'group_id' => $salesFunnelId]),
-                    )
-                    : null;
-            @endphp
-            <div class="">
-                @if ($qualifiedUrl)
-                    <a href="{{ $qualifiedUrl }}"
+            <div class="col-span-1">
+                @if ($ui['special']['qualified_url'])
+                    <a href="{{ $ui['special']['qualified_url'] }}"
                         class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 hover:bg-white/5 transition block">
                         <div class="text-sm text-white/60">Leads calificados </div>
-                        <div class="text-3xl font-bold text-white">{{ $qualifiedCount }}</div>
+                        <div class="text-3xl font-bold text-white">{{ $ui['summary']['qualified'] }}</div>
                         <div
                             class="mt-3 inline-flex items-center justify-between w-full px-3 py-2 rounded-xl bg-white/10 text-white/80 text-sm border border-white/10">
                             <span>Ver lista</span><span class="text-white/50">›</span>
@@ -277,49 +156,52 @@
                 @else
                     <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4">
                         <div class="text-sm text-white/60">Leads calificados </div>
-                        <div class="text-3xl font-bold text-white">{{ $qualifiedCount }}</div>
-                        <div class="text-xs text-white/50 mt-1">No existe un funnel llamado "Calificados".</div>
+                        <div class="text-3xl font-bold text-white">{{ $ui['summary']['qualified'] }}</div>
+                        <div class="text-xs text-white/50 mt-1">{{ $ui['special']['qualified_missing'] }}</div>
                     </div>
                 @endif
-
             </div>
-            <div class="">
-                @if ($salesUrl)
-                    <a href="{{ $salesUrl }}"
+
+            <div class="col-span-1">
+                @if ($ui['special']['sales_url'])
+                    <a href="{{ $ui['special']['sales_url'] }}"
                         class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 hover:bg-white/5 transition block">
                         <div class="text-sm text-white/60">Leads con ventas </div>
-                        <div class="text-3xl font-bold text-white">{{ $salesCount }}</div>
+                        <div class="text-3xl font-bold text-white">{{ $ui['summary']['sales'] }}</div>
+                        <div class="text-sm text-white/60">Valor de la venta </div>
+                        <div class="text-3xl font-bold text-white">
+                            {{ $ui['summary']['sales_value_formatted'] }}
+                        </div>
                         <div
                             class="mt-3 inline-flex items-center justify-between w-full px-3 py-2 rounded-xl bg-white/10 text-white/80 text-sm border border-white/10">
                             <span>Ver lista</span><span class="text-white/50">›</span>
                         </div>
                     </a>
                 @else
-                    <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4">
+                    <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-2 ">
                         <div class="text-sm text-white/60">Leads con ventas </div>
-                        <div class="text-3xl font-bold text-white">{{ $salesCount }}</div>
-                        <div class="text-xs text-white/50 mt-1">No existe un funnel llamado "Ventas".</div>
+                        <div class="text-3xl font-bold text-white">{{ $ui['summary']['sales'] }}</div>
+                        <div class="text-xs text-white/50 mt-1">{{ $ui['special']['sales_missing'] }}</div>
                     </div>
                 @endif
 
+
             </div>
 
-
-
-            @php
-                $spendValue = (float) ($metric['spend'] ?? 0);
-            @endphp
-            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4">
-                <div class="text-sm text-white/60">Costo (Spend) últimos 7 días</div>
-                <div class="text-3xl font-bold text-white">$ {{ number_format($spendValue, 2, ',', '.') }}</div>
+            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 col-span-1">
+                <div class="text-sm text-white/60">Costo (Spend) en el periodo seleccionado</div>
+                <div class="text-3xl font-bold text-white">{{ $ui['summary']['spend_formatted'] }}</div>
             </div>
-
 
         </div>
 
 
 
+
+
         {{-- DESGLOSE --}}
+
+        <h2 class="text-2xl text-white font-bold">Desglose  -  {{ $ui['header']['selected_customer_name'] }} </h2>
         <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
 
             {{-- FUENTE --}}
@@ -330,50 +212,30 @@
                         <h3 class="text-white font-semibold">Por Fuente</h3>
                     </div>
                     <div class="text-xs text-white/50">
-                        Total: <span class="text-white/80 font-semibold">{{ $channelsDonut['total'] }}</span>
+                        Total: <span
+                            class="text-white/80 font-semibold">{{ $ui['donuts']['channels']['total'] }}</span>
                     </div>
                 </div>
 
-                @if (empty($channelsDonut['pairs']))
+                @if (empty($ui['donuts']['channels']['pairs']))
                     <div class="text-sm text-white/60">Sin datos.</div>
                 @else
-                    <div class="grid grid-cols-12 gap-4 items-center">
-
-                        @foreach ($channelsDonut['pairs'] as $row)
-                            @php
-                                $isOther = $row['key'] === '__OTHER__';
-                                $url = $isOther
-                                    ? '#'
-                                    : route(
-                                        'dashboard.leads.list',
-                                        array_merge(
-                                            \Illuminate\Support\Arr::except(request()->query(), [
-                                                'campaign_origin',
-                                                'crm_state',
-                                                'qualification',
-                                                'group_type',
-                                                'group_id',
-                                                'page',
-                                            ]),
-                                            ['group_type' => 'campaign_origin', 'group_id' => $row['key']],
-                                        ),
-                                    );
-                            @endphp
-                        @endforeach
-
-
-                        <div class="col-span-12 md:col-span-4">
-                            <div class="relative h-44">
-                                <canvas id="donutChannels" data-labels='@json($channelsDonut['labels'])'
-                                    data-values='@json($channelsDonut['values'])' data-keys='@json($channelsDonut['keys'])'
-                                    data-base-url='@json($baseForChannels)'
-                                    data-group-type="campaign_origin"></canvas>
+                    <div class="flex items-center">
+                        <div class=" py-12 grid grid-cols-12 gap-4 items-center">
+                            <div class="col-span-12 md:col-span-4">
+                                <div class="relative h-44">
+                                    <canvas id="donutChannels" data-labels='@json($ui['donuts']['channels']['labels'])'
+                                        data-values='@json($ui['donuts']['channels']['values'])'
+                                        data-keys='@json($ui['donuts']['channels']['keys'])'
+                                        data-base-url='@json($ui['donuts']['channels']['base_url'])'
+                                        data-group-type="{{ $ui['donuts']['channels']['group_type'] }}"></canvas>
+                                </div>
                             </div>
-                        </div>
 
-                        <div class="col-span-12 md:col-span-8">
-                            <div class="text-xs text-white/50 mb-2">Leyenda (clic)</div>
-                            <div id="legendChannels" class="space-y-2"></div>
+                            <div class="col-span-12 md:col-span-8">
+                                <div class="text-xs text-white/50 mb-2">Leyenda (clic)</div>
+                                <div id="legendChannels" class="space-y-2"></div>
+                            </div>
                         </div>
                     </div>
                 @endif
@@ -387,222 +249,294 @@
                         <h3 class="text-white font-semibold">Por Medio</h3>
                     </div>
                     <div class="text-xs text-white/50">
-                        Total: <span class="text-white/80 font-semibold">{{ $platformsDonut['total'] }}</span>
+                        Total: <span
+                            class="text-white/80 font-semibold">{{ $ui['donuts']['platforms']['total'] }}</span>
                     </div>
                 </div>
 
-                @if (empty($platformsDonut['pairs']))
+                @if (empty($ui['donuts']['platforms']['pairs']))
                     <div class="text-sm text-white/60">Sin datos.</div>
                 @else
-                    <div class="grid grid-cols-12 gap-4 items-center">
-
-                        @foreach ($platformsDonut['pairs'] as $row)
-                            @php
-                                $isOther = $row['key'] === '__OTHER__';
-                                $url = $isOther
-                                    ? '#'
-                                    : route(
-                                        'dashboard.leads.list',
-                                        array_merge(
-                                            \Illuminate\Support\Arr::except(request()->query(), [
-                                                'plataforma',
-                                                'crm_state',
-                                                'qualification',
-                                                'group_type',
-                                                'group_id',
-                                                'page',
-                                            ]),
-                                            ['group_type' => 'plataforma', 'group_id' => $row['key']],
-                                        ),
-                                    );
-                            @endphp
-                        @endforeach
-
-
-                        <div class="col-span-12 md:col-span-4">
-                            <div class="relative h-44">
-                                <canvas id="donutPlatforms" data-labels='@json($platformsDonut['labels'])'
-                                    data-values='@json($platformsDonut['values'])'
-                                    data-keys='@json($platformsDonut['keys'])'
-                                    data-base-url='@json($baseForPlatforms)'
-                                    data-group-type="plataforma"></canvas>
+                    <div class="flex items-center">
+                        <div class=" py-12 grid grid-cols-12 gap-4 items-center">
+                            <div class=" col-span-12 md:col-span-4">
+                                <div class="relative h-44">
+                                    <canvas id="donutPlatforms" data-labels='@json($ui['donuts']['platforms']['labels'])'
+                                        data-values='@json($ui['donuts']['platforms']['values'])'
+                                        data-keys='@json($ui['donuts']['platforms']['keys'])'
+                                        data-base-url='@json($ui['donuts']['platforms']['base_url'])'
+                                        data-group-type="{{ $ui['donuts']['platforms']['group_type'] }}"></canvas>
+                                </div>
                             </div>
-                        </div>
 
-                        <div class="col-span-12 md:col-span-8">
-                            <div class="text-xs text-white/50 mb-2">Leyenda (clic)</div>
-                            <div id="legendPlatforms" class="space-y-2"></div>
+                            <div class="col-span-12 md:col-span-8">
+                                <div class="text-xs text-white/50 mb-2">Leyenda (clic)</div>
+                                <div id="legendPlatforms" class="space-y-2"></div>
+                            </div>
                         </div>
                     </div>
                 @endif
             </div>
 
-            {{-- ✅ NUEVO: Leads por Funnel (cards clicables) --}}
-            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 col-span-6">
+            {{-- Leads por Funnel --}}
+            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 col-span-3">
                 <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-white font-semibold">Leads por Funnel</h3>
-                    <div class="text-xs text-white/50">Total: <span
-                            class="text-white/80 font-semibold">{{ $totalLeads }}</span></div>
+                    <h3 class="text-white font-semibold">Estado actual de Leads por Funnel</h3>
+                    <div class="text-xs text-white/50">Total:
+                        <span class="text-white/80 font-semibold">{{ $ui['totals']['total_leads'] }}</span>
+                    </div>
                 </div>
 
-                <div class="flex gap-4 overflow-x-auto pb-2">
-                    @foreach ($funnelCards as $card)
-                        @php
-                            $count = (int) ($card['count'] ?? 0);
-                            $pct = $totalLeads > 0 ? (int) round(($count / $totalLeads) * 100) : 0;
+                {{-- ✅ Funnel vertical (embudo hacia abajo) --}}
+                @php
+                    $widths = ['w-full', 'w-11/12', 'w-10/12', 'w-9/12', 'w-8/12'];
+                @endphp
 
-                            $url = route(
-                                'dashboard.leads.list',
-                                array_merge(
-                                    \Illuminate\Support\Arr::except(request()->query(), [
-                                        'crm_state',
-                                        'qualification',
-                                        'group_type',
-                                        'group_id',
-                                        'page',
-                                    ]),
-                                    ['group_type' => 'funnel', 'group_id' => $card['id']],
-                                ),
-                            );
-                        @endphp
+                <div class="relative max-w-xl mx-auto py-2">
+                    <div class="absolute left-4 top-1 bottom-4 w-px bg-white/10"></div>
 
-                        <a href="{{ $url }}" class="min-w-[170px] block">
-                            <div class="text-center text-xs text-white/60 mb-2">{{ $pct }}%</div>
-
-                            <div
-                                class="rounded-2xl border border-white/10 bg-zinc-950/25 p-3 hover:bg-white/5 transition">
-                                <div class="h-10 rounded-xl bg-white/10 flex items-center px-3">
-                                    <div class="text-2xl font-extrabold text-white leading-none">{{ $count }}
+                    <div class="space-y-2">
+                        @foreach ($ui['cards']['funnels'] as $card)
+                            <div class="relative flex justify-center">
+                                <div class="absolute left-4 top-1/2 -translate-y-1/2 flex items-center">
+                                    <div class="h-2.5 w-2.5 rounded-full bg-white/30"></div>
+                                    <div class="h-px w-6 bg-white/10"></div>
+                                </div>
+                                <a href="{{ $card['url'] }}"
+                                    class="{{ $widths[$loop->index] ?? end($widths) }} block">
+                                    <div
+                                        class="rounded-2xl border border-white/10 bg-zinc-950/25 p-4 hover:bg-white/5 transition text-center ">
+                                        <div class="">
+                                            <span class=" text-sm text-white/80 font-semibold truncate">
+                                                {{ $card['name'] }}: <span
+                                                    class="text-2xl font-extrabold text-white leading-none">{{ $card['count'] }}
+                                                    - {{ $card['pct'] }}%
+                                                </span></span>
+                                        </div>
+                                        <div class=" text-sm text-white/80 font-semibold truncate">
+                                        </div>
                                     </div>
-                                </div>
-
-                                <div class="mt-2 text-sm text-white/80 font-semibold truncate">{{ $card['name'] }}
-                                </div>
-
-                                <!--    <div
-                                    class="mt-3 inline-flex items-center justify-between w-full px-3 py-2 rounded-xl bg-white/10 text-white/80 text-sm border border-white/10">
-                                    <span>Ver por Funnel</span>
-                                    <span class="text-white/50">›</span>
-                                </div>-->
+                                </a>
                             </div>
-                        </a>
-                    @endforeach
+                        @endforeach
+                    </div>
                 </div>
             </div>
+
+            {{-- Leads por Funnel --}}
+            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 col-span-3">
+                <div class="flex items-center justify-between mb-3">
+                    <h3 class="text-white font-semibold">Historico Leads en el Funnel </h3>
+                    <div class="text-xs text-white/50">
+                        <span class="text-white/80 font-semibold"></span>
+                    </div>
+                </div>
+
+                {{-- ✅ Funnel vertical (embudo hacia abajo) --}}
+                @php
+                    $widths = ['w-full', 'w-11/12', 'w-10/12', 'w-9/12', 'w-8/12'];
+                @endphp
+
+                <div class="relative max-w-xl mx-auto py-2">
+                    <div class="absolute left-4 top-1 bottom-4 w-px bg-white/10"></div>
+
+                    <div class="space-y-4">
+                        @foreach ($ui['cards']['funnels_history'] as $card)
+                            <div class="relative flex justify-center">
+                                <div class="absolute left-4 top-1/2 -translate-y-1/2 flex items-center">
+                                    <div class="h-2.5 w-2.5 rounded-full bg-white/30"></div>
+                                    <div class="h-px w-6 bg-white/10"></div>
+                                </div>
+                                <a href="{{ $card['url'] }}"
+                                    class="{{ $widths[$loop->index] ?? end($widths) }} block">
+                                    <div
+                                        class="rounded-2xl border border-white/10 bg-zinc-950/25 p-2 hover:bg-white/5 transition text-center">
+                                        <div class="text-2xl font-extrabold text-white leading-none">
+                                            {{ $card['count'] }} -{{ $card['pct'] }}%</div>
+                                        <div class=" text-sm text-white/80 font-semibold truncate">{{ $card['name'] }}
+                                        </div>
+                                    </div>
+                                </a>
+                            </div>
+                        @endforeach
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+
+
+        <h2 class="text-2xl text-white font-bold">Datos de Meta - {{ $ui['header']['selected_customer_name'] }}
+        </h2>
+
+        {{-- Campañas Meta (MetaAdInsight) --}}
+        <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4">
+            <div class="flex items-center justify-between gap-3">
+                <div>
+                    <div class="text-sm text-white/60">Resumen por</div>
+                    <h3 class="text-white font-semibold">Campaña de Meta  -  
+                        {{ $ui['header']['selected_customer_name'] }}</h3>
+                </div>
+                <div class="text-xs text-white/50">
+                    Periodo: <span class="text-white/80 font-semibold">{{ $ui['summary']['period_label'] }}</span>
+                </div>
+            </div>
+
+            @php($t = $ui['tables']['meta_campaigns'] ?? null)
+
+            @if (empty($t) || empty($t['enabled']))
+                <div class="mt-3 text-sm text-white/60">
+                    {{ $t['note'] ?? 'Sin datos de campañas en el periodo.' }}
+                </div>
+            @else
+                @if (!empty($t['note']))
+                    <div class="mt-3 text-xs text-amber-200/80">{{ $t['note'] }}</div>
+                @endif
+
+                <div class="mt-3 overflow-x-auto rounded-xl border border-white/10">
+                    <table class="min-w-full text-xs">
+                        <thead class="bg-white/5 text-white/70">
+                            <tr>
+                                @foreach ($t['columns'] as $col)
+                                    <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">
+                                        {{ $col['label'] }}
+                                    </th>
+                                @endforeach
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-white/10">
+                            @foreach ($t['rows'] as $row)
+                                <tr class="hover:bg-white/5">
+                                    @foreach ($t['columns'] as $col)
+                                        <td class="px-3 py-2 whitespace-nowrap text-white/80">
+                                            {{ $row[$col['key']] ?? '-' }}
+                                        </td>
+                                    @endforeach
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-2 text-[11px] text-white/40">
+                    Mostrando hasta 200 campañas ordenadas por costo.
+                </div>
+            @endif
+
 
 
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-            {{-- Leads por Cualificación (cards clicables) --}}
-            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 ">
-                <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-white font-semibold">Leads por Cualificación</h3>
-                    <div class="text-xs text-white/50">Total: <span
-                            class="text-white/80 font-semibold">{{ $totalLeads }}</span></div>
+        {{-- Grupo de anuncios Meta (MetaAdSet) --}}
+        <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4">
+            <div class="flex items-center justify-between gap-3">
+                <div>
+                    <div class="text-sm text-white/60">Resumen por</div>
+                    <h3 class="text-white font-semibold">Grupo de anuncios de Meta  -  
+                        {{ $ui['header']['selected_customer_name'] }}</h3>
                 </div>
-
-                <div class="flex gap-4 overflow-x-auto pb-2">
-                    @foreach ($qualCards as $card)
-                        @php
-                            $count = (int) ($card['count'] ?? 0);
-                            $pct = $totalLeads > 0 ? (int) round(($count / $totalLeads) * 100) : 0;
-
-                            $url = route(
-                                'dashboard.leads.list',
-                                array_merge(
-                                    \Illuminate\Support\Arr::except(request()->query(), [
-                                        'crm_state',
-                                        'qualification',
-                                        'group_type',
-                                        'group_id',
-                                        'page',
-                                    ]),
-                                    ['group_type' => 'qualification', 'group_id' => $card['id']],
-                                ),
-                            );
-                        @endphp
-
-                        <a href="{{ $url }}" class="min-w-[170px] block">
-                            <div class="text-center text-xs text-white/60 mb-2">{{ $pct }}%</div>
-
-                            <div
-                                class="rounded-2xl border border-white/10 bg-zinc-950/25 p-3 hover:bg-white/5 transition">
-                                <div class="h-10 rounded-xl bg-white/10 flex items-center px-3">
-                                    <div class="text-2xl font-extrabold text-white leading-none">{{ $count }}
-                                    </div>
-                                </div>
-
-                                <div class="mt-2 text-sm text-white/80 font-semibold truncate">{{ $card['name'] }}
-                                </div>
-
-                                <!--  <div
-                                    class="mt-3 inline-flex items-center justify-between w-full px-3 py-2 rounded-xl bg-white/10 text-white/80 text-sm border border-white/10">
-                                    <span>Ver por Cualificación</span>
-                                    <span class="text-white/50">›</span>
-                                </div>-->
-                            </div>
-                        </a>
-                    @endforeach
+                <div class="text-xs text-white/50">
+                    Periodo: <span class="text-white/80 font-semibold">{{ $ui['summary']['period_label'] }}</span>
                 </div>
             </div>
 
-            {{-- Leads por Estado (cards clicables) --}}
-            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4">
-                <div class="flex items-center justify-between mb-3">
-                    <h3 class="text-white font-semibold">Leads por Estado</h3>
-                    <div class="text-xs text-white/50">Total: <span
-                            class="text-white/80 font-semibold">{{ $totalLeads }}</span></div>
+            @php($t = $ui['tables']['meta_ad_sets'] ?? null)
+
+            @if (empty($t) || empty($t['enabled']))
+                <div class="mt-3 text-sm text-white/60">
+                    {{ $t['note'] ?? 'Sin datos de grupos de anuncios en el periodo.' }}
+                </div>
+            @else
+                @if (!empty($t['note']))
+                    <div class="mt-3 text-xs text-amber-200/80">{{ $t['note'] }}</div>
+                @endif
+
+                <div class="mt-3 overflow-x-auto rounded-xl border border-white/10">
+                    <table class="min-w-full text-xs">
+                        <thead class="bg-white/5 text-white/70">
+                            <tr>
+                                @foreach ($t['columns'] as $col)
+                                    <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">
+                                        {{ $col['label'] }}
+                                    </th>
+                                @endforeach
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-white/10">
+                            @foreach ($t['rows'] as $row)
+                                <tr class="hover:bg-white/5">
+                                    @foreach ($t['columns'] as $col)
+                                        <td class="px-3 py-2 whitespace-nowrap text-white/80">
+                                            {{ $row[$col['key']] ?? '-' }}
+                                        </td>
+                                    @endforeach
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
                 </div>
 
-                <div class="flex gap-4 overflow-x-auto pb-2">
-                    @foreach ($crmCards as $card)
-                        @php
-                            $count = (int) ($card['count'] ?? 0);
-                            $pct = $totalLeads > 0 ? (int) round(($count / $totalLeads) * 100) : 0;
-
-                            $url = route(
-                                'dashboard.leads.list',
-                                array_merge(
-                                    \Illuminate\Support\Arr::except(request()->query(), [
-                                        'crm_state',
-                                        'qualification',
-                                        'group_type',
-                                        'group_id',
-                                        'page',
-                                    ]),
-                                    ['group_type' => 'crm_state', 'group_id' => $card['id']],
-                                ),
-                            );
-                        @endphp
-
-                        <a href="{{ $url }}" class="min-w-[170px] block">
-                            <div class="text-center text-xs text-white/60 mb-2">{{ $pct }}%</div>
-
-                            <div
-                                class="rounded-2xl border border-white/10 bg-zinc-950/25 p-3 hover:bg-white/5 transition">
-                                <div class="h-10 rounded-xl bg-white/10 flex items-center px-3">
-                                    <div class="text-2xl font-extrabold text-white leading-none">{{ $count }}
-                                    </div>
-                                </div>
-
-                                <div class="mt-2 text-sm text-white/80 font-semibold truncate">{{ $card['name'] }}
-                                </div>
-
-                                <!--    <div
-                                    class="mt-3 inline-flex items-center justify-between w-full px-3 py-2 rounded-xl bg-white/10 text-white/80 text-sm border border-white/10">
-                                    <span>Ver por Estado</span>
-                                    <span class="text-white/50">›</span>
-                                </div>-->
-                            </div>
-                        </a>
-                    @endforeach
+                <div class="mt-2 text-[11px] text-white/40">
+                    Mostrando hasta 200 grupos ordenados por costo.
                 </div>
-            </div>
+            @endif
         </div>
 
+        {{-- Anuncios Meta (MetaAd) --}}
+        <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4">
+            <div class="flex items-center justify-between gap-3">
+                <div>
+                    <div class="text-sm text-white/60">Resumen por </div>
+                    <h3 class="text-white font-semibold">Anuncio de Meta  -  
+                        {{ $ui['header']['selected_customer_name'] }}</h3>
+                </div>
+                <div class="text-xs text-white/50">
+                    Periodo: <span class="text-white/80 font-semibold">{{ $ui['summary']['period_label'] }}</span>
+                </div>
+            </div>
 
+            @php($t = $ui['tables']['meta_ads'] ?? null)
+
+            @if (empty($t) || empty($t['enabled']))
+                <div class="mt-3 text-sm text-white/60">
+                    {{ $t['note'] ?? 'Sin datos de anuncios en el periodo.' }}
+                </div>
+            @else
+                @if (!empty($t['note']))
+                    <div class="mt-3 text-xs text-amber-200/80">{{ $t['note'] }}</div>
+                @endif
+
+                <div class="mt-3 overflow-x-auto rounded-xl border border-white/10">
+                    <table class="min-w-full text-xs">
+                        <thead class="bg-white/5 text-white/70">
+                            <tr>
+                                @foreach ($t['columns'] as $col)
+                                    <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">
+                                        {{ $col['label'] }}
+                                    </th>
+                                @endforeach
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-white/10">
+                            @foreach ($t['rows'] as $row)
+                                <tr class="hover:bg-white/5">
+                                    @foreach ($t['columns'] as $col)
+                                        <td class="px-3 py-2 whitespace-nowrap text-white/80">
+                                            {{ $row[$col['key']] ?? '-' }}
+                                        </td>
+                                    @endforeach
+                                </tr>
+                            @endforeach
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-2 text-[11px] text-white/40">
+                    Mostrando hasta 200 anuncios ordenados por costo.
+                </div>
+            @endif
+        </div>
 
     </div>
 
@@ -627,6 +561,7 @@
                 if (!baseUrl || !groupType || !groupId) return;
                 if (groupId === "__OTHER__") return;
                 const url = new URL(baseUrl, window.location.origin);
+                // ✅ Agrega/actualiza parámetros para ir al listado detallado
                 url.searchParams.set("group_type", groupType);
                 url.searchParams.set("group_id", groupId);
                 window.location.href = url.toString();
@@ -726,7 +661,25 @@
                 buildDonut("donutPlatforms", "legendPlatforms");
             }
 
-            document.addEventListener("DOMContentLoaded", init);
+            // ✅ Evita "fechas futuras" sin bloquear el presente
+            function nowLocalValue() {
+                const d = new Date();
+                const tz = d.getTimezoneOffset() * 60000;
+                return new Date(d.getTime() - tz).toISOString().slice(0, 16);
+            }
+
+            function setupDatetimeMax() {
+                const max = nowLocalValue();
+                const inputs = document.querySelectorAll(
+                    'input[type="datetime-local"][name="from"], input[type="datetime-local"][name="to"]');
+                inputs.forEach((el) => {
+                    el.max = max;
+                });
+            }
+
+            init();
+            setupDatetimeMax();
+            setInterval(setupDatetimeMax, 60 * 1000);
         })();
     </script>
 </x-app-layout>

@@ -97,4 +97,19 @@ class Lead extends Model
     {
         return $this->belongsTo(CrmState::class, 'crm_state', 'id');
     }
+
+    public function metaAd()
+    {
+        return $this->belongsTo(MetaAd::class, 'meta_id_ad', 'meta_ad_id');
+    }
+
+    public function metaCampaign()
+    {
+        return $this->belongsTo(MetaCampaign::class, 'meta_id_ad', 'meta_campaign_id');
+    }
+
+    public function funnelHistories()
+    {
+        return $this->hasMany(LeadFunnelHistory::class, 'lead_id');
+    }
 }

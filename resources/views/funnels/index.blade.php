@@ -44,7 +44,7 @@
                     <tr>
                         <th class="text-left px-3 py-2">ID</th>
                         <th class="text-left px-3 py-2">Nombre</th>
-                        <th class="text-left px-3 py-2">Meta Event</th>
+                        
                         <th class="text-left px-3 py-2">Estado</th>
                         <th class="text-left px-3 py-2">Qualifications</th>
                         <th class="text-left px-3 py-2 w-56">Acciones</th>
@@ -59,7 +59,7 @@
                             // ✅ Nombre del Meta Event (ajusta si tu columna real es 'nombre')
                             $metaLabel = $meta->nombre
                                 ?? $meta->name
-                                ?? $meta->event_name
+                               
                                 ?? $meta->title
                                 ?? $meta->event
                                 ?? $meta->nombre_evento

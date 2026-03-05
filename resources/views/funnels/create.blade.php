@@ -21,7 +21,7 @@
                     'funnel' => $funnel,
                     'qualifications' => $qualifications,
                     'selectedQualificationIds' => $selectedQualificationIds,
-                    'metaEvents' => $metaEvents,
+                    
                 ])
             </form>
         </div>

@@ -3,15 +3,17 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Services\Lead\LeadFunnelHistoryService;
 use App\Jobs\SendLeadToFacebook;
 use App\Models\Integration;
 use App\Models\Lead;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 
+
 class LeadCrmStateController extends Controller
 {
-    public function update(Request $request, string $public_key)
+    public function update(Request $request, string $public_key, LeadFunnelHistoryService $historyService)
     {
         $integration = Integration::query()
             ->where('public_key', $public_key)
@@ -73,10 +75,13 @@ class LeadCrmStateController extends Controller
             $lead->crm_state = $newCrmState;
             $lead->save();
 
+             // ✅ HISTÓRICO: solo se registra si cambió el funnel
+            $historyService->recordIfFunnelChanged($lead);
+
             $updated++;
 
             // ✅ MISMA condición que ya venías usando
-            if (!in_array($lead->campaign_origin, ['fb', 'meta'], true)) {
+            if (!in_array($lead->campaign_origin, ['fb', 'meta','ig','wa','mg','th'], true)) {
                 continue;
             }
 

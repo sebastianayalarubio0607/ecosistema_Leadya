@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Services\Customer\CustomerService;
 use App\Http\Services\Integration\IntegrationService;
+use App\Http\Services\Lead\LeadFunnelHistoryService;
 use App\Http\Services\Lead\LeadService;
 use App\Jobs\ProcessLeadIntegrationsJob;
 use App\Jobs\SendLeadToFacebook;
@@ -63,7 +64,7 @@ class LeadController extends Controller
         return response()->json($leads);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, LeadFunnelHistoryService $historyService)
     {
 
         /**
@@ -76,18 +77,20 @@ class LeadController extends Controller
          */
         $lead = $this->leadsService->validateLeadRequest($request);
 
-        
         /*
         * Crea el lead en la base de datos
         */
         $lead = $this->leadsService->createLead($lead);
+
+        // ✅ HISTÓRICO INICIAL (si crm_state null => funnel "Lead")
+        $historyService->recordIfFunnelChanged($lead);
 
         /*
         * Buscar integraciones activas del customer
         */
         $integrations = $this->integrationService->getActiveIntegrations($lead->customer_id);
 
-        if (in_array($lead->campaign_origin, ['fb', 'meta'], true)) {
+        if (in_array($lead->campaign_origin, ['fb', 'meta', 'ig', 'wa', 'mg', 'th'], true)) {
             SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
         }
 
@@ -146,10 +149,20 @@ class LeadController extends Controller
         $validated = $request->validate([
             'name' => 'sometimes|string|max:255',
             'email' => 'sometimes|email|max:255',
-            // otros campos opcionales...
+
+            // ✅ permitir crm_state (si este endpoint lo modifica)
+            'crm_state' => 'sometimes|nullable|string|max:255',
         ]);
 
-        $lead->update($validated);
+        $lead->fill($validated);
+        $crmChanged = $lead->isDirty('crm_state');
+
+        $lead->save();
+
+        // ✅ solo si cambió crm_state, entra al servicio
+        if ($crmChanged) {
+            $historyService->recordIfFunnelChanged($lead);
+        }
 
         return response()->json([
             'message' => 'Lead updated successfully',

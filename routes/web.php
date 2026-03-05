@@ -2,6 +2,11 @@
 
 use Illuminate\Support\Facades\Route;
 
+use App\Http\Controllers\UrlGeneratorController;
+
+Route::get('/generate-url', [UrlGeneratorController::class, 'showForm']);
+Route::post('/generate-url', [UrlGeneratorController::class, 'generateUrl'])->name('generate-url');
+
 Route::view('/', 'welcome');
  
 

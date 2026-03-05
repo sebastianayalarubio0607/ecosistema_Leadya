@@ -72,13 +72,11 @@ class LeadService
             'plataforma'      => 'nullable|string|max:255',
             'lenguaje'        => 'nullable|string|max:255',
             'geo'             => 'nullable|string|max:255',
-            'crm_state'       => 'nullable|string|max:255',
-            'meta_id_ad'      => 'nullable|string|max:255',
-            'value'           => 'nullable|numeric',
             'agent'           => 'sometimes|nullable|string|max:10000',
             'page_url'        => 'sometimes|nullable|string|max:10000',
             'meta_id_ad'      => 'sometimes|nullable|string|max:255',
             'value'           => 'sometimes|nullable|numeric',
+            'crm_state'       =>'sometimes|nullable|string|max:255',
 
             
 

@@ -24,4 +24,6 @@ class Funnel extends Model
     {
         return $this->belongsTo(MetaEvent::class, 'meta_event_id');
     }
+
+    
 }

@@ -1,6 +1,6 @@
 <div class="grid gap-4">
     <div>
-        <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">Nombre *</label>
+        <label class="block text-sm mb-1 text-gray-800/50 dark:text-gray-200">Nombre *</label>
         <input
             name="name"
             value="{{ old('name', $funnel->name ?? '') }}"
@@ -37,39 +37,7 @@
         @enderror
     </div>
 
-    {{-- ✅ MetaEvent --}}
-    <div>
-        <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">
-            Meta Event (opcional)
-        </label>
 
-        @php $metaEventId = old('meta_event_id', $funnel->meta_event_id ?? ''); @endphp
-
-        <select name="meta_event_id" class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200">
-            <option value="">— Sin Meta Event —</option>
-
-            @foreach($metaEvents as $ev)
-                @php
-                    // ✅ Aquí se obtiene el "nombre" del meta event
-                    // Ajusta el orden si tu columna real tiene otro nombre.
-                    $label = $ev->name
-                        ?? $ev->event_name
-                        ?? $ev->title
-                        ?? $ev->event
-                        ?? $ev->nombre
-                        ?? ('MetaEvent #' . $ev->id);
-                @endphp
-
-                <option value="{{ $ev->id }}" @selected((string)$metaEventId === (string)$ev->id)>
-                    {{ $label }}
-                </option>
-            @endforeach
-        </select>
-
-        @error('meta_event_id')
-            <div class="mt-1 text-sm text-red-600">{{ $message }}</div>
-        @enderror
-    </div>
 
     {{-- ✅ Qualifications --}}
     <div>

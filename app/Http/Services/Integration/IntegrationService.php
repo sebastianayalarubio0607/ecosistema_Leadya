@@ -18,15 +18,18 @@ class IntegrationService
     private $GooglesheetsIntegrationService;
     private $KommoIntegrationService;
     private $LetyIntegrationService;
+    private $zohoIntegrationService;
 
     public function __construct(
         GoogleSheetsIntegrationService $GooglesheetsIntegrationService,
         KommoIntegrationService $KommoIntegrationService,
-        LetyIntegrationService $LetyIntegrationService
+        LetyIntegrationService $LetyIntegrationService,
+        zohoIntegrationService $zohoIntegrationService
     ) {
         $this->GooglesheetsIntegrationService = $GooglesheetsIntegrationService;
         $this->KommoIntegrationService = $KommoIntegrationService;
         $this->LetyIntegrationService = $LetyIntegrationService;
+        $this->zohoIntegrationService = $zohoIntegrationService;
     }
 
     /**
@@ -75,6 +78,7 @@ class IntegrationService
                 'google_sheets' => fn() => $this->GooglesheetsIntegrationService->sendToGoogleSheets($lead, $integration),
                 'kommo'         => fn() => $this->KommoIntegrationService->sendToKommo($lead, $integration),
                 'lety'          => fn() => $this->LetyIntegrationService->sendToLety($lead, $integration),
+                'zoho'          => fn() => $this->zohoIntegrationService->sendTozoho($lead, $integration),
             ];
 
             $response = $handlers[$type]() ?? null;

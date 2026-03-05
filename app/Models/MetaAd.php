@@ -19,4 +19,9 @@ class MetaAd extends Model
     {
         return $this->hasMany(MetaAdInsight::class, 'meta_ad_id');
     }
+
+    public function leads()
+    {
+        return $this->hasMany(Lead::class, 'meta_ad_id');
+    }
 }

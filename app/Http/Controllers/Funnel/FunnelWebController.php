@@ -19,7 +19,6 @@ class FunnelWebController extends Controller
         $q = $request->get('q');
 
         $funnels = Funnel::query()
-            ->with('metaEvent')
             ->withCount('qualifications')
             ->when($q, fn ($query) => $query->where('name', 'like', "%{$q}%"))
             ->orderByDesc('id')
@@ -37,9 +36,7 @@ class FunnelWebController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'funnel_id']);
 
-        $metaEvents = MetaEvent::query()
-            ->orderByDesc('id')
-            ->get();
+       
 
         $selectedQualificationIds = old('qualification_ids', []);
 
@@ -47,7 +44,7 @@ class FunnelWebController extends Controller
             'funnel',
             'qualifications',
             'selectedQualificationIds',
-            'metaEvents'
+            
         ));
     }
 
@@ -60,8 +57,7 @@ class FunnelWebController extends Controller
             'description' => ['nullable', 'string'],
             'status' => ['required', 'in:active,inactive'],
 
-            // MetaEvent
-            'meta_event_id' => ['nullable', 'integer', 'exists:meta_events,id'],
+
 
             // Qualifications
             'qualification_ids' => ['sometimes', 'array'],
@@ -87,7 +83,7 @@ class FunnelWebController extends Controller
     public function show(Funnel $funnel): View
     {
         $funnel->load([
-            'metaEvent',
+           
             'qualifications' => fn ($q) => $q->orderBy('name'),
         ]);
 
@@ -97,7 +93,7 @@ class FunnelWebController extends Controller
     public function edit(Funnel $funnel): View
     {
         $funnel->load([
-            'metaEvent',
+            
             'qualifications:id,funnel_id,name',
         ]);
 
@@ -105,9 +101,7 @@ class FunnelWebController extends Controller
             ->orderBy('name')
             ->get(['id', 'name', 'funnel_id']);
 
-        $metaEvents = MetaEvent::query()
-            ->orderByDesc('id')
-            ->get();
+        
 
         $selectedQualificationIds = old('qualification_ids', $funnel->qualifications->pluck('id')->all());
 
@@ -115,7 +109,7 @@ class FunnelWebController extends Controller
             'funnel',
             'qualifications',
             'selectedQualificationIds',
-            'metaEvents'
+            
         ));
     }
 
