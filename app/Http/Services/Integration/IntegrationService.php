@@ -9,6 +9,7 @@ use Illuminate\Support\Facades\Log;
 use App\Http\Services\Integration\GoogleSheetsIntegrationService;
 use App\Http\Services\Integration\KommoIntegrationService;
 use App\Http\Services\Integration\LetyIntegrationService;
+use App\Http\Services\Integration\ZohoIntegrationService;
 
 /**
  * Servicio para manejar la lógica relacionada con los integrations.
@@ -24,7 +25,7 @@ class IntegrationService
         GoogleSheetsIntegrationService $GooglesheetsIntegrationService,
         KommoIntegrationService $KommoIntegrationService,
         LetyIntegrationService $LetyIntegrationService,
-        zohoIntegrationService $zohoIntegrationService
+        ZohoIntegrationService $zohoIntegrationService
     ) {
         $this->GooglesheetsIntegrationService = $GooglesheetsIntegrationService;
         $this->KommoIntegrationService = $KommoIntegrationService;
@@ -130,3 +131,5 @@ class IntegrationService
         ]);
     }
 }
+
+

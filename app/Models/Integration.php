@@ -22,6 +22,15 @@ class Integration extends Model
         'crm_Id_fuente',
         'crm_Id_email',
         'public_key',
+        'client_id',
+        'client_secret',
+        'refresh_token',
+        'api_domain',
+        'scope',
+        'token_type',
+        'expires_in',
+        'token_expires_at',
+        'code',
     ];
 
     // Relaciones

@@ -52,7 +52,7 @@ class SendLeadToFacebook implements ShouldQueue
         $baseLog = [
             'lead_id'       => $lead->id,
             'customer_id'   => $this->customerId, // 👈 corregido
-            'event_name'    => $lead->crmState?->metaEvent?->nombre ?: 'CompleteRegistration',
+            'event_name'    => $lead->crmState?->metaEvent?->nombre ?: 'Lead',
             'event_time'    => $lead->created_at->now()->timestamp,// 👈 corregido
             'action_source' => 'website',
             'event_source_url' => $lead->page_url,

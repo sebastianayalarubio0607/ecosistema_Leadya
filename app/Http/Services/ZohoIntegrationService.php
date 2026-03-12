@@ -20,38 +20,30 @@ class ZohoIntegrationService
         }
 
         $url = $apiDomain . '/crm/v8/Leads/upsert';
-        $source = ($lead->campaign_origin && in_array($lead->campaign_origin, ['fb', 'meta', 'ig', 'wa', 'mg', 'th']))
-            ? 'Facebook'
-            : 'Google Ads';
-
-        $leadData = [
-            'Last_Name' => $this->firstNonEmpty($lead->last_name, 'Sin apellido'),
-            'First_Name' => $this->firstNonEmpty($lead->name, 'Sin nombre'),
-            'Company' => $this->firstNonEmpty($lead->company, 'Particular'),
-            'Email' => $lead->email,
-            'Phone' => $lead->phone,
-            'Mobile' => $lead->phone,
-            'Assignment_Rule_ID' => '4516191000001033003',
-            'Description' => $this->firstNonEmpty($lead->message, 'sin comentarios'),
-            'Lead_Status' => 'Sin gestion',
-            'Lead_Source' => $this->firstNonEmpty($source, 'Formulario Clientes Potenciales Facebook.'),
-        ];
-
-        $numberWorkers = $this->firstInteger($lead->number_workers ?? null);
-        if ($numberWorkers !== null) {
-            $leadData['No_of_Employees'] = $numberWorkers;
+        if ($lead->campaign_origin && in_array($lead->campaign_origin, ['fb', 'meta', 'ig', 'wa', 'mg', 'th'])) {
+           $Source= 'Facebook';
         }
-
-        $numberLocations = $this->firstInteger(
-            $lead->number_locations ?? null,
-            $lead->umber_locations ?? null
-        );
-        if ($numberLocations !== null) {
-            $leadData['Cantidad_de_Sedes'] = $numberLocations;
+else {
+            $Source= 'Google Ads';
         }
-
         $payload = [
-            'data' => [$leadData],
+            'data' => [
+                [
+                    'Last_Name' => $this->firstNonEmpty($lead->last_name, 'Sin apellido'),
+                    'First_Name' => $this->firstNonEmpty($lead->name, 'Sin nombre'),
+                    'Company' => $this->firstNonEmpty($lead->company, 'Particular'),
+                    'Email' => $lead->email,
+                    'Phone' => $lead->phone,
+                    'Mobile' => $lead->phone,
+                    'Assignment_Rule_ID' => "4516191000001033003",
+                    'Description' => $this->firstNonEmpty($lead->message, 'sin comentarios'),
+                    'Lead_Status' => "Sin gestión",
+                    'No_of_Employees' =>$this->firstNonEmpty($lead->number_workers, 1) ,
+                    'Cantidad_de_Sedes' => $this->firstNonEmpty($lead->number_locations, 1),
+                    'Lead_Source' => $this->firstNonEmpty($Source, 'Formulario Clientes Potenciales Facebook.'),
+                    
+                ],
+            ],
             'duplicate_check_fields' => ['Email'],
         ];
 
@@ -166,27 +158,13 @@ class ZohoIntegrationService
 
     private function firstNonEmpty(...$values)
     {
-        foreach ($values as $value) {
-            if ($value !== null && $value !== '') {
-                return $value;
-            }
-        }
-
-        return null;
-    }
-
-    private function firstInteger(...$values): ?int
-    {
-        foreach ($values as $value) {
-            if ($value === null || $value === '') {
-                continue;
-            }
-
-            if (filter_var($value, FILTER_VALIDATE_INT) !== false) {
-                return (int) $value;
+        foreach ($values as $v) {
+            if ($v !== null && $v !== '') {
+                return $v;
             }
         }
 
         return null;
     }
 }
+

@@ -46,6 +46,18 @@ class Lead extends Model
         'crm_state',
         'meta_id_ad',
         'value',
+        'number_workers',
+        'number_locations',
+        'campo_numero_1',
+        'campo_numero_2',
+        'campo_numero_3',
+        'campo_numero_4',
+        'campo_numero_5',
+        'campo_text_1',
+        'campo_text_2',
+        'campo_text_3',
+        'campo_text_4',
+        'campo_text_5',
     ];
 
     protected $casts = [
@@ -54,6 +66,13 @@ class Lead extends Model
         'age' => 'integer',
         'fields_custom' => 'array', // si la columna es JSON; si es TEXT, quita este c
         'value' => 'decimal:2',
+        'number_workers' => 'integer',
+        'number_locations' => 'integer',
+        'campo_numero_1' => 'integer',
+        'campo_numero_2' => 'integer',
+        'campo_numero_3' => 'integer',
+        'campo_numero_4' => 'integer',
+        'campo_numero_5' => 'integer',
     ];
 
     // Compatibilidad con payloads legacy (acepta last_Name / fields_Custom)

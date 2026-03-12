@@ -22,11 +22,13 @@
     </div>
 
     <div>
-        <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">Tipo de Integración *</label>
-        <select name="integrationtype_id" class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200" required>
+        <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">Tipo de Integracion *</label>
+        <select id="integrationtype_id" name="integrationtype_id"
+                class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200" required>
             <option value="">Seleccione...</option>
             @foreach($types as $t)
                 <option value="{{ $t->id }}"
+                    data-key="{{ $t->key ?? \Illuminate\Support\Str::slug($t->name, '_') }}"
                     {{ (int) old('integrationtype_id', $integration->integrationtype_id ?? 0) === (int) $t->id ? 'selected' : '' }}>
                     {{ $t->name }}
                 </option>
@@ -44,23 +46,9 @@
         @error('url') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
     </div>
 
-    <div>
-        <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">Token (tokent)</label>
-        <input name="tokent" value="{{ old('tokent', $integration->tokent ?? '') }}"
-               class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200">
-        @error('tokent') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
-    </div>
+    <input type="hidden" name="status" value="{{ old('status', $integration->status ?? 1) }}">
 
-    <div>
-        <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">Status *</label>
-        <select name="status" class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200" required>
-            <option value="1" {{ (int) old('status', $integration->status ?? 1) === 1 ? 'selected' : '' }}>Activo</option>
-            <option value="0" {{ (int) old('status', $integration->status ?? 1) === 0 ? 'selected' : '' }}>Inactivo</option>
-        </select>
-        @error('status') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
-    </div>
-
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden" data-show-for="kommo">
         <div>
             <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">crm_Id_phone</label>
             <input name="crm_Id_phone" value="{{ old('crm_Id_phone', $integration->crm_Id_phone ?? '') }}"
@@ -90,11 +78,41 @@
         </div>
     </div>
 
-    <div>
-        <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">Descripción</label>
-        <textarea name="description" rows="4"
-                  class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200">{{ old('description', $integration->description ?? '') }}</textarea>
-        @error('description') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden" data-show-for="zoho">
+        <div>
+            <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">client_id</label>
+            <input name="client_id" value="{{ old('client_id', $integration->client_id ?? '') }}"
+                   class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200">
+            @error('client_id') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+        </div>
+
+        <div>
+            <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">client_secret</label>
+            <input name="client_secret" value="{{ old('client_secret', $integration->client_secret ?? '') }}"
+                   class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200">
+            @error('client_secret') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+        </div>
+
+        <div>
+            <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">code</label>
+            <input name="code" value="{{ old('code', $integration->code ?? '') }}"
+                   class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200">
+            @error('code') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+        </div>
+
+        <div>
+            <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">access_token</label>
+            <input name="access_token" value="{{ old('access_token', $integration->tokent ?? '') }}"
+                   class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200">
+            @error('access_token') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+        </div>
+
+        <div>
+            <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">refresh_token</label>
+            <input name="refresh_token" value="{{ old('refresh_token', $integration->refresh_token ?? '') }}"
+                   class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200">
+            @error('refresh_token') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+        </div>
     </div>
 
     @if(isset($integration) && $integration->exists)
@@ -122,3 +140,55 @@
         </a>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const typeSelect = document.getElementById('integrationtype_id');
+  const conditionalBlocks = document.querySelectorAll('[data-show-for]');
+
+  function normalizeTypeKey(raw) {
+    const key = (raw || '').trim().toLowerCase();
+    if (key.includes('google')) return 'google_sheets';
+    if (key.includes('kommo')) return 'kommo';
+    if (key.includes('zoho')) return 'zoho';
+    return key;
+  }
+
+  function getSelectedKey() {
+    const opt = typeSelect.options[typeSelect.selectedIndex];
+    const byData = normalizeTypeKey(opt?.dataset?.key || '');
+    if (byData) return byData;
+    return normalizeTypeKey(opt?.textContent || '');
+  }
+
+  function setBlockVisible(block, visible) {
+    block.classList.toggle('hidden', !visible);
+
+    block.querySelectorAll('input, select, textarea').forEach(el => {
+      el.disabled = !visible;
+    });
+  }
+
+  function refresh() {
+    const key = getSelectedKey();
+
+    conditionalBlocks.forEach(block => {
+      const showFor = (block.dataset.showFor || '')
+        .split(/\s+/)
+        .map(s => s.trim().toLowerCase())
+        .filter(Boolean);
+
+      const hasError = !!block.querySelector('.text-red-600');
+      const shouldShow = hasError || (key && showFor.includes(key));
+
+      setBlockVisible(block, shouldShow);
+    });
+  }
+
+  if (typeSelect) {
+    typeSelect.addEventListener('change', refresh);
+  }
+
+  refresh();
+});
+</script>

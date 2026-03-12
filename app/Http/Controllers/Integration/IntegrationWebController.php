@@ -7,7 +7,9 @@ use App\Models\Customer;
 use App\Models\Integration;
 use App\Models\Integrationtype;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 class IntegrationWebController extends Controller
 {
@@ -42,28 +44,17 @@ class IntegrationWebController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'integrationtype_id' => 'required|exists:integrationtypes,id',
-            'customer_id' => 'required|exists:customers,id',
-            'url' => 'required|url',
-            'tokent' => 'nullable|string',
-            'status' => 'required|boolean',
-            'crm_Id_phone' => ['nullable', 'string', 'max:255'],
-            'crm_Id_service' => ['nullable', 'string', 'max:255'],
-            'crm_Id_fuente' => ['nullable', 'string', 'max:255'],
-            'crm_Id_email' => ['nullable', 'string', 'max:255'],
-        ]);
+        $validated = $request->validate($this->rules());
+        $payload = $this->normalizePayloadByType($validated);
+        $payload = $this->hydrateZohoTokensFromAuthorizationCode($payload);
 
-        // ✅ Generar public_key aleatorio y único
-        $validated['public_key'] = $this->generatePublicKey();
+        $payload['public_key'] = $this->generatePublicKey();
 
-        $integration = Integration::create($validated);
+        $integration = Integration::create($payload);
 
         return redirect()
             ->route('integrations.show', $integration)
-            ->with('success', 'Integración creada correctamente.');
+            ->with('success', 'Integracion creada correctamente.');
     }
 
     public function show(Integration $integration)
@@ -83,32 +74,18 @@ class IntegrationWebController extends Controller
 
     public function update(Request $request, Integration $integration)
     {
-        $validated = $request->validate([
-            'name' => 'required|string|max:255',
-            'description' => 'nullable|string',
-            'integrationtype_id' => 'required|exists:integrationtypes,id',
-            'customer_id' => 'required|exists:customers,id',
-            'url' => 'required|url',
-            'tokent' => 'nullable|string',
-            'status' => 'required|boolean',
-            'crm_Id_phone' => ['nullable', 'string', 'max:255'],
-            'crm_Id_service' => ['nullable', 'string', 'max:255'],
-            'crm_Id_fuente' => ['nullable', 'string', 'max:255'],
-            'crm_Id_email' => ['nullable', 'string', 'max:255'],
-            'regenerate_public_key' => 'nullable|boolean',
-        ]);
+        $validated = $request->validate($this->rules(true));
+        $payload = $this->normalizePayloadByType($validated);
 
         if ($request->boolean('regenerate_public_key')) {
-            $validated['public_key'] = $this->generatePublicKey();
-        } else {
-            unset($validated['regenerate_public_key']);
+            $payload['public_key'] = $this->generatePublicKey();
         }
 
-        $integration->update($validated);
+        $integration->update($payload);
 
         return redirect()
             ->route('integrations.show', $integration)
-            ->with('success', 'Integración actualizada.');
+            ->with('success', 'Integracion actualizada.');
     }
 
     public function destroy(Integration $integration)
@@ -117,7 +94,134 @@ class IntegrationWebController extends Controller
 
         return redirect()
             ->route('integrations.index')
-            ->with('success', 'Integración eliminada.');
+            ->with('success', 'Integracion eliminada.');
+    }
+
+    private function rules(bool $updating = false): array
+    {
+        $rules = [
+            'name' => 'required|string|max:255',
+            'description' => 'nullable|string',
+            'integrationtype_id' => 'required|exists:integrationtypes,id',
+            'customer_id' => 'required|exists:customers,id',
+            'url' => 'required|url',
+            'status' => 'nullable|boolean',
+            'crm_Id_phone' => ['nullable', 'string', 'max:255'],
+            'crm_Id_service' => ['nullable', 'string', 'max:255'],
+            'crm_Id_fuente' => ['nullable', 'string', 'max:255'],
+            'crm_Id_email' => ['nullable', 'string', 'max:255'],
+            'client_id' => ['nullable', 'string', 'max:255'],
+            'client_secret' => ['nullable', 'string'],
+            'code' => ['nullable', 'string'],
+            'access_token' => ['nullable', 'string'],
+            'refresh_token' => ['nullable', 'string'],
+            'api_domain' => ['nullable', 'url', 'max:255'],
+            'scope' => ['nullable', 'string'],
+            'token_type' => ['nullable', 'string', 'max:30'],
+            'expires_in' => ['nullable', 'integer', 'min:1'],
+            'token_expires_at' => ['nullable', 'date'],
+        ];
+
+        if ($updating) {
+            $rules['regenerate_public_key'] = 'nullable|boolean';
+        }
+
+        return $rules;
+    }
+
+    private function normalizePayloadByType(array $validated): array
+    {
+        $validated['status'] = array_key_exists('status', $validated) ? (int) $validated['status'] : 1;
+
+        if (array_key_exists('access_token', $validated)) {
+            $validated['tokent'] = $validated['access_token'];
+            unset($validated['access_token']);
+        }
+
+        $typeName = strtolower((string) Integrationtype::whereKey($validated['integrationtype_id'])->value('name'));
+
+        if ($typeName === 'google_sheets') {
+            $validated = $this->clearKommoFields($validated);
+            $validated = $this->clearZohoFields($validated);
+        }
+
+        if ($typeName === 'kommo') {
+            $validated = $this->clearZohoFields($validated);
+        }
+
+        if ($typeName === 'zoho') {
+            $validated = $this->clearKommoFields($validated);
+        }
+
+        return $validated;
+    }
+
+    private function hydrateZohoTokensFromAuthorizationCode(array $payload): array
+    {
+        $typeName = strtolower((string) Integrationtype::whereKey($payload['integrationtype_id'])->value('name'));
+        if ($typeName !== 'zoho') {
+            return $payload;
+        }
+
+        if (empty($payload['client_id']) || empty($payload['client_secret']) || empty($payload['code'])) {
+            throw ValidationException::withMessages([
+                'code' => 'Para Zoho debes enviar client_id, client_secret y code para generar tokens.',
+            ]);
+        }
+
+        $accountsUrl = rtrim((string) $payload['url'], '/');
+        $query = [
+            'grant_type' => 'authorization_code',
+            'client_id' => trim((string) $payload['client_id']),
+            'client_secret' => trim((string) $payload['client_secret']),
+            'code' => trim((string) $payload['code']),
+        ];
+
+        $response = Http::acceptJson()->post($accountsUrl . '/oauth/v2/token?' . http_build_query($query));
+        $json = $response->json();
+
+        if (!$response->successful() || !is_array($json) || isset($json['error']) || empty($json['access_token'])) {
+            $message = is_array($json)
+                ? ($json['error'] ?? 'No fue posible obtener tokens de Zoho.')
+                : 'No fue posible obtener tokens de Zoho.';
+
+            throw ValidationException::withMessages([
+                'code' => 'Zoho OAuth error: ' . $message,
+            ]);
+        }
+
+        $expiresIn = isset($json['expires_in']) ? (int) $json['expires_in'] : null;
+
+        $payload['tokent'] = (string) $json['access_token'];
+        $payload['refresh_token'] = $json['refresh_token'] ?? ($payload['refresh_token'] ?? null);
+        $payload['scope'] = $json['scope'] ?? null;
+        $payload['api_domain'] = $json['api_domain'] ?? ($payload['api_domain'] ?? null);
+        $payload['token_type'] = $json['token_type'] ?? null;
+        $payload['expires_in'] = $expiresIn;
+        $payload['token_expires_at'] = $expiresIn ? now()->addSeconds($expiresIn) : null;
+
+        return $payload;
+    }
+
+    private function clearKommoFields(array $payload): array
+    {
+        $payload['crm_Id_phone'] = null;
+        $payload['crm_Id_email'] = null;
+        $payload['crm_Id_service'] = null;
+        $payload['crm_Id_fuente'] = null;
+
+        return $payload;
+    }
+
+    private function clearZohoFields(array $payload): array
+    {
+        $payload['client_id'] = null;
+        $payload['client_secret'] = null;
+        $payload['code'] = null;
+        $payload['refresh_token'] = null;
+        $payload['tokent'] = null;
+
+        return $payload;
     }
 
     private function generatePublicKey(): string

@@ -13,7 +13,7 @@ class FacebookConversionsService
      * Si quieres un default "quemado", déjalo aquí.
      * Si está vacío, no se envía.
      */
-    private const DEFAULT_TEST_EVENT_CODE = 'TEST66994';
+    private const DEFAULT_TEST_EVENT_CODE = '';
 
     private const DEFAULT_CURRENCY = 'COP';
 
@@ -39,7 +39,7 @@ class FacebookConversionsService
          * Si crmState es null/vacío/no existe => "Lead"
          * (NO se normaliza)
          */
-        $event_name = 'Lead';
+        $event_name = 'CompleteRegistration';
         $usedFallbackLeadEvent = true;
 
         if (!empty($lead->crm_state)) {
