@@ -42,8 +42,8 @@
                         <thead>
                             <tr class="bg-slate-900 text-slate-300 text-[11px] uppercase tracking-[0.1em] font-bold">
                                 <th class="p-4 text-left w-[220px]">Base URL</th>
-                                <th class="p-4 text-left w-[160px]">Origen</th>
                                 <th class="p-4 text-left w-[160px]">Plataforma</th>
+                                <th class="p-4 text-left w-[160px]">Origen</th>
                                 <th class="p-4 text-left w-[140px]">Geo</th>
                                 <th class="p-4 text-left w-[120px]">Idioma</th>
                                 <th class="p-4 text-left w-[160px]">Servicio</th>

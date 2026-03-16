@@ -2,31 +2,36 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Http\Request;
+use App\Models\Geo;
+use App\Models\Language;
+use App\Models\Origin;
+use App\Models\Platform;
 
 class UrlGeneratorController extends Controller
 {
     public function showForm()
     {
-        // El formato es 'abreviatura' => 'Nombre Completo'
         $options = [
-            'origin' => [
-                'gads' => 'Google Ads', 'yt' => 'YouTube Ads', 'gm' => 'Google Maps', 
-                'gs' => 'Google Shopping', 'fb' => 'Facebook', 'ig' => 'Instagram', 
-                'fbm' => 'Messenger', 'wa' => 'WhatsApp'
-            ],
-            'platform' => [
-                'search' => 'Search', 'display' => 'Display', 'video' => 'Video', 
-                'apps' => 'Apps', 'discovery' => 'Discovery', 'max' => 'Performance Max', 
-                'demand' => 'Demand Gen', 'reels' => 'Reels', 'shorts' => 'Shorts'
-            ],
-            'geo' => [
-                'bog' => 'Bogota', 'clo' => 'Cali', 'baq' => 'Barranquilla', 'med' => 'Medellin', 
-                'mex' => 'Mexico DF', 'us' => 'USA', 'latam' => 'Latam', 'eu' => 'Europa'
-            ],
-            'language' => [
-                'es' => 'Español', 'en' => 'Inglés', 'pt' => 'Portugués'
-            ]
+            'origin' => Origin::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->pluck('name', 'code')
+                ->toArray(),
+            'platform' => Platform::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->pluck('name', 'code')
+                ->toArray(),
+            'geo' => Geo::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->pluck('name', 'code')
+                ->toArray(),
+            'language' => Language::query()
+                ->where('is_active', true)
+                ->orderBy('name')
+                ->pluck('name', 'code')
+                ->toArray(),
         ];
 
         return view('generate-url', compact('options'));

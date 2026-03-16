@@ -30,6 +30,12 @@ new class extends Component {
             'active' => ['customers.*'],
             'icon' => 'users',
         ],
+        [
+            'label' => 'Meta Ad Accounts',
+            'route' => 'meta.ad-accounts.index',
+            'active' => ['meta.ad-accounts.*'],
+            'icon' => 'users',
+        ],
 
         // ✅ META ADS (CRUD)
         [
@@ -38,36 +44,27 @@ new class extends Component {
             'active' => ['meta.insights.*'],
             'icon' => 'list',
         ],
-        [
-            'label' => 'Meta Ad Accounts',
-            'route' => 'meta.ad-accounts.index',
-            'active' => ['meta.ad-accounts.*'],
+                [
+            'label' => 'Meta Ads',
+            'route' => 'meta.ads.index',
+            'active' => ['meta.ads.*'],
             'icon' => 'list',
         ],
+                [
+            'label' => 'Meta Ad Sets',
+            'route' => 'meta.ad-sets.index',
+            'active' => ['meta.ad-sets.*'],
+            'icon' => 'list',
+        ],
+
         [
             'label' => 'Meta Campaigns',
             'route' => 'meta.campaigns.index',
             'active' => ['meta.campaigns.*'],
             'icon' => 'list',
         ],
-        [
-            'label' => 'Meta Ad Sets',
-            'route' => 'meta.ad-sets.index',
-            'active' => ['meta.ad-sets.*'],
-            'icon' => 'list',
-        ],
-        [
-            'label' => 'Meta Ads',
-            'route' => 'meta.ads.index',
-            'active' => ['meta.ads.*'],
-            'icon' => 'list',
-        ],
-        [
-            'label' => 'Meta Insights',
-            'route' => 'meta.insights.index',
-            'active' => ['meta.insights.*'],
-            'icon' => 'chart',
-        ],
+        
+
 
         [
             'label' => 'Integration Types',
@@ -105,6 +102,31 @@ new class extends Component {
             'route' => 'meta.meta-events.index',
             'active' => ['meta.meta-events.*'],
             'icon' => 'funnel',
+        ],
+
+        [
+            'label' => 'platforms',
+            'route' => 'platforms.index',
+            'active' => ['platforms.*'],
+            'icon' => 'platforms',
+        ],
+        [
+            'label' => 'Geos',
+            'route' => 'geos.index',
+            'active' => ['geos.*'],
+            'icon' => 'Geos',
+        ],
+        [
+            'label' => 'languages',
+            'route' => 'languages.index',
+            'active' => ['languages.*'],
+            'icon' => 'languages',
+        ],
+        [
+            'label' => 'origins',
+            'route' => 'origins.index',
+            'active' => ['origins.*'],
+            'icon' => 'origins',
         ],
     ];
 
