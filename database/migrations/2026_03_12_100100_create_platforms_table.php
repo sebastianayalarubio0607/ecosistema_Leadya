@@ -27,6 +27,8 @@ return new class extends Migration
             ['code' => 'demand', 'name' => 'Demand Gen', 'is_active' => true, 'created_at' => now(), 'updated_at' => now()],
             ['code' => 'reels', 'name' => 'Reels', 'is_active' => true, 'created_at' => now(), 'updated_at' => now()],
             ['code' => 'shorts', 'name' => 'Shorts', 'is_active' => true, 'created_at' => now(), 'updated_at' => now()],
+            ['code' => 'img', 'name' => 'Imagen', 'is_active' => true, 'created_at' => now(), 'updated_at' => now()],
+            ['code' => 'slider', 'name' => 'carrusel', 'is_active' => true, 'created_at' => now(), 'updated_at' => now()],
         ]);
     }
 

@@ -26,6 +26,8 @@ return new class extends Migration
             ['code' => 'us', 'name' => 'USA', 'is_active' => true, 'created_at' => now(), 'updated_at' => now()],
             ['code' => 'latam', 'name' => 'Latam', 'is_active' => true, 'created_at' => now(), 'updated_at' => now()],
             ['code' => 'eu', 'name' => 'Europa', 'is_active' => true, 'created_at' => now(), 'updated_at' => now()],
+            ['code' => 'as', 'name' => 'Asia', 'is_active' => true, 'created_at' => now(), 'updated_at' => now()],
+            ['code' => 'co', 'name' => 'Colombia', 'is_active' => true, 'created_at' => now(), 'updated_at' => now()],
         ]);
     }
 

@@ -63,9 +63,6 @@ new class extends Component {
             'active' => ['meta.campaigns.*'],
             'icon' => 'list',
         ],
-        
-
-
         [
             'label' => 'Integration Types',
             'route' => 'integrationtypes.index',

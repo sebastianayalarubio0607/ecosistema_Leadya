@@ -31,9 +31,13 @@ class Integration extends Model
         'expires_in',
         'token_expires_at',
         'code',
+        'territory_id',
+        'owner_id',
+        'city',
+        'lead_source_id',
+        'custom_field',
     ];
 
-    // Relaciones
     public function customer()
     {
         return $this->belongsTo(Customer::class);

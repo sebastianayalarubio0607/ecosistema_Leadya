@@ -120,6 +120,12 @@ class IntegrationWebController extends Controller
             'token_type' => ['nullable', 'string', 'max:30'],
             'expires_in' => ['nullable', 'integer', 'min:1'],
             'token_expires_at' => ['nullable', 'date'],
+            'territory_id' => ['nullable', 'string', 'max:255'],
+            'owner_id' => ['nullable', 'string', 'max:255'],
+            'city' => ['nullable', 'string', 'max:255'],
+            'lead_source_id' => ['nullable', 'string', 'max:255'],
+            'custom_field' => ['nullable', 'string'],
+            'tokent' => ['nullable', 'string'],
         ];
 
         if ($updating) {
@@ -143,17 +149,58 @@ class IntegrationWebController extends Controller
         if ($typeName === 'google_sheets') {
             $validated = $this->clearKommoFields($validated);
             $validated = $this->clearZohoFields($validated);
+            $validated = $this->clearFreshworksFields($validated);
         }
 
         if ($typeName === 'kommo') {
             $validated = $this->clearZohoFields($validated);
+            $validated = $this->clearFreshworksFields($validated);
         }
 
         if ($typeName === 'zoho') {
             $validated = $this->clearKommoFields($validated);
+            $validated = $this->clearFreshworksFields($validated);
+        }
+
+        if ($typeName === 'freshworks') {
+            $validated = $this->clearKommoFields($validated);
+            $validated = $this->clearZohoFieldsPreservingToken($validated);
+            $validated = $this->validateFreshworksPayload($validated);
         }
 
         return $validated;
+    }
+
+    private function validateFreshworksPayload(array $payload): array
+    {
+        $required = [
+            'tokent' => 'token',
+            'territory_id' => 'territory_id',
+            'owner_id' => 'owner_id',
+            'city' => 'City',
+            'lead_source_id' => 'lead_source_id',
+            'custom_field' => 'custom_field',
+        ];
+
+        $messages = [];
+        foreach ($required as $field => $label) {
+            if (empty($payload[$field])) {
+                $messages[$field] = "Para Freshworks el campo {$label} es obligatorio.";
+            }
+        }
+
+        if (!empty($payload['custom_field'])) {
+            $decoded = json_decode($payload['custom_field'], true);
+            if (!is_array($decoded)) {
+                $messages['custom_field'] = 'custom_field debe ser un JSON valido.';
+            }
+        }
+
+        if ($messages !== []) {
+            throw ValidationException::withMessages($messages);
+        }
+
+        return $payload;
     }
 
     private function hydrateZohoTokensFromAuthorizationCode(array $payload): array
@@ -220,6 +267,37 @@ class IntegrationWebController extends Controller
         $payload['code'] = null;
         $payload['refresh_token'] = null;
         $payload['tokent'] = null;
+        $payload['api_domain'] = null;
+        $payload['scope'] = null;
+        $payload['token_type'] = null;
+        $payload['expires_in'] = null;
+        $payload['token_expires_at'] = null;
+
+        return $payload;
+    }
+
+    private function clearZohoFieldsPreservingToken(array $payload): array
+    {
+        $payload['client_id'] = null;
+        $payload['client_secret'] = null;
+        $payload['code'] = null;
+        $payload['refresh_token'] = null;
+        $payload['api_domain'] = null;
+        $payload['scope'] = null;
+        $payload['token_type'] = null;
+        $payload['expires_in'] = null;
+        $payload['token_expires_at'] = null;
+
+        return $payload;
+    }
+
+    private function clearFreshworksFields(array $payload): array
+    {
+        $payload['territory_id'] = null;
+        $payload['owner_id'] = null;
+        $payload['city'] = null;
+        $payload['lead_source_id'] = null;
+        $payload['custom_field'] = null;
 
         return $payload;
     }

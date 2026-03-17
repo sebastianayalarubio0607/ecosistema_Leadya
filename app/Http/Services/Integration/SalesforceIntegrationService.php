@@ -8,15 +8,15 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
-class ZohoIntegrationService
+class SalesforceIntegrationService
 {
-    public function sendToZoho(Lead $lead, Integration $integration)
+    public function sendToSalesforce(Lead $lead, Integration $integration)
     {
         $oauth = $this->refreshAccessToken($integration);
 
         $apiDomain = rtrim((string) ($oauth['api_domain'] ?? $integration->api_domain), '/');
         if ($apiDomain === '') {
-            throw new RuntimeException('No existe api_domain configurado para Zoho.');
+            throw new RuntimeException('No existe api_domain configurado para Salesforce.');
         }
 
         $url = $apiDomain . '/crm/v8/Leads/upsert';

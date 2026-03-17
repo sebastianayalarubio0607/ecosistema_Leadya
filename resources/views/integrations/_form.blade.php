@@ -115,6 +115,57 @@
         </div>
     </div>
 
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden" data-show-for="freshworks">
+        <div>
+            <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">token *</label>
+            <input name="tokent" value="{{ old('tokent', $integration->tokent ?? '') }}"
+                   class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200"
+                   data-required-for="freshworks">
+            @error('tokent') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+        </div>
+
+        <div>
+            <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">territory_id *</label>
+            <input name="territory_id" value="{{ old('territory_id', $integration->territory_id ?? '') }}"
+                   class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200"
+                   data-required-for="freshworks">
+            @error('territory_id') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+        </div>
+
+        <div>
+            <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">owner_id *</label>
+            <input name="owner_id" value="{{ old('owner_id', $integration->owner_id ?? '') }}"
+                   class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200"
+                   data-required-for="freshworks">
+            @error('owner_id') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+        </div>
+
+        <div>
+            <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">City *</label>
+            <input name="city" value="{{ old('city', $integration->city ?? '') }}"
+                   class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200"
+                   data-required-for="freshworks">
+            @error('city') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+        </div>
+
+        <div>
+            <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">lead_source_id *</label>
+            <input name="lead_source_id" value="{{ old('lead_source_id', $integration->lead_source_id ?? '') }}"
+                   class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200"
+                   data-required-for="freshworks">
+            @error('lead_source_id') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+        </div>
+
+        <div class="md:col-span-2">
+            <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">custom_field *</label>
+            <textarea name="custom_field" rows="8"
+                      class="w-full rounded border p-2 font-mono text-sm dark:bg-gray-900 dark:text-gray-200"
+                      placeholder='{"cf_tipo_de_contacto":"LEAD","cf_tipo_de_servicio":"Comercial"}'
+                      data-required-for="freshworks">{{ old('custom_field', $integration->custom_field ?? '') }}</textarea>
+            @error('custom_field') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+        </div>
+    </div>
+
     @if(isset($integration) && $integration->exists)
         <div class="bg-gray-50 dark:bg-gray-800 rounded p-3">
             <div class="text-sm text-gray-700 dark:text-gray-200">
@@ -151,6 +202,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (key.includes('google')) return 'google_sheets';
     if (key.includes('kommo')) return 'kommo';
     if (key.includes('zoho')) return 'zoho';
+    if (key.includes('freshworks')) return 'freshworks';
     return key;
   }
 
@@ -161,11 +213,13 @@ document.addEventListener('DOMContentLoaded', () => {
     return normalizeTypeKey(opt?.textContent || '');
   }
 
-  function setBlockVisible(block, visible) {
+  function setBlockVisible(block, visible, key) {
     block.classList.toggle('hidden', !visible);
 
     block.querySelectorAll('input, select, textarea').forEach(el => {
       el.disabled = !visible;
+      const requiredFor = (el.dataset.requiredFor || '').trim().toLowerCase();
+      el.required = visible && requiredFor !== '' && requiredFor === key;
     });
   }
 
@@ -181,7 +235,7 @@ document.addEventListener('DOMContentLoaded', () => {
       const hasError = !!block.querySelector('.text-red-600');
       const shouldShow = hasError || (key && showFor.includes(key));
 
-      setBlockVisible(block, shouldShow);
+      setBlockVisible(block, shouldShow, key);
     });
   }
 

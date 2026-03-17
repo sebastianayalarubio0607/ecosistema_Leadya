@@ -39,7 +39,7 @@ class FacebookConversionsService
          * Si crmState es null/vacío/no existe => "Lead"
          * (NO se normaliza)
          */
-        $event_name = 'CompleteRegistration';
+        $event_name = 'Lead';
         $usedFallbackLeadEvent = true;
 
         if (!empty($lead->crm_state)) {
