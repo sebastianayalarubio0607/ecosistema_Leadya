@@ -36,6 +36,10 @@ class Integration extends Model
         'city',
         'lead_source_id',
         'custom_field',
+        'url_credenciales',
+        'username',
+        'password',
+        'body',
     ];
 
     public function customer()

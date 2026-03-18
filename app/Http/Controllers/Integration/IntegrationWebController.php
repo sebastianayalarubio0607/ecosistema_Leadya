@@ -47,6 +47,7 @@ class IntegrationWebController extends Controller
         $validated = $request->validate($this->rules());
         $payload = $this->normalizePayloadByType($validated);
         $payload = $this->hydrateZohoTokensFromAuthorizationCode($payload);
+        $payload = $this->hydrateSalesforceTokenFromCredentials($payload);
 
         $payload['public_key'] = $this->generatePublicKey();
 
@@ -76,6 +77,7 @@ class IntegrationWebController extends Controller
     {
         $validated = $request->validate($this->rules(true));
         $payload = $this->normalizePayloadByType($validated);
+        $payload = $this->hydrateSalesforceTokenFromCredentials($payload);
 
         if ($request->boolean('regenerate_public_key')) {
             $payload['public_key'] = $this->generatePublicKey();
@@ -126,6 +128,10 @@ class IntegrationWebController extends Controller
             'lead_source_id' => ['nullable', 'string', 'max:255'],
             'custom_field' => ['nullable', 'string'],
             'tokent' => ['nullable', 'string'],
+            'url_credenciales' => ['nullable', 'url', 'max:255'],
+            'username' => ['nullable', 'string', 'max:255'],
+            'password' => ['nullable', 'string'],
+            'body' => ['nullable', 'string'],
         ];
 
         if ($updating) {
@@ -150,22 +156,33 @@ class IntegrationWebController extends Controller
             $validated = $this->clearKommoFields($validated);
             $validated = $this->clearZohoFields($validated);
             $validated = $this->clearFreshworksFields($validated);
+            $validated = $this->clearSalesforceFields($validated);
         }
 
         if ($typeName === 'kommo') {
             $validated = $this->clearZohoFields($validated);
             $validated = $this->clearFreshworksFields($validated);
+            $validated = $this->clearSalesforceFields($validated);
         }
 
         if ($typeName === 'zoho') {
             $validated = $this->clearKommoFields($validated);
             $validated = $this->clearFreshworksFields($validated);
+            $validated = $this->clearSalesforceFields($validated);
         }
 
         if ($typeName === 'freshworks') {
             $validated = $this->clearKommoFields($validated);
             $validated = $this->clearZohoFieldsPreservingToken($validated);
+            $validated = $this->clearSalesforceFields($validated);
             $validated = $this->validateFreshworksPayload($validated);
+        }
+
+        if ($typeName === 'salesforce') {
+            $validated = $this->clearKommoFields($validated);
+            $validated = $this->clearZohoFieldsPreservingToken($validated);
+            $validated = $this->clearFreshworksFields($validated);
+            $validated = $this->validateSalesforcePayload($validated);
         }
 
         return $validated;
@@ -189,11 +206,35 @@ class IntegrationWebController extends Controller
             }
         }
 
-        if (!empty($payload['custom_field'])) {
-            $decoded = json_decode($payload['custom_field'], true);
-            if (!is_array($decoded)) {
-                $messages['custom_field'] = 'custom_field debe ser un JSON valido.';
+        if (!empty($payload['custom_field']) && !is_array(json_decode($payload['custom_field'], true))) {
+            $messages['custom_field'] = 'custom_field debe ser un JSON valido.';
+        }
+
+        if ($messages !== []) {
+            throw ValidationException::withMessages($messages);
+        }
+
+        return $payload;
+    }
+
+    private function validateSalesforcePayload(array $payload): array
+    {
+        $required = [
+            'url_credenciales' => 'url_credenciales',
+            'username' => 'Username',
+            'password' => 'Password',
+            'body' => 'body',
+        ];
+
+        $messages = [];
+        foreach ($required as $field => $label) {
+            if (empty($payload[$field])) {
+                $messages[$field] = "Para Salesforce el campo {$label} es obligatorio.";
             }
+        }
+
+        if (!empty($payload['body']) && !is_array(json_decode($payload['body'], true))) {
+            $messages['body'] = 'body debe ser un JSON valido.';
         }
 
         if ($messages !== []) {
@@ -250,6 +291,40 @@ class IntegrationWebController extends Controller
         return $payload;
     }
 
+    private function hydrateSalesforceTokenFromCredentials(array $payload): array
+    {
+        $typeName = strtolower((string) Integrationtype::whereKey($payload['integrationtype_id'])->value('name'));
+        if ($typeName !== 'salesforce') {
+            return $payload;
+        }
+
+        $response = Http::acceptJson()
+            ->withBasicAuth((string) $payload['username'], (string) $payload['password'])
+            ->post(rtrim((string) $payload['url_credenciales'], '/') . '?grant_type=client_credentials');
+
+        $json = $response->json();
+
+        if (!$response->successful() || !is_array($json) || isset($json['error']) || empty($json['access_token'])) {
+            $message = is_array($json)
+                ? ($json['error'] ?? 'No fue posible obtener token de Salesforce.')
+                : 'No fue posible obtener token de Salesforce.';
+
+            throw ValidationException::withMessages([
+                'username' => 'Salesforce auth error: ' . $message,
+            ]);
+        }
+
+        $expiresIn = isset($json['expires_in']) ? (int) $json['expires_in'] : null;
+
+        $payload['tokent'] = (string) $json['access_token'];
+        $payload['scope'] = $json['scope'] ?? null;
+        $payload['token_type'] = $json['token_type'] ?? null;
+        $payload['expires_in'] = $expiresIn;
+        $payload['token_expires_at'] = $expiresIn ? now()->addSeconds($expiresIn) : null;
+
+        return $payload;
+    }
+
     private function clearKommoFields(array $payload): array
     {
         $payload['crm_Id_phone'] = null;
@@ -298,6 +373,16 @@ class IntegrationWebController extends Controller
         $payload['city'] = null;
         $payload['lead_source_id'] = null;
         $payload['custom_field'] = null;
+
+        return $payload;
+    }
+
+    private function clearSalesforceFields(array $payload): array
+    {
+        $payload['url_credenciales'] = null;
+        $payload['username'] = null;
+        $payload['password'] = null;
+        $payload['body'] = null;
 
         return $payload;
     }

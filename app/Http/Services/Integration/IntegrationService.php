@@ -6,40 +6,36 @@ use App\Http\Services\Integration\FreshworksIntegrationService;
 use App\Http\Services\Integration\GoogleSheetsIntegrationService;
 use App\Http\Services\Integration\KommoIntegrationService;
 use App\Http\Services\Integration\LetyIntegrationService;
-use App\Http\Services\Integration\ZohoIntegrationService;
 use App\Http\Services\Integration\SalesforceIntegrationService;
+use App\Http\Services\Integration\ZohoIntegrationService;
 use App\Models\Integration;
 use App\Models\Lead;
 use App\Models\LeadIntegration;
 use Illuminate\Support\Facades\Log;
 
-/**
- * Servicio para manejar la logica relacionada con los integrations.
- */
 class IntegrationService
 {
     private $GooglesheetsIntegrationService;
     private $KommoIntegrationService;
     private $LetyIntegrationService;
-    private $ZohoIntegrationService;
-    private $FreshworksIntegrationService;
-    private $SalesforceIntegrationService;
-
+    private $zohoIntegrationService;
+    private $freshworksIntegrationService;
+    private $salesforceIntegrationService;
 
     public function __construct(
         GoogleSheetsIntegrationService $GooglesheetsIntegrationService,
         KommoIntegrationService $KommoIntegrationService,
         LetyIntegrationService $LetyIntegrationService,
-        ZohoIntegrationService $ZohoIntegrationService,
-        FreshworksIntegrationService $FreshworksIntegrationService,
-        SalesforceIntegrationService $SalesforceIntegrationService
+        ZohoIntegrationService $zohoIntegrationService,
+        FreshworksIntegrationService $freshworksIntegrationService,
+        SalesforceIntegrationService $salesforceIntegrationService
     ) {
         $this->GooglesheetsIntegrationService = $GooglesheetsIntegrationService;
         $this->KommoIntegrationService = $KommoIntegrationService;
         $this->LetyIntegrationService = $LetyIntegrationService;
-        $this->ZohoIntegrationService = $ZohoIntegrationService;
-        $this->FreshworksIntegrationService = $FreshworksIntegrationService;
-        $this->SalesforceIntegrationService = $SalesforceIntegrationService;
+        $this->zohoIntegrationService = $zohoIntegrationService;
+        $this->freshworksIntegrationService = $freshworksIntegrationService;
+        $this->salesforceIntegrationService = $salesforceIntegrationService;
     }
 
     public function getActiveIntegrations($customer_id)
@@ -77,9 +73,9 @@ class IntegrationService
                 'google_sheets' => fn() => $this->GooglesheetsIntegrationService->sendToGoogleSheets($lead, $integration),
                 'kommo' => fn() => $this->KommoIntegrationService->sendToKommo($lead, $integration),
                 'lety' => fn() => $this->LetyIntegrationService->sendToLety($lead, $integration),
-                'zoho' => fn() => $this->ZohoIntegrationService->sendToZoho($lead, $integration),
-                'freshworks' => fn() => $this->FreshworksIntegrationService->sendToFreshworks($lead, $integration),
-                'salesforce' => fn() => $this->SalesforceIntegrationService->sendToSalesforce($lead, $integration),
+                'zoho' => fn() => $this->zohoIntegrationService->sendTozoho($lead, $integration),
+                'freshworks' => fn() => $this->freshworksIntegrationService->sendTofreshworks($lead, $integration),
+                'salesforce' => fn() => $this->salesforceIntegrationService->sendToSalesforce($lead, $integration),
             ];
 
             $response = $handlers[$type]() ?? null;

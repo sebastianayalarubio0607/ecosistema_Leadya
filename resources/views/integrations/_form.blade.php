@@ -166,6 +166,50 @@
         </div>
     </div>
 
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden" data-show-for="salesforce">
+        <div>
+            <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">url_credenciales *</label>
+            <input name="url_credenciales" value="{{ old('url_credenciales', $integration->url_credenciales ?? '') }}"
+                   class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200"
+                   placeholder="https://..."
+                   data-required-for="salesforce">
+            @error('url_credenciales') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+        </div>
+
+        <div>
+            <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">Username *</label>
+            <input name="username" value="{{ old('username', $integration->username ?? '') }}"
+                   class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200"
+                   data-required-for="salesforce">
+            @error('username') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+        </div>
+
+        <div>
+            <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">Password *</label>
+            <input name="password" type="password" value="{{ old('password', $integration->password ?? '') }}"
+                   class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200"
+                   data-required-for="salesforce">
+            @error('password') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+        </div>
+
+        <div>
+            <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">token</label>
+            <input name="tokent" value="{{ old('tokent', $integration->tokent ?? '') }}"
+                   class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200"
+                   readonly>
+            @error('tokent') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+        </div>
+
+        <div class="md:col-span-2">
+            <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">body *</label>
+            <textarea name="body" rows="10"
+                      class="w-full rounded border p-2 font-mono text-sm dark:bg-gray-900 dark:text-gray-200"
+                      placeholder='{"ServiceInput":{"tipo":"{{service}}","tipoDocumento":"CC","documento":"{{document}}","nombres":"{{name}}","apellidos":"{{last_name}}","celular":"{{phone}}"}}'
+                      data-required-for="salesforce">{{ old('body', $integration->body ?? '') }}</textarea>
+            @error('body') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+        </div>
+    </div>
+
     @if(isset($integration) && $integration->exists)
         <div class="bg-gray-50 dark:bg-gray-800 rounded p-3">
             <div class="text-sm text-gray-700 dark:text-gray-200">
@@ -203,6 +247,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (key.includes('kommo')) return 'kommo';
     if (key.includes('zoho')) return 'zoho';
     if (key.includes('freshworks')) return 'freshworks';
+    if (key.includes('salesforce')) return 'salesforce';
     return key;
   }
 
