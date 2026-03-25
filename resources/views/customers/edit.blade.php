@@ -10,7 +10,7 @@
             @csrf
             @method('PUT')
 
-            @include('customers.partials.form', ['customer' => $customer])
+            @include('customers.partials.form', ['customer' => $customer, 'metaPages' => $metaPages, 'selectedMetaPageIds' => $selectedMetaPageIds])
 
             <div class="bg-white dark:bg-gray-900 rounded shadow p-4  ">
                 <p class="font-semibold mb-2 ">Token actual</p>

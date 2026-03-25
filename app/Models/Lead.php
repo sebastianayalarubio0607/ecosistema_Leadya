@@ -45,6 +45,11 @@ class Lead extends Model
         'crm_id',
         'crm_state',
         'meta_id_ad',
+        'meta_lead_id',
+        'meta_page_id',
+        'meta_form_id',
+        'meta_created_time',
+        'meta_payload',
         'value',
         'number_workers',
         'number_locations',
@@ -73,6 +78,8 @@ class Lead extends Model
         'campo_numero_3' => 'integer',
         'campo_numero_4' => 'integer',
         'campo_numero_5' => 'integer',
+        'meta_payload' => 'array',
+        'meta_created_time' => 'datetime',
     ];
 
     // Compatibilidad con payloads legacy (acepta last_Name / fields_Custom)
@@ -130,5 +137,32 @@ class Lead extends Model
     public function funnelHistories()
     {
         return $this->hasMany(LeadFunnelHistory::class, 'lead_id');
+    }
+
+    public function metaPage()
+    {
+        return $this->belongsTo(MetaPage::class);
+    }
+
+    public function metaForm()
+    {
+        return $this->belongsTo(MetaForm::class);
+    }
+
+    public static function metaMappableFields(): array
+    {
+        return collect((new static())->getFillable())
+            ->reject(fn ($field) => in_array($field, [
+                'id',
+                'customer_id',
+                'integration_id',
+                'meta_lead_id',
+                'meta_page_id',
+                'meta_form_id',
+                'meta_created_time',
+                'meta_payload',
+            ], true))
+            ->values()
+            ->all();
     }
 }

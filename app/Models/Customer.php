@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Models\FacebookConversionLog;
 use \App\Models\MetaAdAccount;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Customer extends Model
 {
@@ -24,8 +25,18 @@ class Customer extends Model
         return $this->hasMany(FacebookConversionLog::class);
     }
 
-    public function metaAdAccounts()
+public function metaAdAccounts()
 {
     return $this->hasMany(MetaAdAccount::class, 'customer_id');
+}
+
+public function metaPages(): HasMany
+{
+    return $this->hasMany(MetaPage::class, 'customer_id');
+}
+
+public function metaAccessTokens(): HasMany
+{
+    return $this->hasMany(MetaAccessToken::class, 'customer_id');
 }
 }

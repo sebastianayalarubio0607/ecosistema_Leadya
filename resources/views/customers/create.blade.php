@@ -9,7 +9,7 @@
         <form method="POST" action="{{ route('customers.store') }}" class="space-y-4">
             @csrf
 
-            @include('customers.partials.form', ['customer' => null])
+            @include('customers.partials.form', ['customer' => null, 'metaPages' => $metaPages, 'selectedMetaPageIds' => $selectedMetaPageIds])
 
             <div class="flex gap-2">
                 <button class="px-4 py-2 rounded bg-black text-white">Guardar</button>

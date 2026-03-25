@@ -4,6 +4,8 @@ namespace App\Http\Services\Integration;
 
 use App\Models\Integration;
 use App\Models\Lead;
+use Illuminate\Contracts\Cache\LockTimeoutException;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use RuntimeException;
@@ -12,38 +14,46 @@ class ZohoIntegrationService
 {
     public function sendTozoho(Lead $lead, Integration $integration)
     {
-        $oauth = $this->refreshAccessToken($integration);
+        $oauth = $this->getValidAccessToken($integration);
 
         $apiDomain = rtrim((string) ($oauth['api_domain'] ?? $integration->api_domain), '/');
         if ($apiDomain === '') {
             throw new RuntimeException('No existe api_domain configurado para Zoho.');
         }
 
-        $url = $apiDomain . '/crm/v8/Leads/upsert';
-        if ($lead->campaign_origin && in_array($lead->campaign_origin, ['fb', 'meta', 'ig', 'wa', 'mg', 'th'])) {
-           $Source= 'Facebook';
+        $url = $apiDomain.'/crm/v8/Leads/upsert';
+        $source = ($lead->campaign_origin && in_array($lead->campaign_origin, ['fb', 'meta', 'ig', 'wa', 'mg', 'th']))
+            ? 'Facebook'
+            : 'Google Ads';
+
+        $leadData = [
+            'Last_Name' => ( is_null($lead->last_name) ||trim((string) $lead->last_name) === '' || mb_strlen(trim((string) $lead->last_name)) > 1  )  ? trim((string) $lead->name): trim((string) $lead->last_name),
+            'First_Name' => $this->firstNonEmpty($lead->name, 'Sin nombre'),
+            'Company' => $this->firstNonEmpty($lead->company, 'Particular'),
+            'Email' => $lead->email,
+            'Phone' => $lead->phone,
+            'Mobile' => $lead->phone,
+            'Assignment_Rule_ID' => '4516191000001033003',
+            'Description' => $this->firstNonEmpty($lead->message, 'sin comentarios'),
+            'Lead_Status' => 'Sin gestion',
+            'Lead_Source' => (is_null($lead->campo_text_5) || trim((string) $lead->campo_text_5) === '' || mb_strlen(trim((string) $lead->campo_text_5)) > 1) ? 'Facebook' : trim((string) $lead->campo_text_5),
+        ];
+
+        $numberWorkers = $this->firstInteger($lead->number_workers ?? null);
+        if ($numberWorkers !== null) {
+            $leadData['No_of_Employees'] = $numberWorkers;
         }
-else {
-            $Source= 'Google Ads';
+
+        $numberLocations = $this->firstInteger(
+            $lead->number_locations ?? null,
+            $lead->umber_locations ?? null
+        );
+        if ($numberLocations !== null) {
+            $leadData['Cantidad_de_Sedes'] = $numberLocations;
         }
+
         $payload = [
-            'data' => [
-                [
-                    'Last_Name' => $this->firstNonEmpty($lead->last_name, 'Sin apellido'),
-                    'First_Name' => $this->firstNonEmpty($lead->name, 'Sin nombre'),
-                    'Company' => $this->firstNonEmpty($lead->company, 'Particular'),
-                    'Email' => $lead->email,
-                    'Phone' => $lead->phone,
-                    'Mobile' => $lead->phone,
-                    'Assignment_Rule_ID' => "4516191000001033003",
-                    'Description' => $this->firstNonEmpty($lead->message, 'sin comentarios'),
-                    'Lead_Status' => "Sin gestión",
-                    'No_of_Employees' =>$this->firstNonEmpty($lead->number_workers, 1) ,
-                    'Cantidad_de_Sedes' => $this->firstNonEmpty($lead->number_locations, 1),
-                    'Lead_Source' => $this->firstNonEmpty($Source, 'Formulario Clientes Potenciales Facebook.'),
-                    
-                ],
-            ],
+            'data' => [$leadData],
             'duplicate_check_fields' => ['Email'],
         ];
 
@@ -55,7 +65,7 @@ else {
         $response = Http::acceptJson()
             ->asJson()
             ->withHeaders([
-                'Authorization' => 'Zoho-oauthtoken ' . $oauth['access_token'],
+                'Authorization' => 'Zoho-oauthtoken '.$oauth['access_token'],
             ])
             ->post($url, $payload);
 
@@ -69,7 +79,7 @@ else {
             $zohoLeadId = $item['details']['id'] ?? $item['id'] ?? null;
 
             if ($zohoLeadId !== null) {
-                $lead->crm_id = $integration->id . '-' . $zohoLeadId;
+                $lead->crm_id = $integration->id.'-'.$zohoLeadId;
                 $lead->save();
 
                 Log::info('LEAD UPDATED crm_id', [
@@ -83,6 +93,70 @@ else {
         return $response;
     }
 
+    private function getValidAccessToken(Integration $integration): array
+    {
+        if ($this->hasValidAccessToken($integration)) {
+            Log::info('ZOHO USING EXISTING TOKEN', [
+                'integration_id' => $integration->id,
+                'token_expires_at' => optional($integration->token_expires_at)?->toDateTimeString(),
+            ]);
+
+            return [
+                'access_token' => (string) $integration->tokent,
+                'api_domain' => $integration->api_domain,
+            ];
+        }
+
+        $lock = Cache::lock('zoho-refresh-token:'.$integration->id, 30);
+
+        try {
+            return $lock->block(10, function () use ($integration) {
+                $integration->refresh();
+
+                if ($this->hasValidAccessToken($integration)) {
+                    Log::info('ZOHO USING EXISTING TOKEN AFTER LOCK', [
+                        'integration_id' => $integration->id,
+                        'token_expires_at' => optional($integration->token_expires_at)?->toDateTimeString(),
+                    ]);
+
+                    return [
+                        'access_token' => (string) $integration->tokent,
+                        'api_domain' => $integration->api_domain,
+                    ];
+                }
+
+                Log::info('ZOHO REFRESHING TOKEN', [
+                    'integration_id' => $integration->id,
+                ]);
+
+                return $this->refreshAccessToken($integration);
+            });
+        } catch (LockTimeoutException $exception) {
+            Log::warning('ZOHO REFRESH LOCK TIMEOUT', [
+                'integration_id' => $integration->id,
+                'message' => $exception->getMessage(),
+            ]);
+
+            $integration->refresh();
+
+            if ($this->hasValidAccessToken($integration)) {
+                return [
+                    'access_token' => (string) $integration->tokent,
+                    'api_domain' => $integration->api_domain,
+                ];
+            }
+
+            throw new RuntimeException('No fue posible obtener un token válido de Zoho por timeout de lock.', 0, $exception);
+        }
+    }
+
+    private function hasValidAccessToken(Integration $integration): bool
+    {
+        return filled($integration->tokent)
+            && $integration->token_expires_at !== null
+            && $integration->token_expires_at->isFuture();
+    }
+
     private function refreshAccessToken(Integration $integration): array
     {
         $accountsUrl = rtrim((string) $integration->url, '/');
@@ -90,7 +164,7 @@ else {
             throw new RuntimeException('No existe accounts_url configurado para Zoho (integrations.url).');
         }
 
-        if (!$integration->client_id || !$integration->client_secret || !$integration->refresh_token) {
+        if (! $integration->client_id || ! $integration->client_secret || ! $integration->refresh_token) {
             throw new RuntimeException('Faltan credenciales OAuth de Zoho (client_id, client_secret, refresh_token).');
         }
 
@@ -102,7 +176,7 @@ else {
         ];
 
         $refreshResponse = Http::acceptJson()->post(
-            $accountsUrl . '/oauth/v2/token?' . http_build_query($query)
+            $accountsUrl.'/oauth/v2/token?'.http_build_query($query)
         );
 
         Log::info('ZOHO REFRESH RESPONSE', [
@@ -111,14 +185,20 @@ else {
             'body' => $refreshResponse->body(),
         ]);
 
-        if (!$refreshResponse->successful()) {
-            throw new RuntimeException('No se pudo refrescar token Zoho: ' . $refreshResponse->body());
+        if (! $refreshResponse->successful()) {
+            Log::error('ZOHO TOKEN REFRESH FAILED', [
+                'integration_id' => $integration->id,
+                'status' => $refreshResponse->status(),
+                'body' => $refreshResponse->body(),
+            ]);
+
+            throw new RuntimeException('No se pudo refrescar token Zoho: '.$refreshResponse->body());
         }
 
         $data = $refreshResponse->json();
         $accessToken = trim((string) ($data['access_token'] ?? ''));
         if ($accessToken === '') {
-            throw new RuntimeException('Respuesta de Zoho sin access_token. body: ' . $refreshResponse->body());
+            throw new RuntimeException('Respuesta de Zoho sin access_token. body: '.$refreshResponse->body());
         }
 
         $expiresIn = isset($data['expires_in']) ? (int) $data['expires_in'] : null;
@@ -129,7 +209,7 @@ else {
             'scope' => $data['scope'] ?? $integration->scope,
             'token_type' => $data['token_type'] ?? $integration->token_type,
             'expires_in' => $expiresIn,
-            'token_expires_at' => $expiresIn ? now()->addSeconds($expiresIn) : null,
+            'token_expires_at' => now()->addMinutes(50),
             'updated_at' => now(),
         ];
 
@@ -158,13 +238,27 @@ else {
 
     private function firstNonEmpty(...$values)
     {
-        foreach ($values as $v) {
-            if ($v !== null && $v !== '') {
-                return $v;
+        foreach ($values as $value) {
+            if ($value !== null && $value !== '') {
+                return $value;
+            }
+        }
+
+        return null;
+    }
+
+    private function firstInteger(...$values): ?int
+    {
+        foreach ($values as $value) {
+            if ($value === null || $value === '') {
+                continue;
+            }
+
+            if (filter_var($value, FILTER_VALIDATE_INT) !== false) {
+                return (int) $value;
             }
         }
 
         return null;
     }
 }
-

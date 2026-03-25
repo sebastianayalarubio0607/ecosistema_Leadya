@@ -101,6 +101,34 @@ new class extends Component {
             'icon' => 'funnel',
         ],
 
+        /**
+         * ✅ Estas son las nuevas rutas que añadiste, las he puesto al final para que se vean claramente, pero puedes ordenarlas como quieras
+         */
+                [
+            'label' => 'access-tokens',
+            'route' => 'meta.access-tokens.index',
+            'active' => ['meta.access-tokens.*'],
+            'icon' => 'access-tokens',
+        ],
+                [
+            'label' => 'meta_forms',
+            'route' => 'meta.forms.index',
+            'active' => ['meta.forms.*'],
+            'icon' => 'forms',
+        ],
+                [
+            'label' => 'form-field-mappings',
+            'route' => 'meta.form-field-mappings.index',
+            'active' => ['meta.form-field-mappings.*'],
+            'icon' => 'form-field-mappings',
+        ],
+                        [
+            'label' => 'meta_pages',
+            'route' => 'meta.pages.index',
+            'active' => ['meta.pages.*'],
+            'icon' => 'pages',
+        ],
+
         [
             'label' => 'platforms',
             'route' => 'platforms.index',

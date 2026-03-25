@@ -96,6 +96,21 @@
                     {{ $customer->token }}
                 </div>
             </div>
+
+            <div>
+                <strong>Meta Pages asociadas:</strong>
+                <div class="mt-2 space-y-2">
+                    @forelse($customer->metaPages as $metaPage)
+                        <div class="text-sm break-all p-2 rounded bg-gray-100 dark:bg-gray-800">
+                            {{ $metaPage->name }} ({{ $metaPage->meta_page_id }})
+                        </div>
+                    @empty
+                        <div class="text-sm break-all p-2 rounded bg-gray-100 dark:bg-gray-800">
+                            Sin páginas asignadas.
+                        </div>
+                    @endforelse
+                </div>
+            </div>
         </div>
 
         <div class="flex gap-2">

@@ -160,7 +160,7 @@
             <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">custom_field *</label>
             <textarea name="custom_field" rows="8"
                       class="w-full rounded border p-2 font-mono text-sm dark:bg-gray-900 dark:text-gray-200"
-                      placeholder='{"cf_tipo_de_contacto":"LEAD","cf_tipo_de_servicio":"Comercial"}'
+                      placeholder='jeson con los campos necesarios para autenticarse y crear un lead"}'
                       data-required-for="freshworks">{{ old('custom_field', $integration->custom_field ?? '') }}</textarea>
             @error('custom_field') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
         </div>
@@ -204,7 +204,7 @@
             <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">body *</label>
             <textarea name="body" rows="10"
                       class="w-full rounded border p-2 font-mono text-sm dark:bg-gray-900 dark:text-gray-200"
-                      placeholder='{"ServiceInput":{"tipo":"{{service}}","tipoDocumento":"CC","documento":"{{document}}","nombres":"{{name}}","apellidos":"{{last_name}}","celular":"{{phone}}"}}'
+                      placeholder='jeson con los campos necesarios para autenticarse y crear un lead, '
                       data-required-for="salesforce">{{ old('body', $integration->body ?? '') }}</textarea>
             @error('body') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
         </div>

@@ -12,7 +12,11 @@ use App\Http\Controllers\Meta\MetaAdAccountController;
 use App\Http\Controllers\Meta\MetaAdController;
 use App\Http\Controllers\Meta\MetaAdInsightController;
 use App\Http\Controllers\Meta\MetaAdSetController;
+use App\Http\Controllers\Meta\MetaAccessTokenController;
 use App\Http\Controllers\Meta\MetaCampaignController;
+use App\Http\Controllers\Meta\MetaFormController;
+use App\Http\Controllers\Meta\MetaFormFieldMappingController;
+use App\Http\Controllers\Meta\MetaPageController;
 use App\Http\Controllers\Meta\MetaSyncController;
 use App\Http\Controllers\Qualification\QualificationWebController;
 use Illuminate\Support\Facades\Route;
@@ -72,6 +76,36 @@ Route::middleware('auth')->group(function () {
             ->parameters(['ad-sets' => 'ad_set']);
 
         Route::resource('ads', MetaAdController::class);
+
+        Route::resource('access-tokens', MetaAccessTokenController::class)
+            ->parameters(['access-tokens' => 'access_token']);
+
+        Route::post('access-tokens/{access_token}/refresh', [MetaAccessTokenController::class, 'refresh'])
+            ->name('access-tokens.refresh');
+
+        Route::post('access-tokens/{access_token}/sync-pages', [MetaAccessTokenController::class, 'syncPages'])
+            ->name('access-tokens.sync-pages');
+
+        Route::resource('pages', MetaPageController::class)
+            ->parameters(['pages' => 'page']);
+
+        Route::post('pages/sync', [MetaPageController::class, 'syncAll'])
+            ->name('pages.sync-all');
+
+        Route::post('pages/{page}/sync-forms', [MetaPageController::class, 'syncForms'])
+            ->name('pages.sync-forms');
+
+        Route::resource('forms', MetaFormController::class)
+            ->parameters(['forms' => 'form']);
+
+        Route::post('forms/sync', [MetaFormController::class, 'syncAll'])
+            ->name('forms.sync-all');
+
+        Route::post('forms/{form}/sync-leads', [MetaFormController::class, 'syncLeads'])
+            ->name('forms.sync-leads');
+
+        Route::resource('form-field-mappings', MetaFormFieldMappingController::class)
+            ->parameters(['form-field-mappings' => 'mapping']);
 
         Route::resource('insights', MetaAdInsightController::class)
             ->parameters(['insights' => 'insight']);

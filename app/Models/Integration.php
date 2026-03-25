@@ -9,6 +9,11 @@ class Integration extends Model
 {
     use HasFactory;
 
+    protected $casts = [
+        'status' => 'boolean',
+        'token_expires_at' => 'datetime',
+    ];
+
     protected $fillable = [
         'name',
         'description',
