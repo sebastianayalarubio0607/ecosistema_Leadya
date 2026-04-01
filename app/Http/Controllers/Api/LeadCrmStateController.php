@@ -14,7 +14,18 @@ use Illuminate\Support\Facades\Log;
 class LeadCrmStateController extends Controller
 {
     public function update(Request $request, string $public_key, LeadFunnelHistoryService $historyService)
-    {
+    { 
+        /**
+         * 1. Validar que la integración exista usando el public_key.
+         * 2. Validar que el payload tenga la estructura esperada (leads.status como array).
+         * 3. Iterar sobre cada item de leads.status:
+         *    a. Buscar el Lead correspondiente usando crm_id = "{integration_id}-{kommoLeadId}".
+         *    b. Si no se encuentra el Lead, agregar a un array de "not found" y continuar.
+         *    c. Si se encuentra, actualizar el crm_state a "{integration_id}-{statusId}".
+         *    d. Si el crm_state cambió, registrar el cambio en el histórico (usando LeadFunnelHistoryService).     
+         *   4. Para cada Lead actualizado, si su campaign_origin es uno de ['fb', 'meta','ig','wa','mg','th'] y tiene crm_state con meta_event_id, disparar el Job SendLeadToFacebook.
+         *      
+         */
         $integration = Integration::query()
             ->where('public_key', $public_key)
             ->first();

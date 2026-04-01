@@ -160,7 +160,7 @@
             <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">custom_field *</label>
             <textarea name="custom_field" rows="8"
                       class="w-full rounded border p-2 font-mono text-sm dark:bg-gray-900 dark:text-gray-200"
-                      placeholder='jeson con los campos necesarios para autenticarse y crear un lead"}'
+                      placeholder='json con los campos necesarios para crear el lead'
                       data-required-for="freshworks">{{ old('custom_field', $integration->custom_field ?? '') }}</textarea>
             @error('custom_field') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
         </div>
@@ -204,9 +204,21 @@
             <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">body *</label>
             <textarea name="body" rows="10"
                       class="w-full rounded border p-2 font-mono text-sm dark:bg-gray-900 dark:text-gray-200"
-                      placeholder='jeson con los campos necesarios para autenticarse y crear un lead, '
+                      placeholder='json con el payload a enviar a Salesforce'
                       data-required-for="salesforce">{{ old('body', $integration->body ?? '') }}</textarea>
             @error('body') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="monday">
+        <div>
+            <label class="block text-sm mb-1 text-gray-800 dark:text-gray-200">Authorization *</label>
+            <input name="tokent" value="{{ old('tokent', $integration->tokent ?? '') }}"
+                   class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200"
+                   placeholder="Token permanente de Monday"
+                   data-required-for="monday">
+            @error('tokent') <div class="mt-1 text-sm text-red-600">{{ $message }}</div> @enderror
+            <p class="mt-1 text-xs text-gray-500 dark:text-gray-400">Se usara como header Authorization para las consultas GraphQL a Monday.</p>
         </div>
     </div>
 
@@ -248,6 +260,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (key.includes('zoho')) return 'zoho';
     if (key.includes('freshworks')) return 'freshworks';
     if (key.includes('salesforce')) return 'salesforce';
+    if (key.includes('monday')) return 'monday';
     return key;
   }
 

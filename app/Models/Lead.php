@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class Lead extends Model
 {
@@ -69,7 +70,7 @@ class Lead extends Model
         'status' => 'boolean',
         'tc' => 'boolean',
         'age' => 'integer',
-        'fields_custom' => 'array', // si la columna es JSON; si es TEXT, quita este c
+        'fields_custom' => 'array',
         'value' => 'decimal:2',
         'number_workers' => 'integer',
         'number_locations' => 'integer',
@@ -82,7 +83,6 @@ class Lead extends Model
         'meta_created_time' => 'datetime',
     ];
 
-    // Compatibilidad con payloads legacy (acepta last_Name / fields_Custom)
     public function setLastNameAttribute($value)
     {
         $this->attributes['last_name'] = $value;
@@ -98,7 +98,6 @@ class Lead extends Model
         return is_string($value) ? json_decode($value, true) ?? [] : ($value ?? []);
     }
 
-    // Relaciones
     public function customer()
     {
         return $this->belongsTo(Customer::class);
@@ -149,6 +148,11 @@ class Lead extends Model
         return $this->belongsTo(MetaForm::class);
     }
 
+    public function campaignOrigin(): BelongsTo
+    {
+        return $this->belongsTo(Origin::class, 'campaign_origin', 'code');
+    }
+
     public static function metaMappableFields(): array
     {
         return collect((new static())->getFillable())
@@ -164,5 +168,10 @@ class Lead extends Model
             ], true))
             ->values()
             ->all();
+    }
+
+    public static function integrationMappableFields(): array
+    {
+        return static::metaMappableFields();
     }
 }

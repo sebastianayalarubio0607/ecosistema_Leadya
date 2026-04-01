@@ -8,34 +8,40 @@ use App\Http\Services\Integration\KommoIntegrationService;
 use App\Http\Services\Integration\LetyIntegrationService;
 use App\Http\Services\Integration\SalesforceIntegrationService;
 use App\Http\Services\Integration\ZohoIntegrationService;
+use App\Http\Services\Integration\MondayIntegrationService;
 use App\Models\Integration;
 use App\Models\Lead;
 use App\Models\LeadIntegration;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
+use RuntimeException;
 
 class IntegrationService
 {
     private $GooglesheetsIntegrationService;
     private $KommoIntegrationService;
     private $LetyIntegrationService;
-    private $zohoIntegrationService;
-    private $freshworksIntegrationService;
-    private $salesforceIntegrationService;
+    private $ZohoIntegrationService;
+    private $FreshworksIntegrationService;
+    private $SalesforceIntegrationService;
+    private $MondayIntegrationService;
 
     public function __construct(
         GoogleSheetsIntegrationService $GooglesheetsIntegrationService,
         KommoIntegrationService $KommoIntegrationService,
         LetyIntegrationService $LetyIntegrationService,
-        ZohoIntegrationService $zohoIntegrationService,
-        FreshworksIntegrationService $freshworksIntegrationService,
-        SalesforceIntegrationService $salesforceIntegrationService
+        ZohoIntegrationService $ZohoIntegrationService,
+        FreshworksIntegrationService $FreshworksIntegrationService,
+        SalesforceIntegrationService $SalesforceIntegrationService,
+        MondayIntegrationService $MondayIntegrationService
     ) {
         $this->GooglesheetsIntegrationService = $GooglesheetsIntegrationService;
         $this->KommoIntegrationService = $KommoIntegrationService;
         $this->LetyIntegrationService = $LetyIntegrationService;
-        $this->zohoIntegrationService = $zohoIntegrationService;
-        $this->freshworksIntegrationService = $freshworksIntegrationService;
-        $this->salesforceIntegrationService = $salesforceIntegrationService;
+        $this->ZohoIntegrationService = $ZohoIntegrationService;
+        $this->FreshworksIntegrationService = $FreshworksIntegrationService;
+        $this->SalesforceIntegrationService = $SalesforceIntegrationService;
+        $this->MondayIntegrationService = $MondayIntegrationService;
     }
 
     public function getActiveIntegrations($customer_id)
@@ -67,18 +73,48 @@ class IntegrationService
     protected function sendToIntegration(Lead $lead, Integration $integration, LeadIntegration $leadIntegration)
     {
         try {
-            $type = strtolower($integration->integrationtype->name ?? 'webhook');
+            $rawType = (string) data_get($integration, 'integrationtype.name', 'webhook');
+            $type = $this->normalizeIntegrationType($rawType);
 
             $handlers = [
                 'google_sheets' => fn() => $this->GooglesheetsIntegrationService->sendToGoogleSheets($lead, $integration),
                 'kommo' => fn() => $this->KommoIntegrationService->sendToKommo($lead, $integration),
                 'lety' => fn() => $this->LetyIntegrationService->sendToLety($lead, $integration),
-                'zoho' => fn() => $this->zohoIntegrationService->sendTozoho($lead, $integration),
-                'freshworks' => fn() => $this->freshworksIntegrationService->sendTofreshworks($lead, $integration),
-                'salesforce' => fn() => $this->salesforceIntegrationService->sendToSalesforce($lead, $integration),
+                'zoho' => fn() => $this->ZohoIntegrationService->sendToZoho($lead, $integration),
+                'freshworks' => fn() => $this->FreshworksIntegrationService->sendToFreshworks($lead, $integration),
+                'salesforce' => fn() => $this->SalesforceIntegrationService->sendToSalesforce($lead, $integration),
+                'monday' => fn() => $this->MondayIntegrationService->sendToMonday($lead, $integration),
             ];
 
-            $response = $handlers[$type]() ?? null;
+            $serviceMap = [
+                'google_sheets' => $this->GooglesheetsIntegrationService::class,
+                'kommo' => $this->KommoIntegrationService::class,
+                'lety' => $this->LetyIntegrationService::class,
+                'zoho' => $this->ZohoIntegrationService::class,
+                'freshworks' => $this->FreshworksIntegrationService::class,
+                'salesforce' => $this->SalesforceIntegrationService::class,
+                'monday' => $this->MondayIntegrationService::class,
+            ];
+
+            $handler = $handlers[$type] ?? null;
+
+            Log::info('INTEGRATION HANDLER RESOLUTION', [
+                'integration_id' => $integration->id,
+                'lead_id' => $lead->id,
+                'raw_type' => $rawType,
+                'normalized_type' => $type,
+                'available_types' => array_keys($handlers),
+                'resolved_service' => $serviceMap[$type] ?? null,
+                'config_snapshot' => $this->integrationConfigSnapshot($type, $integration),
+            ]);
+
+            if (!is_callable($handler)) {
+                throw new RuntimeException(
+                    'No existe handler para el tipo de integracion [' . $rawType . '] normalizado como [' . $type . ']. Tipos disponibles: ' . implode(', ', array_keys($handlers))
+                );
+            }
+
+            $response = $handler();
 
             if (!$response) {
                 Log::warning("Tipo de integracion no soportado: {$type}");
@@ -119,5 +155,57 @@ class IntegrationService
             'exception_class' => get_class($e),
             'timestamp' => now()->toDateTimeString(),
         ]);
+    }
+
+    private function normalizeIntegrationType(?string $type): string
+    {
+        $normalized = Str::of((string) $type)
+            ->ascii()
+            ->lower()
+            ->replace([' ', '-'], '_')
+            ->replaceMatches('/_+/', '_')
+            ->trim('_')
+            ->toString();
+
+        return match ($normalized) {
+            'googlesheets' => 'google_sheets',
+            default => $normalized !== '' ? $normalized : 'webhook',
+        };
+    }
+
+    private function integrationConfigSnapshot(string $type, Integration $integration): array
+    {
+        return match ($type) {
+            'monday' => [
+                'integration_url' => $integration->url,
+                'integration_url_present' => filled($integration->url),
+                'token_present' => filled($integration->tokent),
+                'config_base_url' => data_get(config('monday', []), 'base_url'),
+                'config_api_version' => data_get(config('monday', []), 'api_version'),
+            ],
+            'zoho' => [
+                'integration_url' => $integration->url,
+                'url_present' => filled($integration->url),
+                'api_domain' => $integration->api_domain,
+                'api_domain_present' => filled($integration->api_domain),
+                'client_id_present' => filled($integration->client_id),
+                'refresh_token_present' => filled($integration->refresh_token),
+                'token_present' => filled($integration->tokent),
+            ],
+            'kommo' => [
+                'integration_url' => $integration->url,
+                'url_present' => filled($integration->url),
+                'token_present' => filled($integration->tokent),
+                'crm_id_phone_present' => filled($integration->crm_Id_phone),
+                'crm_id_email_present' => filled($integration->crm_Id_email),
+                'crm_id_service_present' => filled($integration->crm_Id_service),
+                'crm_id_fuente_present' => filled($integration->crm_Id_fuente),
+            ],
+            default => [
+                'integration_url' => $integration->url,
+                'url_present' => filled($integration->url),
+                'token_present' => filled($integration->tokent),
+            ],
+        };
     }
 }

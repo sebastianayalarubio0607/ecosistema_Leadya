@@ -35,7 +35,6 @@ class IntegrationWebController extends Controller
     public function create()
     {
         $integration = new Integration();
-
         $customers = Customer::orderBy('name')->get(['id', 'name']);
         $types = Integrationtype::orderBy('name')->get(['id', 'name']);
 
@@ -48,7 +47,6 @@ class IntegrationWebController extends Controller
         $payload = $this->normalizePayloadByType($validated);
         $payload = $this->hydrateZohoTokensFromAuthorizationCode($payload);
         $payload = $this->hydrateSalesforceTokenFromCredentials($payload);
-
         $payload['public_key'] = $this->generatePublicKey();
 
         $integration = Integration::create($payload);
@@ -61,6 +59,14 @@ class IntegrationWebController extends Controller
     public function show(Integration $integration)
     {
         $integration->load(['customer:id,name', 'integrationtype:id,name']);
+
+        if ($this->normalizeIntegrationTypeName(optional($integration->integrationtype)->name) === 'monday') {
+            $integration->load([
+                'mondayBoards' => fn ($query) => $query
+                    ->withCount(['groups', 'columns', 'columnMappings'])
+                    ->orderBy('name'),
+            ]);
+        }
 
         return view('integrations.show', compact('integration'));
     }
@@ -150,7 +156,9 @@ class IntegrationWebController extends Controller
             unset($validated['access_token']);
         }
 
-        $typeName = strtolower((string) Integrationtype::whereKey($validated['integrationtype_id'])->value('name'));
+        $typeName = $this->normalizeIntegrationTypeName(
+            Integrationtype::whereKey($validated['integrationtype_id'])->value('name')
+        );
 
         if ($typeName === 'google_sheets') {
             $validated = $this->clearKommoFields($validated);
@@ -185,7 +193,26 @@ class IntegrationWebController extends Controller
             $validated = $this->validateSalesforcePayload($validated);
         }
 
+        if ($typeName === 'monday') {
+            $validated = $this->clearKommoFields($validated);
+            $validated = $this->clearZohoFieldsPreservingToken($validated);
+            $validated = $this->clearFreshworksFields($validated);
+            $validated = $this->clearSalesforceFields($validated);
+            $validated = $this->validateMondayPayload($validated);
+        }
+
         return $validated;
+    }
+
+    private function normalizeIntegrationTypeName(?string $typeName): string
+    {
+        return Str::of((string) $typeName)
+            ->ascii()
+            ->lower()
+            ->replace([' ', '-'], '_')
+            ->replaceMatches('/_+/', '_')
+            ->trim('_')
+            ->toString();
     }
 
     private function validateFreshworksPayload(array $payload): array
@@ -206,7 +233,7 @@ class IntegrationWebController extends Controller
             }
         }
 
-        if (!empty($payload['custom_field']) && !is_array(json_decode($payload['custom_field'], true))) {
+        if (!empty($payload['custom_field']) && !$this->isValidFreshworksCustomField($payload['custom_field'])) {
             $messages['custom_field'] = 'custom_field debe ser un JSON valido.';
         }
 
@@ -239,6 +266,17 @@ class IntegrationWebController extends Controller
 
         if ($messages !== []) {
             throw ValidationException::withMessages($messages);
+        }
+
+        return $payload;
+    }
+
+    private function validateMondayPayload(array $payload): array
+    {
+        if (empty($payload['tokent'])) {
+            throw ValidationException::withMessages([
+                'tokent' => 'Para Monday el campo authorization es obligatorio.',
+            ]);
         }
 
         return $payload;
@@ -375,6 +413,55 @@ class IntegrationWebController extends Controller
         $payload['custom_field'] = null;
 
         return $payload;
+    }
+
+    private function isValidFreshworksCustomField(?string $customField): bool
+    {
+        $customField = trim((string) $customField);
+
+        if ($customField === '') {
+            return true;
+        }
+
+        $quotedPattern = '/"(\s*\{\{\s*([^}]+?)\s*\}\}\s*)"/';
+        $inlinePattern = '/\{\{\s*([^}]+?)\s*\}\}/';
+
+        $normalized = preg_replace_callback($quotedPattern, function ($matches) {
+            $path = $this->normalizeFreshworksPlaceholderPath($matches[2]);
+
+            return $path === null
+                ? $matches[0]
+                : json_encode('__freshworks_lead_field__:' . $path, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }, $customField);
+
+        $normalized = preg_replace_callback($inlinePattern, function ($matches) {
+            $path = $this->normalizeFreshworksPlaceholderPath($matches[1]);
+
+            return $path === null
+                ? $matches[0]
+                : json_encode('__freshworks_lead_field__:' . $path, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }, $normalized);
+
+        return is_array(json_decode($normalized, true));
+    }
+
+    private function normalizeFreshworksPlaceholderPath(string $expression): ?string
+    {
+        $expression = trim($expression);
+
+        if (!preg_match('/^\$?lead(?:(?:->|\.)[A-Za-z_][A-Za-z0-9_]*)+$/', $expression)) {
+            return null;
+        }
+
+        $path = preg_replace('/^\$?lead(?:->|\.)/', '', $expression);
+        $path = str_replace('->', '.', (string) $path);
+        $path = trim((string) $path, '.');
+
+        if (str_starts_with($path, 'campaign_origin.')) {
+            $path = 'campaignOrigin.' . substr($path, strlen('campaign_origin.'));
+        }
+
+        return $path !== '' ? $path : null;
     }
 
     private function clearSalesforceFields(array $payload): array

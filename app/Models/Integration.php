@@ -4,6 +4,8 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Integration extends Model
 {
@@ -47,18 +49,23 @@ class Integration extends Model
         'body',
     ];
 
-    public function customer()
+    public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
     }
 
-    public function integrationtype()
+    public function integrationtype(): BelongsTo
     {
         return $this->belongsTo(Integrationtype::class, 'integrationtype_id');
     }
 
-    public function leadIntegrations()
+    public function leadIntegrations(): HasMany
     {
         return $this->hasMany(LeadIntegration::class);
+    }
+
+    public function mondayBoards(): HasMany
+    {
+        return $this->hasMany(MondayBoard::class);
     }
 }

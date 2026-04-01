@@ -23,11 +23,11 @@ class ZohoIntegrationService
 
         $url = $apiDomain . '/crm/v8/Leads/upsert';
         $source = ($lead->campaign_origin && in_array($lead->campaign_origin, ['fb', 'meta', 'ig', 'wa', 'mg', 'th']))
-            ? 'Facebook'
+            ? 'Meta ADS'
             : 'Google Ads';
 
         $leadData = [
-            'Last_Name' => $this->firstNonEmpty($lead->last_name, 'Sin apellido'),
+            'Last_Name' => $this->firstNonEmpty($lead->last_name ?? $lead->name, '    '),
             'First_Name' => $this->firstNonEmpty($lead->name, 'Sin nombre'),
             'Company' => $this->firstNonEmpty($lead->company, 'Particular'),
             'Email' => $lead->email,
@@ -36,7 +36,7 @@ class ZohoIntegrationService
             'Assignment_Rule_ID' => '4516191000001033003',
             'Description' => $this->firstNonEmpty($lead->message, 'sin comentarios'),
             'Lead_Status' => 'Sin gestion',
-            'Lead_Source' => $this->firstNonEmpty($source, 'Formulario Clientes Potenciales Facebook.'),
+            'Lead_Source' => $this->firstNonEmpty($source, 'Sitio web'),
         ];
 
         $numberWorkers = $this->firstInteger($lead->number_workers ?? null);
