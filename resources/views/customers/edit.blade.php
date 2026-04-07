@@ -1,35 +1,44 @@
-<x-app-layout>
-    <x-slot name="header">
-        <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200">
-            Editar Customer
-        </h2>
-    </x-slot>
+@extends('meta.layout')
 
-    <div class="p-6 max-w-3xl mx-auto  dark:text-gray-200  ">
-        <form method="POST" action="{{ route('customers.update', $customer) }}" class="space-y-4">
-            @csrf
-            @method('PUT')
+@section('title', 'Editar Customer')
+@section('subtitle', 'Actualiza datos del cliente sin alterar su configuración funcional')
 
-            @include('customers.partials.form', ['customer' => $customer, 'metaPages' => $metaPages, 'selectedMetaPageIds' => $selectedMetaPageIds])
+@section('header_actions')
+    <a href="{{ route('customers.index') }}"
+       class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">
+        Volver
+    </a>
+@endsection
 
-            <div class="bg-white dark:bg-gray-900 rounded shadow p-4  ">
-                <p class="font-semibold mb-2 ">Token actual</p>
-                <div class="text-sm break-all p-2 rounded bg-gray-100 dark:bg-gray-800">
-                    {{ $customer->token }}
+@section('content')
+    <div class="space-y-4">
+        <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-6">
+            <form method="POST" action="{{ route('customers.update', $customer) }}" class="space-y-4">
+                @csrf
+                @method('PUT')
+
+                @include('customers.partials.form', ['customer' => $customer, 'metaPages' => $metaPages, 'selectedMetaPageIds' => $selectedMetaPageIds])
+
+                <div class="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3 text-white/80">
+                    <div>
+                        <p class="text-sm text-white/50">Token actual</p>
+                        <div class="mt-2 text-sm break-all rounded-xl border border-white/10 bg-slate-900/60 p-3 font-mono text-white/80">
+                            {{ $customer->token }}
+                        </div>
+                    </div>
+
+                    <x-toggle-switch name="regenerate_token" value="1" label="Regenerar token">
+                        Genera un nuevo token al guardar manteniendo intacto el flujo actual.
+                    </x-toggle-switch>
+
+                    <div class="flex gap-2">
+                        <button class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10">Actualizar</button>
+                        <a href="{{ route('customers.index') }}" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">
+                            Cancelar
+                        </a>
+                    </div>
                 </div>
-
-                <label class="inline-flex items-center gap-2 mt-3">
-                    <input type="checkbox" name="regenerate_token" value="1">
-                    <span>Regenerar token</span>
-                </label>
-            </div>
-
-            <div class="flex gap-2">
-                <button class="px-4 py-2 rounded bg-blue-600 text-white">Actualizar</button>
-                <a href="{{ route('customers.index') }}" class="px-4 py-2 rounded bg-gray-200 dark:bg-gray-700">
-                    Cancelar
-                </a>
-            </div>
-        </form>
+            </form>
+        </div>
     </div>
-</x-app-layout>
+@endsection

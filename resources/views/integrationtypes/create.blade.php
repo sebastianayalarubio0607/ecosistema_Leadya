@@ -1,29 +1,20 @@
-<x-app-layout>
-    <x-slot name="header">
-        <div class="flex items-center justify-between">
-            <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200">
-                Crear Integration Type
-            </h2>
+@extends('meta.layout')
 
-            <a href="{{ route('integrationtypes.index') }}"
-               class="px-4 py-2 rounded bg-gray-200 dark:bg-gray-200">
-                Volver
-            </a>
-        </div>
-    </x-slot>
+@section('title', 'Crear Integration Type')
+@section('subtitle', 'Alta de un nuevo tipo de integración')
 
-    <div class="p-6 max-w-6xl mx-auto">
-        @if ($errors->any())
-            <div class="mb-4 p-3 rounded bg-red-100 text-red-900">
-                Revisa los campos marcados.
-            </div>
-        @endif
+@section('header_actions')
+    <a href="{{ route('integrationtypes.index') }}"
+       class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">
+        Volver
+    </a>
+@endsection
 
-        <div class="bg-white dark:bg-gray-900 rounded shadow p-6">
-            <form method="POST" action="{{ route('integrationtypes.store') }}">
-                @csrf
-                @include('integrationtypes._form', ['type' => $type])
-            </form>
-        </div>
+@section('content')
+    <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-6">
+        <form method="POST" action="{{ route('integrationtypes.store') }}">
+            @csrf
+            @include('integrationtypes._form', ['type' => $type])
+        </form>
     </div>
-</x-app-layout>
+@endsection

@@ -1,84 +1,86 @@
-<x-app-layout>
-    <x-slot name="header">
-        <div class="flex items-center justify-between">
-            <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200">
-                Qualifications
-            </h2>
+@extends('meta.layout')
 
-            <a href="{{ route('qualifications.create') }}"
-               class="px-4 py-2 rounded bg-green-600 text-white">
-                Nuevo
-            </a>
-        </div>
-    </x-slot>
+@section('title', 'Qualifications')
+@section('subtitle', 'Listado de calificaciones y su relación con funnels')
 
-    <div class="p-6 max-w-6xl mx-auto">
-        @if (session('success'))
-            <div class="mb-4 p-3 rounded bg-green-100 text-green-800">
-                {{ session('success') }}
+@section('header_actions')
+    <a href="{{ route('qualifications.create') }}"
+       class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10">
+        + Nuevo
+    </a>
+@endsection
+
+@section('content')
+    <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 space-y-4">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+            <div class="md:col-span-10">
+                <label class="block mb-1 text-white/70">Buscar</label>
+                <input name="q" value="{{ $q ?? request('q') }}"
+                       class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
+                       placeholder="Buscar por nombre..." />
             </div>
-        @endif
 
-        <form method="GET" class="mb-4 flex gap-2">
-            <input name="q" value="{{ $q ?? request('q') }}"
-                   class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200"
-                   placeholder="Buscar por nombre..." />
-            <button class="px-4 py-2 rounded bg-gray-200 dark:bg-gray-200">
-                Buscar
-            </button>
+            <div class="md:col-span-2 flex gap-2">
+                <button class="w-full px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">
+                    Buscar
+                </button>
+                <a href="{{ route('qualifications.index') }}"
+                   class="w-full text-center px-4 py-2 rounded-xl bg-zinc-950/25 hover:bg-white/10 text-white border border-white/10">
+                    Limpiar
+                </a>
+            </div>
         </form>
 
-        <div class="bg-white dark:bg-gray-900 rounded shadow overflow-hidden">
-            <table class="w-full text-left">
-                <thead class="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
-                <tr>
-                    <th class="p-3">ID</th>
-                    <th class="p-3">Nombre</th>
-                    <th class="p-3">Creado</th>
-                    <th class="p-3 w-72">Acciones</th>
-                </tr>
-                </thead>
-
-                <tbody>
-                @forelse ($qualifications as $qualification)
-                    <tr class="border-t border-gray-200 dark:border-gray-800 text-gray-800 dark:text-gray-200">
-                        <td class="p-3">{{ $qualification->id }}</td>
-                        <td class="p-3">{{ $qualification->name }}</td>
-                        <td class="p-3 text-sm text-gray-600 dark:text-gray-300">
-                            {{ optional($qualification->created_at)->format('Y-m-d H:i') }}
-                        </td>
-
-                        <td class="p-3 flex gap-2">
-                            <a class="px-3 py-1 rounded bg-gray-200 dark:bg-gray-800"
-                               href="{{ route('qualifications.show', $qualification) }}">
-                                Ver
-                            </a>
-
-                            <a class="px-3 py-1 rounded bg-yellow-900 text-white"
-                               href="{{ route('qualifications.edit', $qualification) }}">
-                                Editar
-                            </a>
-
-                            <form method="POST"
-                                  action="{{ route('qualifications.destroy', $qualification) }}"
-                                  onsubmit="return confirm('¿Seguro que deseas eliminar esta qualification?');">
-                                @csrf
-                                @method('DELETE')
-                                <button class="px-3 py-1 rounded bg-red-900 text-white" type="submit">
-                                    Eliminar
-                                </button>
-                            </form>
-                        </td>
+        <div class="overflow-x-auto rounded-xl border border-white/10">
+            <table class="min-w-full text-sm">
+                <thead class="bg-white/5 text-white/70">
+                    <tr>
+                        <th class="text-left px-3 py-2">ID</th>
+                        <th class="text-left px-3 py-2">Nombre</th>
+                        <th class="text-left px-3 py-2">Creado</th>
+                        <th class="text-left px-3 py-2 w-72">Acciones</th>
                     </tr>
-                @empty
-                    <tr><td class="p-3" colspan="4">No hay registros.</td></tr>
-                @endforelse
+                </thead>
+                <tbody class="divide-y divide-white/10 text-white/80">
+                    @forelse ($qualifications as $qualification)
+                        <tr class="hover:bg-white/5">
+                            <td class="px-3 py-2">{{ $qualification->id }}</td>
+                            <td class="px-3 py-2">{{ $qualification->name }}</td>
+                            <td class="px-3 py-2">{{ optional($qualification->created_at)->format('Y-m-d H:i') }}</td>
+
+                            <td class="px-3 py-2">
+                                <div class="flex items-center gap-2">
+                                    <a class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs"
+                                       href="{{ route('qualifications.show', $qualification) }}">
+                                        Ver
+                                    </a>
+
+                                    <a class="px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-white/10 text-xs"
+                                       href="{{ route('qualifications.edit', $qualification) }}">
+                                        Editar
+                                    </a>
+
+                                    <form method="POST"
+                                          action="{{ route('qualifications.destroy', $qualification) }}"
+                                          onsubmit="return confirm('Â¿Seguro que deseas eliminar esta qualification?');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button class="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-300/20 text-xs" type="submit">
+                                            Eliminar
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td class="px-3 py-8 text-center text-white/60" colspan="4">No hay qualifications.</td>
+                        </tr>
+                    @endforelse
                 </tbody>
             </table>
         </div>
 
-        <div class="mt-4">
-            {{ $qualifications->links() }}
-        </div>
+        <div>{{ $qualifications->links() }}</div>
     </div>
-</x-app-layout>
+@endsection

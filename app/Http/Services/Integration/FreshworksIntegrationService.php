@@ -72,7 +72,7 @@ class FreshworksIntegrationService
             ]);
 
             if ($freshworksLeadId !== null) {
-                $lead->crm_id = $integration->id . '-' . $freshworksLeadId;
+                $lead->crm_id = $integration->crmIdPrefix() . '-' . $freshworksLeadId;
                 $lead->save();
 
                 Log::info('LEAD UPDATED crm_id', [

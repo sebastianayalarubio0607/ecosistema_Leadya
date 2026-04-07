@@ -14,6 +14,7 @@ class Integration extends Model
     protected $casts = [
         'status' => 'boolean',
         'token_expires_at' => 'datetime',
+        'disable_integration_id_crm_prefix' => 'boolean',
     ];
 
     protected $fillable = [
@@ -28,6 +29,8 @@ class Integration extends Model
         'crm_Id_service',
         'crm_Id_fuente',
         'crm_Id_email',
+        'disable_integration_id_crm_prefix',
+        'crm_id_prefix',
         'public_key',
         'client_id',
         'client_secret',
@@ -48,6 +51,17 @@ class Integration extends Model
         'password',
         'body',
     ];
+
+    public function crmIdPrefix(): string
+    {
+        $manualPrefix = trim((string) $this->crm_id_prefix);
+
+        if ($this->disable_integration_id_crm_prefix && $manualPrefix !== '') {
+            return $manualPrefix;
+        }
+
+        return (string) $this->id;
+    }
 
     public function customer(): BelongsTo
     {

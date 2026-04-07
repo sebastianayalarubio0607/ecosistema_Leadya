@@ -96,7 +96,7 @@ class KommoIntegrationService
             $kommoLeadId = (isset($json[0]['id'])) ? (string) $json[0]['id'] : null;
 
             if ($kommoLeadId !== null) {
-                $lead->crm_id = $integration->id . '-' . $kommoLeadId;
+                $lead->crm_id = $integration->crmIdPrefix() . '-' . $kommoLeadId;
                 $lead->save();
 
                 Log::info('LEAD UPDATED crm_id', [
@@ -159,4 +159,3 @@ class KommoIntegrationService
 
        
 }
-

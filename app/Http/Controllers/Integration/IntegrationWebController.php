@@ -118,6 +118,8 @@ class IntegrationWebController extends Controller
             'crm_Id_service' => ['nullable', 'string', 'max:255'],
             'crm_Id_fuente' => ['nullable', 'string', 'max:255'],
             'crm_Id_email' => ['nullable', 'string', 'max:255'],
+            'disable_integration_id_crm_prefix' => ['nullable', 'boolean'],
+            'crm_id_prefix' => ['nullable', 'string', 'max:255'],
             'client_id' => ['nullable', 'string', 'max:255'],
             'client_secret' => ['nullable', 'string'],
             'code' => ['nullable', 'string'],
@@ -165,18 +167,21 @@ class IntegrationWebController extends Controller
             $validated = $this->clearZohoFields($validated);
             $validated = $this->clearFreshworksFields($validated);
             $validated = $this->clearSalesforceFields($validated);
+            $validated = $this->clearCrmIdPrefixFields($validated);
         }
 
         if ($typeName === 'kommo') {
             $validated = $this->clearZohoFields($validated);
             $validated = $this->clearFreshworksFields($validated);
             $validated = $this->clearSalesforceFields($validated);
+            $validated = $this->validateCrmIdPrefixPayload($validated, 'Kommo');
         }
 
         if ($typeName === 'zoho') {
             $validated = $this->clearKommoFields($validated);
             $validated = $this->clearFreshworksFields($validated);
             $validated = $this->clearSalesforceFields($validated);
+            $validated = $this->clearCrmIdPrefixFields($validated);
         }
 
         if ($typeName === 'freshworks') {
@@ -184,6 +189,7 @@ class IntegrationWebController extends Controller
             $validated = $this->clearZohoFieldsPreservingToken($validated);
             $validated = $this->clearSalesforceFields($validated);
             $validated = $this->validateFreshworksPayload($validated);
+            $validated = $this->validateCrmIdPrefixPayload($validated, 'Freshworks');
         }
 
         if ($typeName === 'salesforce') {
@@ -191,6 +197,7 @@ class IntegrationWebController extends Controller
             $validated = $this->clearZohoFieldsPreservingToken($validated);
             $validated = $this->clearFreshworksFields($validated);
             $validated = $this->validateSalesforcePayload($validated);
+            $validated = $this->clearCrmIdPrefixFields($validated);
         }
 
         if ($typeName === 'monday') {
@@ -199,6 +206,11 @@ class IntegrationWebController extends Controller
             $validated = $this->clearFreshworksFields($validated);
             $validated = $this->clearSalesforceFields($validated);
             $validated = $this->validateMondayPayload($validated);
+            $validated = $this->clearCrmIdPrefixFields($validated);
+        }
+
+        if (!in_array($typeName, ['google_sheets', 'kommo', 'zoho', 'freshworks', 'salesforce', 'monday'], true)) {
+            $validated = $this->clearCrmIdPrefixFields($validated);
         }
 
         return $validated;
@@ -411,6 +423,37 @@ class IntegrationWebController extends Controller
         $payload['city'] = null;
         $payload['lead_source_id'] = null;
         $payload['custom_field'] = null;
+
+        return $payload;
+    }
+
+    private function clearCrmIdPrefixFields(array $payload): array
+    {
+        $payload['disable_integration_id_crm_prefix'] = null;
+        $payload['crm_id_prefix'] = null;
+
+        return $payload;
+    }
+
+    private function validateCrmIdPrefixPayload(array $payload, string $integrationLabel): array
+    {
+        $payload['disable_integration_id_crm_prefix'] = array_key_exists('disable_integration_id_crm_prefix', $payload)
+            ? (int) ((bool) $payload['disable_integration_id_crm_prefix'])
+            : 0;
+
+        $payload['crm_id_prefix'] = isset($payload['crm_id_prefix'])
+            ? trim((string) $payload['crm_id_prefix'])
+            : null;
+
+        if ((int) $payload['disable_integration_id_crm_prefix'] === 1 && $payload['crm_id_prefix'] === '') {
+            throw ValidationException::withMessages([
+                'crm_id_prefix' => "Para {$integrationLabel} el prefijo manual es obligatorio cuando se desactiva el ID de integración en el crm_id.",
+            ]);
+        }
+
+        if ($payload['crm_id_prefix'] === '') {
+            $payload['crm_id_prefix'] = null;
+        }
 
         return $payload;
     }

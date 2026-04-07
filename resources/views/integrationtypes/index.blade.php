@@ -1,90 +1,90 @@
-<x-app-layout>
-    <x-slot name="header">
-        <div class="flex items-center justify-between">
-            <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200">
-                Integration Types
-            </h2>
+@extends('meta.layout')
 
-            <a href="{{ route('integrationtypes.create') }}"
-               class="px-4 py-2 rounded bg-green-600 text-white">
-                Nuevo
-            </a>
-        </div>
-    </x-slot>
+@section('title', 'Integration Types')
+@section('subtitle', 'Catálogo de tipos de integración disponibles')
 
-    <div class="p-6 max-w-6xl mx-auto">
-        @if (session('success'))
-            <div class="mb-4 p-3 rounded bg-green-100 text-green-800">
-                {{ session('success') }}
+@section('header_actions')
+    <a href="{{ route('integrationtypes.create') }}"
+       class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10">
+        + Nuevo
+    </a>
+@endsection
+
+@section('content')
+    <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 space-y-4">
+        <form method="GET" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+            <div class="md:col-span-10">
+                <label class="block mb-1 text-white/70">Buscar</label>
+                <input name="q" value="{{ $q ?? request('q') }}"
+                       class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
+                       placeholder="Buscar por nombre o descripciÃ³n..." />
             </div>
-        @endif
 
-        <form method="GET" class="mb-4 flex gap-2">
-            <input name="q" value="{{ $q ?? request('q') }}"
-                   class="w-full rounded border p-2 dark:bg-gray-900 dark:text-gray-200"
-                   placeholder="Buscar por nombre o descripción..." />
-            <button class="px-4 py-2 rounded bg-gray-200 dark:bg-gray-200">
-                Buscar
-            </button>
+            <div class="md:col-span-2 flex gap-2">
+                <button class="w-full px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">
+                    Buscar
+                </button>
+                <a href="{{ route('integrationtypes.index') }}"
+                   class="w-full text-center px-4 py-2 rounded-xl bg-zinc-950/25 hover:bg-white/10 text-white border border-white/10">
+                    Limpiar
+                </a>
+            </div>
         </form>
 
-        <div class="bg-white dark:bg-gray-900 rounded shadow overflow-hidden">
-            <table class="w-full text-left">
-                <thead class="bg-gray-100 dark:bg-gray-800 text-gray-800 dark:text-gray-200">
-                <tr>
-                    <th class="p-3">Nombre</th>
-                    <th class="p-3">Status</th>
-                    <th class="p-3">Descripción</th>
-                    <th class="p-3 w-72">Acciones</th>
-                </tr>
-                </thead>
-                <tbody>
-                @forelse ($types as $type)
-                    <tr class="border-t border-gray-200 dark:border-gray-800 text-gray-800 dark:text-gray-200">
-                        <td class="p-3">{{ $type->name }}</td>
-                        <td class="p-3">
-                            <span class="px-2 py-1 rounded text-sm
-                                {{ (int) $type->status === 1 ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-900' }}">
-                                {{ (int) $type->status === 1 ? 'Activo' : 'Inactivo' }}
-                            </span>
-                        </td>
-                        <td class="p-3">
-                            <span class="text-sm text-gray-700 dark:text-gray-200">
-                                {{ $type->description ?: '—' }}
-                            </span>
-                        </td>
-
-                        <td class="p-3 flex gap-2">
-                            <a class="px-3 py-1 rounded bg-gray-200 dark:bg-gray-800"
-                               href="{{ route('integrationtypes.show', $type) }}">
-                                Ver
-                            </a>
-
-                            <a class="px-3 py-1 rounded bg-yellow-900 text-white"
-                               href="{{ route('integrationtypes.edit', $type) }}">
-                                Editar
-                            </a>
-
-                            <form method="POST"
-                                  action="{{ route('integrationtypes.destroy', $type) }}"
-                                  onsubmit="return confirm('¿Seguro que deseas eliminar este Integration Type?');">
-                                @csrf
-                                @method('DELETE')
-                                <button class="px-3 py-1 rounded bg-red-900 text-white" type="submit">
-                                    Eliminar
-                                </button>
-                            </form>
-                        </td>
+        <div class="overflow-x-auto rounded-xl border border-white/10">
+            <table class="min-w-full text-sm">
+                <thead class="bg-white/5 text-white/70">
+                    <tr>
+                        <th class="text-left px-3 py-2">Nombre</th>
+                        <th class="text-left px-3 py-2">Status</th>
+                        <th class="text-left px-3 py-2">DescripciÃ³n</th>
+                        <th class="text-left px-3 py-2 w-72">Acciones</th>
                     </tr>
-                @empty
-                    <tr><td class="p-3" colspan="4">No hay Integration Types.</td></tr>
-                @endforelse
+                </thead>
+                <tbody class="divide-y divide-white/10 text-white/80">
+                    @forelse ($types as $type)
+                        <tr class="hover:bg-white/5">
+                            <td class="px-3 py-2">{{ $type->name }}</td>
+                            <td class="px-3 py-2">
+                                <span class="px-2 py-1 rounded-lg text-xs border {{ (int) $type->status === 1 ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
+                                    {{ (int) $type->status === 1 ? 'Activo' : 'Inactivo' }}
+                                </span>
+                            </td>
+                            <td class="px-3 py-2">{{ $type->description ?: '—' }}</td>
+
+                            <td class="px-3 py-2">
+                                <div class="flex items-center gap-2">
+                                    <a class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs"
+                                       href="{{ route('integrationtypes.show', $type) }}">
+                                        Ver
+                                    </a>
+
+                                    <a class="px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-white/10 text-xs"
+                                       href="{{ route('integrationtypes.edit', $type) }}">
+                                        Editar
+                                    </a>
+
+                                    <form method="POST"
+                                          action="{{ route('integrationtypes.destroy', $type) }}"
+                                          onsubmit="return confirm('Â¿Seguro que deseas eliminar este Integration Type?');">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button class="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-300/20 text-xs" type="submit">
+                                            Eliminar
+                                        </button>
+                                    </form>
+                                </div>
+                            </td>
+                        </tr>
+                    @empty
+                        <tr>
+                            <td class="px-3 py-8 text-center text-white/60" colspan="4">No hay tipos de integraciÃ³n.</td>
+                        </tr>
+                    @endforelse
                 </tbody>
             </table>
         </div>
 
-        <div class="mt-4">
-            {{ $types->links() }}
-        </div>
+        <div>{{ $types->links() }}</div>
     </div>
-</x-app-layout>
+@endsection
