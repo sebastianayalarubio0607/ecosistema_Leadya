@@ -13,6 +13,9 @@ use Carbon\Carbon;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Service for syncing leads with Meta's advertising platform.
+ */
 class MetaLeadAdsSyncService
 {
     public function __construct(
@@ -337,6 +340,7 @@ class MetaLeadAdsSyncService
 
     private function upsertLeadFromMeta(MetaForm $form, array $leadData): array
     {
+        $leadData = $this->normalizeMetaLeadData($leadData);
         $normalizedFields = $this->normalizeFieldData($leadData['field_data'] ?? []);
         $mappings = $form->fieldMappings;
 
@@ -433,14 +437,14 @@ class MetaLeadAdsSyncService
     private function normalizeFieldValue(mixed $values): mixed
     {
         if (! is_array($values)) {
-            return $values;
+            return $this->stripMetaPrefix($values);
         }
 
         if (count($values) === 1) {
             $value = $values[0];
 
             if (is_scalar($value) || $value === null) {
-                return $value;
+                return $this->stripMetaPrefix($value);
             }
 
             return json_encode($value);
@@ -449,13 +453,24 @@ class MetaLeadAdsSyncService
         return collect($values)
             ->map(function ($value) {
                 if (is_scalar($value) || $value === null) {
-                    return $value;
+                    return $this->stripMetaPrefix($value);
                 }
 
                 return json_encode($value);
             })
             ->filter(fn ($value) => ! is_null($value))
             ->implode(', ');
+    }
+
+    private function normalizeMetaLeadData(array $leadData): array
+    {
+        foreach (['id', 'ad_id', 'adset_id', 'campaign_id', 'form_id'] as $field) {
+            if (array_key_exists($field, $leadData)) {
+                $leadData[$field] = $this->stripMetaPrefix($leadData[$field]);
+            }
+        }
+
+        return $leadData;
     }
 
     private function buildUnmappedFieldsPayload(array $normalizedFields, Collection $mappings): array
@@ -489,6 +504,19 @@ class MetaLeadAdsSyncService
         }
 
         return null;
+    }
+
+    private function stripMetaPrefix(mixed $value): mixed
+    {
+        if (! is_string($value) || $value === '') {
+            return $value;
+        }
+
+        if (preg_match('/^[a-zA-Z]+:(.+)$/', $value, $matches) === 1) {
+            return $matches[1];
+        }
+
+        return $value;
     }
 
     private function ensureMetaCredentialsConfigured(?string $appId, ?string $appSecret): void
