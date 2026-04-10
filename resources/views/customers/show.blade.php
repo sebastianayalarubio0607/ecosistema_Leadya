@@ -19,12 +19,21 @@
         <div id="tokenModalBackdrop" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
             <div class="w-full max-w-lg rounded-2xl border border-white/10 bg-zinc-950/95 p-6 shadow-xl shadow-black/30">
                 <h3 class="text-lg font-semibold text-white">
-                    Token generado âœ…
+                    Token generado
                 </h3>
 
                 <p class="mt-2 text-sm text-white/70">
-                    Este es el token REAL (solo se muestra una vez). CÃ³pialo ahora.
+                    Este es el token REAL (solo se muestra una vez). Cópialo ahora.
                 </p>
+
+                <div class="mt-4">
+                    <label class="text-sm text-white/70">Customer ID</label>
+                    <input
+                        readonly
+                        value="{{ $customer->id }}"
+                        class="mt-1 w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 text-white"
+                    />
+                </div>
 
                 <div class="mt-4">
                     <label class="text-sm text-white/70">Token</label>
@@ -94,7 +103,7 @@
             </div>
 
             <div>
-                <div class="text-sm text-white/50">DescripciÃ³n</div>
+                <div class="text-sm text-white/50">Descripción</div>
                 <div class="mt-1">{{ $customer->description ?: '—' }}</div>
             </div>
 
@@ -126,7 +135,7 @@
                         </div>
                     @empty
                         <div class="text-sm break-all rounded-xl border border-white/10 bg-white/5 p-3 text-white/60">
-                            Sin pÃ¡ginas asignadas.
+                            Sin páginas asignadas.
                         </div>
                     @endforelse
                 </div>

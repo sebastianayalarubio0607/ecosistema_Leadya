@@ -12,24 +12,25 @@ class SalesforceIntegrationService
 {
     public function sendToSalesforce(Lead $lead, Integration $integration)
     {
-        $oauth = $this->refreshAccessToken($integration);
-
         $url = rtrim((string) $integration->url, '/');
         if ($url === '') {
             throw new RuntimeException('No existe url configurada para Salesforce.');
         }
 
         $payload = $this->buildPayload($lead, $integration);
+        $oauth = $this->getValidAccessToken($integration);
 
         Log::info('SALESFORCE URL', ['url' => $url]);
         Log::info('SALESFORCE PAYLOAD JSON', [
             'json' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
         ]);
 
-        $response = Http::acceptJson()
-            ->asJson()
-            ->withToken($oauth['access_token'])
-            ->post($url, $payload);
+        $response = $this->sendLeadRequest($url, $payload, $oauth['access_token']);
+
+        if ($response->status() === 401) {
+            $oauth = $this->refreshAccessToken($integration);
+            $response = $this->sendLeadRequest($url, $payload, $oauth['access_token']);
+        }
 
         Log::info('SALESFORCE RESPONSE', [
             'status' => $response->status(),
@@ -57,6 +58,28 @@ class SalesforceIntegrationService
         }
 
         return $response;
+    }
+
+    private function getValidAccessToken(Integration $integration): array
+    {
+        $accessToken = trim((string) $integration->tokent);
+
+        if ($accessToken === '' || $this->tokenNeedsRefresh($integration)) {
+            return $this->refreshAccessToken($integration);
+        }
+
+        return [
+            'access_token' => $accessToken,
+        ];
+    }
+
+    private function tokenNeedsRefresh(Integration $integration): bool
+    {
+        if (!$integration->token_expires_at) {
+            return true;
+        }
+
+        return $integration->token_expires_at->copy()->subSeconds(60)->lessThanOrEqualTo(now());
     }
 
     private function refreshAccessToken(Integration $integration): array
@@ -132,11 +155,6 @@ class SalesforceIntegrationService
             ];
         }
 
-        $decoded = json_decode($template, true);
-        if (!is_array($decoded)) {
-            throw new RuntimeException('El campo body de Salesforce debe ser un JSON valido.');
-        }
-
         $replacements = [
             '{{name}}' => $this->firstNonEmpty($lead->name, 'Sin nombre'),
             '{{last_name}}' => $this->firstNonEmpty($lead->last_name, 'Sin apellido'),
@@ -146,25 +164,103 @@ class SalesforceIntegrationService
             '{{service}}' => $this->firstNonEmpty($lead->service, 'Test Drive'),
         ];
 
-        return $this->replacePlaceholders($decoded, $replacements);
+        $template = strtr($template, $replacements);
+        $decoded = $this->decodeBodyTemplate($template);
+        if (!is_array($decoded)) {
+            throw new RuntimeException('El campo body de Salesforce debe ser un JSON valido.');
+        }
+
+        return $this->resolveBodyPlaceholders($decoded, $lead);
     }
 
-    private function replacePlaceholders($value, array $replacements)
+    private function decodeBodyTemplate(string $template): ?array
+    {
+        $normalized = $this->replaceBodyPlaceholdersWithTokens($template);
+
+        $decoded = json_decode($normalized, true);
+
+        return is_array($decoded) ? $decoded : null;
+    }
+
+    private function replaceBodyPlaceholdersWithTokens(string $value): string
+    {
+        $quotedPattern = '/"(\s*\{\{\s*([^}]+?)\s*\}\}\s*)"/';
+        $inlinePattern = '/\{\{\s*([^}]+?)\s*\}\}/';
+
+        $value = preg_replace_callback($quotedPattern, function ($matches) {
+            $path = $this->normalizePlaceholderPath($matches[2]);
+
+            return $path === null
+                ? $matches[0]
+                : json_encode($this->placeholderToken($path), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }, $value);
+
+        return preg_replace_callback($inlinePattern, function ($matches) {
+            $path = $this->normalizePlaceholderPath($matches[1]);
+
+            return $path === null
+                ? $matches[0]
+                : json_encode($this->placeholderToken($path), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }, $value);
+    }
+
+    private function resolveBodyPlaceholders(array $payload, Lead $lead): array
+    {
+        return $this->replacePlaceholders($payload, [], $lead);
+    }
+
+    private function replacePlaceholders($value, array $replacements, ?Lead $lead = null)
     {
         if (is_array($value)) {
             $result = [];
             foreach ($value as $key => $item) {
-                $result[$key] = $this->replacePlaceholders($item, $replacements);
+                $result[$key] = $this->replacePlaceholders($item, $replacements, $lead);
             }
 
             return $result;
         }
 
         if (is_string($value)) {
+            if ($lead && preg_match('/^__salesforce_lead_field__:(.+)$/', $value, $matches)) {
+                return data_get($lead, $matches[1]);
+            }
+
             return strtr($value, $replacements);
         }
 
         return $value;
+    }
+
+    private function placeholderToken(string $field): string
+    {
+        return '__salesforce_lead_field__:' . $field;
+    }
+
+    private function normalizePlaceholderPath(string $expression): ?string
+    {
+        $expression = trim($expression);
+
+        if (!preg_match('/^\$?lead(?:(?:->|\.)[A-Za-z_][A-Za-z0-9_]*)+$/', $expression)) {
+            return null;
+        }
+
+        $path = preg_replace('/^\$?lead(?:->|\.)/', '', $expression);
+        $path = str_replace('->', '.', (string) $path);
+        $path = trim((string) $path, '.');
+
+        if (str_starts_with($path, 'campaign_origin.')) {
+            $path = 'campaignOrigin.' . substr($path, strlen('campaign_origin.'));
+        }
+
+        return $path !== '' ? $path : null;
+    }
+
+    private function sendLeadRequest(string $url, array $payload, string $accessToken)
+    {
+        return Http::acceptJson()
+            ->asJson()
+            ->withToken($accessToken)
+            ->post($url, $payload);
     }
 
     private function firstNonEmpty(...$values)

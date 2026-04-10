@@ -174,6 +174,7 @@ class IntegrationWebController extends Controller
             $validated = $this->clearZohoFields($validated);
             $validated = $this->clearFreshworksFields($validated);
             $validated = $this->clearSalesforceFields($validated);
+            $validated = $this->validateKommoPayload($validated);
             $validated = $this->validateCrmIdPrefixPayload($validated, 'Kommo');
         }
 
@@ -251,6 +252,17 @@ class IntegrationWebController extends Controller
 
         if ($messages !== []) {
             throw ValidationException::withMessages($messages);
+        }
+
+        return $payload;
+    }
+
+    private function validateKommoPayload(array $payload): array
+    {
+        if (empty($payload['tokent'])) {
+            throw ValidationException::withMessages([
+                'tokent' => 'Para Kommo el campo token es obligatorio.',
+            ]);
         }
 
         return $payload;
