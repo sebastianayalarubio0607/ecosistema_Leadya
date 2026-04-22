@@ -8,6 +8,7 @@ use App\Http\Controllers\IntegrationTypeController;
 use App\Http\Controllers\LeadIntegrationController;
 use App\Http\Middleware\ApiAuthMiddleware;
 use App\Http\Controllers\Api\LeadCrmStateController;
+use App\Http\Controllers\Webhooks\MetaLeadAdsWebhookController;
 
 
 
@@ -46,3 +47,6 @@ Route::get('/prueba-sin-auth', function () {
 
 Route::post('/integrations/leads/crm-state/{public_key}', [LeadCrmStateController::class, 'update'])
     ->middleware(['throttle:460,1']); // 60 por minuto (ajusta)
+
+Route::get('/webhooks/meta/lead-ads', [MetaLeadAdsWebhookController::class, 'verify']);
+Route::post('/webhooks/meta/lead-ads', [MetaLeadAdsWebhookController::class, 'receive']);

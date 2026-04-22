@@ -1,0 +1,4 @@
+#TESTING
+DB_DATABASE=leadsya_testing
+DB_USERNAME=leadsya_testing_user
+DB_PASSWORD=d(Md:N$l67~o%vL3
