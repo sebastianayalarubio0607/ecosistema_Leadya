@@ -112,7 +112,7 @@ class IntegrationWebController extends Controller
             'description' => 'nullable|string',
             'integrationtype_id' => 'required|exists:integrationtypes,id',
             'customer_id' => 'required|exists:customers,id',
-            'url' => 'required|url',
+            'url' => 'nullable|url',
             'status' => 'nullable|boolean',
             'crm_Id_phone' => ['nullable', 'string', 'max:255'],
             'crm_Id_service' => ['nullable', 'string', 'max:255'],
@@ -140,6 +140,11 @@ class IntegrationWebController extends Controller
             'username' => ['nullable', 'string', 'max:255'],
             'password' => ['nullable', 'string'],
             'body' => ['nullable', 'string'],
+            'url_consulta_lead' => ['nullable', 'url', 'max:255'],
+            'url_negocio' => ['nullable', 'url', 'max:255'],
+            'url_creacionlead' => ['nullable', 'url', 'max:255'],
+            'dealname' => ['nullable', 'string'],
+            'dealstage' => ['nullable', 'string', 'max:255'],
         ];
 
         if ($updating) {
@@ -162,11 +167,18 @@ class IntegrationWebController extends Controller
             Integrationtype::whereKey($validated['integrationtype_id'])->value('name')
         );
 
+        if ($typeName !== 'hubspot' && empty($validated['url'])) {
+            throw ValidationException::withMessages([
+                'url' => 'El campo URL es obligatorio.',
+            ]);
+        }
+
         if ($typeName === 'google_sheets') {
             $validated = $this->clearKommoFields($validated);
             $validated = $this->clearZohoFields($validated);
             $validated = $this->clearFreshworksFields($validated);
             $validated = $this->clearSalesforceFields($validated);
+            $validated = $this->clearHubspotFields($validated);
             $validated = $this->clearCrmIdPrefixFields($validated);
         }
 
@@ -174,6 +186,7 @@ class IntegrationWebController extends Controller
             $validated = $this->clearZohoFields($validated);
             $validated = $this->clearFreshworksFields($validated);
             $validated = $this->clearSalesforceFields($validated);
+            $validated = $this->clearHubspotFields($validated);
             $validated = $this->validateKommoPayload($validated);
             $validated = $this->validateCrmIdPrefixPayload($validated, 'Kommo');
         }
@@ -182,6 +195,7 @@ class IntegrationWebController extends Controller
             $validated = $this->clearKommoFields($validated);
             $validated = $this->clearFreshworksFields($validated);
             $validated = $this->clearSalesforceFields($validated);
+            $validated = $this->clearHubspotFields($validated);
             $validated = $this->clearCrmIdPrefixFields($validated);
         }
 
@@ -189,6 +203,7 @@ class IntegrationWebController extends Controller
             $validated = $this->clearKommoFields($validated);
             $validated = $this->clearZohoFieldsPreservingToken($validated);
             $validated = $this->clearSalesforceFields($validated);
+            $validated = $this->clearHubspotFields($validated);
             $validated = $this->validateFreshworksPayload($validated);
             $validated = $this->validateCrmIdPrefixPayload($validated, 'Freshworks');
         }
@@ -197,6 +212,7 @@ class IntegrationWebController extends Controller
             $validated = $this->clearKommoFields($validated);
             $validated = $this->clearZohoFieldsPreservingToken($validated);
             $validated = $this->clearFreshworksFields($validated);
+            $validated = $this->clearHubspotFields($validated);
             $validated = $this->validateSalesforcePayload($validated);
             $validated = $this->clearCrmIdPrefixFields($validated);
         }
@@ -206,11 +222,22 @@ class IntegrationWebController extends Controller
             $validated = $this->clearZohoFieldsPreservingToken($validated);
             $validated = $this->clearFreshworksFields($validated);
             $validated = $this->clearSalesforceFields($validated);
+            $validated = $this->clearHubspotFields($validated);
             $validated = $this->validateMondayPayload($validated);
             $validated = $this->clearCrmIdPrefixFields($validated);
         }
 
-        if (!in_array($typeName, ['google_sheets', 'kommo', 'zoho', 'freshworks', 'salesforce', 'monday'], true)) {
+        if ($typeName === 'hubspot') {
+            $validated = $this->clearKommoFields($validated);
+            $validated = $this->clearZohoFieldsPreservingToken($validated);
+            $validated = $this->clearFreshworksFields($validated);
+            $validated = $this->clearSalesforceCredentialFields($validated);
+            $validated = $this->validateHubspotPayload($validated);
+            $validated = $this->validateCrmIdPrefixPayload($validated, 'HubSpot');
+        }
+
+        if (!in_array($typeName, ['google_sheets', 'kommo', 'zoho', 'freshworks', 'salesforce', 'monday', 'hubspot'], true)) {
+            $validated = $this->clearHubspotFields($validated);
             $validated = $this->clearCrmIdPrefixFields($validated);
         }
 
@@ -301,6 +328,40 @@ class IntegrationWebController extends Controller
             throw ValidationException::withMessages([
                 'tokent' => 'Para Monday el campo authorization es obligatorio.',
             ]);
+        }
+
+        return $payload;
+    }
+
+    private function validateHubspotPayload(array $payload): array
+    {
+        $required = [
+            'tokent' => 'access_token',
+            'url_consulta_lead' => 'url_consulta_lead',
+            'url_negocio' => 'url_negocio',
+            'url_creacionlead' => 'url_creacionlead',
+            'dealname' => 'dealname',
+            'dealstage' => 'dealstage',
+            'body' => 'body',
+        ];
+
+        $messages = [];
+        foreach ($required as $field => $label) {
+            if (empty($payload[$field])) {
+                $messages[$field] = "Para HubSpot el campo {$label} es obligatorio.";
+            }
+        }
+
+        if (empty($payload['url'])) {
+            $payload['url'] = (string) ($payload['url_consulta_lead'] ?? '');
+        }
+
+        if (!empty($payload['body']) && !$this->isValidJsonTemplate($payload['body'])) {
+            $messages['body'] = 'body debe ser un JSON valido.';
+        }
+
+        if ($messages !== []) {
+            throw ValidationException::withMessages($messages);
         }
 
         return $payload;
@@ -478,23 +539,34 @@ class IntegrationWebController extends Controller
             return true;
         }
 
+        return $this->isValidJsonTemplate($customField, '__freshworks_lead_field__:');
+    }
+
+    private function isValidJsonTemplate(?string $value, string $tokenPrefix = '__integration_lead_field__:'): bool
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return true;
+        }
+
         $quotedPattern = '/"(\s*\{\{\s*([^}]+?)\s*\}\}\s*)"/';
         $inlinePattern = '/\{\{\s*([^}]+?)\s*\}\}/';
 
-        $normalized = preg_replace_callback($quotedPattern, function ($matches) {
+        $normalized = preg_replace_callback($quotedPattern, function ($matches) use ($tokenPrefix) {
             $path = $this->normalizeFreshworksPlaceholderPath($matches[2]);
 
             return $path === null
                 ? $matches[0]
-                : json_encode('__freshworks_lead_field__:' . $path, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        }, $customField);
+                : json_encode($tokenPrefix . $path, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }, $value);
 
-        $normalized = preg_replace_callback($inlinePattern, function ($matches) {
+        $normalized = preg_replace_callback($inlinePattern, function ($matches) use ($tokenPrefix) {
             $path = $this->normalizeFreshworksPlaceholderPath($matches[1]);
 
             return $path === null
                 ? $matches[0]
-                : json_encode('__freshworks_lead_field__:' . $path, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                : json_encode($tokenPrefix . $path, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }, $normalized);
 
         return is_array(json_decode($normalized, true));
@@ -525,6 +597,26 @@ class IntegrationWebController extends Controller
         $payload['username'] = null;
         $payload['password'] = null;
         $payload['body'] = null;
+
+        return $payload;
+    }
+
+    private function clearSalesforceCredentialFields(array $payload): array
+    {
+        $payload['url_credenciales'] = null;
+        $payload['username'] = null;
+        $payload['password'] = null;
+
+        return $payload;
+    }
+
+    private function clearHubspotFields(array $payload): array
+    {
+        $payload['url_consulta_lead'] = null;
+        $payload['url_negocio'] = null;
+        $payload['url_creacionlead'] = null;
+        $payload['dealname'] = null;
+        $payload['dealstage'] = null;
 
         return $payload;
     }

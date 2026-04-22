@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\CampaignObjective;
 use App\Models\Geo;
 use App\Models\Language;
 use App\Models\Origin;
@@ -31,6 +32,11 @@ class UrlGeneratorController extends Controller
                 ->where('is_active', true)
                 ->orderBy('name')
                 ->pluck('name', 'code')
+                ->toArray(),
+            'campaign_objective' => CampaignObjective::query()
+                ->where('estado', true)
+                ->orderBy('nombre')
+                ->pluck('nombre', 'id')
                 ->toArray(),
         ];
 

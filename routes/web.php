@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CampaignObjectiveController;
 use App\Http\Controllers\GeoController;
 use App\Http\Controllers\LanguageController;
 use App\Http\Controllers\OriginController;
@@ -26,6 +27,7 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('platforms', PlatformController::class);
     Route::resource('geos', GeoController::class);
     Route::resource('languages', LanguageController::class);
+    Route::resource('campaign_objectives', CampaignObjectiveController::class);
 });
 
 require __DIR__.'/auth.php';

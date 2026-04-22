@@ -63,6 +63,7 @@
                             <th class="text-left px-3 py-2">Apellido</th>
                             <th class="text-left px-3 py-2">Fuente</th>
                             <th class="text-left px-3 py-2">Medio</th>
+                            <th class="text-left px-3 py-2">Campaign Objective</th>
                             <th class="text-left px-3 py-2">Estado</th>
                             <th class="text-left px-3 py-2">Cualificación</th>
                             <th class="text-left px-3 py-2">valor</th>
@@ -80,6 +81,7 @@
                                 <td class="px-3 py-2 whitespace-nowrap">{{ $row['last_name'] }}</td>
                                 <td class="px-3 py-2 whitespace-nowrap">{{ $row['fuente'] }}</td>
                                 <td class="px-3 py-2 whitespace-nowrap">{{ $row['medio'] }}</td>
+                                <td class="px-3 py-2 whitespace-nowrap">{{ $row['campaign_objective'] }}</td>
                                 <td class="px-3 py-2 whitespace-nowrap">{{ $row['crm_state'] }}</td>
                                 <td class="px-3 py-2 whitespace-nowrap">{{ $row['qualification'] }}</td>
                                 <td class="px-3 py-2 whitespace-nowrap">{{ $row['value_formatted'] }}</td>
@@ -87,7 +89,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="11" class="px-3 py-8 text-center text-white/60">
+                                <td colspan="12" class="px-3 py-8 text-center text-white/60">
                                     No hay leads para este grupo en la ventana seleccionada.
                                 </td>
                             </tr>

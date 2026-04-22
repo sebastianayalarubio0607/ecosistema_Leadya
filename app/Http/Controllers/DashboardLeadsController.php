@@ -5,9 +5,8 @@ namespace App\Http\Controllers;
 use App\Models\Customer;
 use App\Models\Lead;
 use App\Models\LeadFunnelHistory;
-use App\Models\MetaAdInsight;
 use App\Models\MetaAdAccount;
-
+use App\Models\MetaAdInsight;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -17,29 +16,49 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 
+/**
+ * Controlador para manejar las vistas y endpoints relacionados con los leads en el dashboard.
+ */
 class DashboardLeadsController extends Controller
 {
+    private const DONUT_MAX_ITEMS = 7;
+
+    private const DASHBOARD_FILTER_KEYS = [
+        'campaign_origin',
+        'plataforma',
+        'lenguaje',
+        'geo',
+        'crm_state',
+        'qualification',
+    ];
+
+    private const LIST_FILTER_KEYS = [
+        'campaign_origin',
+        'plataforma',
+        'lenguaje',
+        'geo',
+    ];
+
+    private const ALLOWED_GROUP_TYPES = [
+        'crm_state',
+        'qualification',
+        'campaign_origin',
+        'plataforma',
+        'funnel',
+        'funnel_history',
+    ];
+
+    /**
+     * Muestra la vista principal del dashboard de leads, con métricas y filtros.
+     */
     public function leads(Request $request)
     {
-        $customerId = $request->integer('customer_id') ?: null;
-        $integrationId = $request->integer('integration_id') ?: null;
+        [$customerId, $integrationId] = $this->resolveRequestScope($request);
+        $filters = $this->extractDashboardFilters($request);
+        [$from, $to, $nowMax] = $this->resolveRequestedDateRange($request);
+        [$customers, $selectedCustomer] = $this->resolveCustomerSelection($customerId);
 
-        $filters = $request->only([
-            'campaign_origin',
-            'plataforma',
-            'lenguaje',
-            'geo',
-            'crm_state',
-            'qualification',
-        ]);
-
-        // ✅ Rango fecha/hora (default: últimos 7 días hasta ahora)
-        [$from, $to, $nowMax] = $this->resolveDateRange($request);
-
-        $customers = Customer::query()->orderBy('name')->get(['id', 'name']);
-        $selectedCustomer = $customerId ? $customers->firstWhere('id', $customerId) : null;
-
-        $metric = $this->getLeadsMetrics(
+        $metric = $this->buildDashboardMetrics(
             $customerId,
             $integrationId,
             (string) $request->session()->getId(),
@@ -48,8 +67,7 @@ class DashboardLeadsController extends Controller
             $to
         );
 
-        // ✅ Toda la “lógica de UI” (labels, urls, porcentajes, selects, etc.) sale del Blade
-        $ui = $this->buildLeadsDashboardUi(
+        $ui = $this->buildDashboardViewData(
             $request,
             $customerId,
             $integrationId,
@@ -74,64 +92,31 @@ class DashboardLeadsController extends Controller
         ));
     }
 
+    /*
+    * Export CSV (Excel) del listado de leads por grupo (filtro aplicado)
+     * Nota: el export se basa en el mismo query que el listado paginado, para mantener consistencia entre ambos.
+    */
     public function leadsList(Request $request)
     {
-        $customerId = $request->integer('customer_id') ?: null;
-        $integrationId = $request->integer('integration_id') ?: null;
+        [$customerId, $integrationId] = $this->resolveRequestScope($request);
+        [$groupType, $groupId] = $this->resolveRequestedGroup($request);
+        $filters = $this->extractListFilters($request);
+        [$from, $to, $nowMax] = $this->resolveRequestedDateRange($request);
+        [$customers, $selectedCustomer] = $this->resolveCustomerSelection($customerId);
 
-        $groupType = (string) $request->get('group_type', '');
-        $groupId = (string) $request->get('group_id', '');
+        $groupLabel = $this->resolveGroupDisplayLabel($groupType, $groupId);
 
-        if (! in_array($groupType, ['crm_state', 'qualification', 'campaign_origin', 'plataforma', 'funnel', 'funnel_history'], true)) {
-            abort(404);
-        }
-        if ($groupId === '') {
-            abort(404);
-        }
+        $totalValueFormatted = $this->formatGroupedLeadsValue(
+            $customerId,
+            $integrationId,
+            $filters,
+            $groupType,
+            $groupId,
+            $from,
+            $to
+        );
 
-        $filters = $request->only([
-            'campaign_origin',
-            'plataforma',
-            'lenguaje',
-            'geo',
-        ]);
-
-        // ✅ Rango fecha/hora (default: últimos 7 días hasta ahora)
-        [$from, $to, $nowMax] = $this->resolveDateRange($request);
-
-        $customers = Customer::query()->orderBy('name')->get(['id', 'name']);
-        $selectedCustomer = $customerId ? $customers->firstWhere('id', $customerId) : null;
-
-        $groupLabel = $this->resolveGroupLabel($groupType, $groupId);
-
-        // ✅ Suma del campo value para el listado (mismos filtros + grupo)
-        $totalValueFormatted = '$ 0';
-        $leadTable = (new Lead)->getTable();
-        if (Schema::hasColumn($leadTable, 'value')) {
-            $sumQuery = $this->getLeadsForGroupQuery(
-                $customerId,
-                $integrationId,
-                $filters,
-                $groupType,
-                $groupId,
-                $from,
-                $to
-            );
-
-           if ($groupType === 'funnel_history') {
-    // ⚠️ Este subquery se usa dentro de un aggregate (sum).
-    // Si mantenemos ORDER BY (ej: lfh_last_at), MySQL falla porque el subquery solo selecciona id.
-    // Por eso removemos el orden con reorder().
-    $idsSub = (clone $sumQuery)->reorder()->select("{$leadTable}.id")->distinct();
-    $totalValue = (float) Lead::query()->whereIn("{$leadTable}.id", $idsSub)->sum("{$leadTable}.value");
-} else {
-                $totalValue = (float) (clone $sumQuery)->sum("{$leadTable}.value");
-            }
-            $totalValueFormatted = '$ '.number_format($totalValue, 0, ',', '.');
-        }
-
-
-        $leads = $this->getLeadsForGroup(
+        $leads = $this->paginateGroupedLeads(
             $customerId,
             $integrationId,
             $filters,
@@ -142,15 +127,14 @@ class DashboardLeadsController extends Controller
             $to
         )->withQueryString();
 
-        // ✅ Limpieza del Blade: filas ya “listas para pintar”
-        $leads = $this->transformLeadRows($leads);
+        $leads = $this->transformLeadListRows($leads);
 
         $backUrl = route('dashboard.leads', Arr::except($request->query(), [
             'group_type', 'group_id', 'page',
         ]));
 
         $exportUrl = route('dashboard.leads.list.export', Arr::except($request->query(), ['page']));
-        $periodLabel = $from->format('Y-m-d H:i').' → '.$to->format('Y-m-d H:i');
+        $periodLabel = $from->format('Y-m-d H:i').' -> '.$to->format('Y-m-d H:i');
 
         return view('dashboard.leads_list', compact(
             'customers',
@@ -172,38 +156,20 @@ class DashboardLeadsController extends Controller
     }
 
     /**
-     * Export CSV (Excel)
+     * Export CSV (Excel) del listado de leads por grupo (filtro aplicado)
      */
     public function leadsListExport(Request $request)
     {
-        $customerId = $request->integer('customer_id') ?: null;
-        $integrationId = $request->integer('integration_id') ?: null;
+        [$customerId, $integrationId] = $this->resolveRequestScope($request);
+        [$groupType, $groupId] = $this->resolveRequestedGroup($request);
+        $filters = $this->extractListFilters($request);
+        [$from, $to] = $this->resolveRequestedDateRange($request);
 
-        $groupType = (string) $request->get('group_type', '');
-        $groupId = (string) $request->get('group_id', '');
-
-        if (! in_array($groupType, ['crm_state', 'qualification', 'campaign_origin', 'plataforma', 'funnel', 'funnel_history'], true)) {
-            abort(404);
-        }
-        if ($groupId === '') {
-            abort(404);
-        }
-
-        $filters = $request->only([
-            'campaign_origin',
-            'plataforma',
-            'lenguaje',
-            'geo',
-        ]);
-
-        // ✅ Rango fecha/hora (default: últimos 7 días hasta ahora)
-        [$from, $to] = $this->resolveDateRange($request);
-
-        $groupLabel = $this->resolveGroupLabel($groupType, $groupId);
+        $groupLabel = $this->resolveGroupDisplayLabel($groupType, $groupId);
         $safeLabel = Str::slug($groupLabel ?: 'leads', '_');
         $filename = "leads_{$safeLabel}_".now()->format('Ymd_His').'.csv';
 
-        $query = $this->getLeadsForGroupQuery(
+        $query = $this->buildGroupedLeadsQuery(
             $customerId,
             $integrationId,
             $filters,
@@ -217,7 +183,7 @@ class DashboardLeadsController extends Controller
             $out = fopen('php://output', 'w');
             fwrite($out, "\xEF\xBB\xBF"); // BOM UTF-8 para Excel
 
-            fputcsv($out, ['Fecha', 'ID', 'Teléfono', 'Nombre', 'Apellido', 'Fuente', 'Medio', 'Estado', 'Cualificación', 'Valor', 'page_url']);
+            fputcsv($out, ['Fecha', 'ID', 'Teléfono', 'Nombre', 'Apellido', 'Fuente', 'Medio', 'Campaign Objective', 'Estado', 'Cualificación', 'Valor', 'page_url']);
 
             $query->chunk(500, function ($rows) use ($out) {
                 foreach ($rows as $lead) {
@@ -242,6 +208,7 @@ class DashboardLeadsController extends Controller
                         $last ?? '',
                         $fuenteLabel,
                         $medioLabel,
+                        $lead->campaign_objective_name ?? 'Sin Campaign Objective',
                         $lead->crm_state_name ?? 'Sin Estado',
                         $lead->qualification_name ?? 'Sin Cualificación',
                         $value,
@@ -256,10 +223,98 @@ class DashboardLeadsController extends Controller
         ]);
     }
 
-    // =====================================================
-    // ✅ Date range parsing (datetime-local) + validation
-    // =====================================================
-    private function resolveDateRange(Request $request): array
+    /**
+     * Resuelve el alcance del request, extrayendo y validando los parámetros relevantes.
+     */
+    private function resolveRequestScope(Request $request): array
+    {
+        return [
+            $request->integer('customer_id') ?: null,
+            $request->integer('integration_id') ?: null,
+        ];
+    }
+
+    /**
+     * Resuelve la selección de clientes para los filtros del dashboard, obteniendo la lista de clientes y el cliente seleccionado (si aplica).
+     */
+    private function resolveCustomerSelection(?int $customerId): array
+    {
+        $customers = Customer::query()->orderBy('name')->get(['id', 'name']);
+        $selectedCustomer = $customerId ? $customers->firstWhere('id', $customerId) : null;
+
+        return [$customers, $selectedCustomer];
+    }
+
+    private function extractDashboardFilters(Request $request): array
+    {
+        return $request->only(self::DASHBOARD_FILTER_KEYS);
+    }
+
+    /**
+     * Resuelve la etiqueta legible para el grupo solicitado, para mostrar en el encabezado del listado de leads.
+     */
+    private function extractListFilters(Request $request): array
+    {
+        return $request->only(self::LIST_FILTER_KEYS);
+    }
+
+    /**
+     *      Resuelve la etiqueta legible para el grupo solicitado, para mostrar en el encabezado del listado de leads.
+     */
+    private function resolveRequestedGroup(Request $request): array
+    {
+        $groupType = (string) $request->get('group_type', '');
+        $groupId = (string) $request->get('group_id', '');
+
+        if (! in_array($groupType, self::ALLOWED_GROUP_TYPES, true) || $groupId === '') {
+            abort(404);
+        }
+
+        return [$groupType, $groupId];
+    }
+
+    /**
+     * Formatea el valor total de los leads agrupados para mostrar en el dashboard.
+     */
+    private function formatGroupedLeadsValue(
+        ?int $customerId,
+        ?int $integrationId,
+        array $filters,
+        string $groupType,
+        string $groupId,
+        Carbon $from,
+        Carbon $to
+    ): string {
+        $leadTable = (new Lead)->getTable();
+
+        if (! Schema::hasColumn($leadTable, 'value')) {
+            return '$ 0';
+        }
+
+        $groupedLeadsQuery = $this->buildGroupedLeadsQuery(
+            $customerId,
+            $integrationId,
+            $filters,
+            $groupType,
+            $groupId,
+            $from,
+            $to
+        );
+
+        if ($groupType === 'funnel_history') {
+            $leadIdsSubquery = (clone $groupedLeadsQuery)->reorder()->select("{$leadTable}.id")->distinct();
+            $totalValue = (float) Lead::query()->whereIn("{$leadTable}.id", $leadIdsSubquery)->sum("{$leadTable}.value");
+        } else {
+            $totalValue = (float) (clone $groupedLeadsQuery)->sum("{$leadTable}.value");
+        }
+
+        return '$ '.number_format($totalValue, 0, ',', '.');
+    }
+
+    /**
+     * Resuelve el rango de fechas solicitado, aplicando validaciones y normalizaciones.
+     */
+    private function resolveRequestedDateRange(Request $request): array
     {
         $tz = config('app.timezone') ?: 'UTC';
         $now = now($tz);
@@ -301,17 +356,20 @@ class DashboardLeadsController extends Controller
             [$from, $to] = [$to, $from];
         }
 
-        // Normaliza precisión a minuto (por si llega con segundos)
+        // Normaliza precisiÃ³n a minuto (por si llega con segundos)
         $from = $from->copy()->seconds(0);
         $to = $to->copy()->seconds(0);
 
         return [$from, $to, $nowMax];
     }
 
-    // =====================================================
-    // ✅ Métricas del dashboard (inlined del Service)
-    // =====================================================
-    private function getLeadsMetrics(
+    /**
+     * Construye las métricas del dashboard de leads, aplicando los filtros y agrupamientos necesarios.
+     * Implementa caching para mejorar rendimiento en consultas repetidas.
+     * Nota: el caching se hace a nivel de usuario + sesion + filtros, para evitar interferencia entre usuarios y mantener consistencia en la experiencia.
+     * El cache tiene una expiraciÃ³n corta (60 segundos) para balancear frescura de datos y rendimiento.
+     */
+    private function buildDashboardMetrics(
         ?int $customerId,
         ?int $integrationId,
         string $sessionId,
@@ -319,40 +377,48 @@ class DashboardLeadsController extends Controller
         Carbon $from,
         Carbon $to
     ): array {
-        $filters = $this->normalizeFilters($filters);
+        $filters = $this->sanitizeDashboardFilters($filters);
 
-        // ✅ Cache per usuario + sesión (evita interferencia entre usuarios)
+        // âœ… Cache per usuario + sesiÃ³n (evita interferencia entre usuarios)
         $userKey = (string) (auth()->id() ?? 'guest');
-        $key = $this->makeKey($customerId, $integrationId, $userKey, $sessionId, $filters, $from, $to);
+        $key = $this->makeMetricsCacheKey($customerId, $integrationId, $userKey, $sessionId, $filters, $from, $to);
 
         $insightsTable = (new MetaAdInsight)->getTable();
-        return Cache::remember($key, now()->addSeconds(60), function () use ($customerId, $integrationId, $filters, $from, $to, $insightsTable) {
+
+        return Cache::remember($key, now()->addSeconds(60), function () use ($customerId, $integrationId, $filters, $from, $to) {
             $leadTable = (new Lead)->getTable();
 
             $base = Lead::query()->whereBetween("{$leadTable}.created_at", [$from, $to]);
-            $base = $this->applyBaseFilters($base, $customerId, $integrationId, $filters, $leadTable);
+            $base = $this->applyLeadScopeFilters($base, $customerId, $integrationId, $filters, $leadTable);
 
             // 1) Totales (aplicando todos los filtros)
             $qTotals = clone $base;
-            $qTotals = $this->applyDimensionFilters($qTotals, $filters, $leadTable, true, true, true, true);
+            $qTotals = $this->applyLeadDimensionFilters($qTotals, $filters, $leadTable, true, true, true, true);
 
             $totalCount = (int) (clone $qTotals)->count();
 
             $managedCount = (int) (clone $qTotals)
+                ->leftJoin('crm_state as csm', 'csm.id', '=', "{$leadTable}.crm_state")
                 ->whereNotNull("{$leadTable}.crm_state")
                 ->where("{$leadTable}.crm_state", '!=', '')
+                ->where(function ($qq) {
+                    $qq->whereNull('csm.unmanaged')
+                        ->orWhere('csm.unmanaged', false);
+                })
                 ->count();
 
             $pendingCount = (int) (clone $qTotals)
+                ->leftJoin('crm_state as csp', 'csp.id', '=', "{$leadTable}.crm_state")
                 ->where(function ($qq) use ($leadTable) {
                     $qq->whereNull("{$leadTable}.crm_state")
-                        ->orWhere("{$leadTable}.crm_state", '');
+                        ->orWhere("{$leadTable}.crm_state", '')
+                        ->orWhere('csp.unmanaged', true);
                 })
                 ->count();
 
             // 2) Fuente (NO aplica campaign_origin)
             $qChannels = clone $base;
-            $qChannels = $this->applyDimensionFilters($qChannels, $filters, $leadTable, false, true, true, true);
+            $qChannels = $this->applyLeadDimensionFilters($qChannels, $filters, $leadTable, false, true, true, true);
 
             $channels = (clone $qChannels)
                 ->selectRaw("\n                    COALESCE(NULLIF(MIN({$leadTable}.campaign_origin), ''), '__NULL__') as campaign_origin,\n                    COUNT(*) as total\n                ")
@@ -375,7 +441,7 @@ class DashboardLeadsController extends Controller
 
             // 3) Medio (NO aplica plataforma)
             $qPlatforms = clone $base;
-            $qPlatforms = $this->applyDimensionFilters($qPlatforms, $filters, $leadTable, true, false, true, true);
+            $qPlatforms = $this->applyLeadDimensionFilters($qPlatforms, $filters, $leadTable, true, false, true, true);
 
             $platforms = (clone $qPlatforms)
                 ->selectRaw("\n                    COALESCE(NULLIF(MIN({$leadTable}.plataforma), ''), '__NULL__') as plataforma,\n                    COUNT(*) as total\n                ")
@@ -398,7 +464,7 @@ class DashboardLeadsController extends Controller
 
             // 4) CRM States (NO aplica crm_state)
             $qCrmStates = clone $base;
-            $qCrmStates = $this->applyDimensionFilters($qCrmStates, $filters, $leadTable, true, true, false, true);
+            $qCrmStates = $this->applyLeadDimensionFilters($qCrmStates, $filters, $leadTable, true, true, false, true);
 
             $crmStates = (clone $qCrmStates)
                 ->whereNotNull("{$leadTable}.crm_state")
@@ -417,7 +483,7 @@ class DashboardLeadsController extends Controller
 
             // 5) Qualifications (NO aplica qualification)
             $qQualifications = clone $base;
-            $qQualifications = $this->applyDimensionFilters($qQualifications, $filters, $leadTable, true, true, true, false);
+            $qQualifications = $this->applyLeadDimensionFilters($qQualifications, $filters, $leadTable, true, true, true, false);
 
             $qualifications = (clone $qQualifications)
                 ->whereNotNull("{$leadTable}.crm_state")
@@ -435,32 +501,13 @@ class DashboardLeadsController extends Controller
                 ])
                 ->toArray();
 
-
-            // ✅ Indicador: "Leads NO Efectivos" (por CUALIFICACIÓN)
-            // Relación: qualification -> crm_state -> leads
+            // âœ… Indicador: "Leads NO Efectivos" (por CUALIFICACIÃ“N)
+            // RelaciÃ³n: qualification -> crm_state -> leads
             // Nota: NO aplica el filtro 'qualification' del dashboard (usa $qQualifications)
-            $notEffectiveQualificationId = DB::table('qualification')
-                ->whereRaw('LOWER(TRIM(name)) = ?', [mb_strtolower('Lead NO Efectivo')])
-                ->value('id');
-
-            $notEffectiveQualificationId = $notEffectiveQualificationId !== null ? (int) $notEffectiveQualificationId : null;
+            $notEffectiveFunnelId = null;
             $notEffectiveCount = 0;
 
-            if ($notEffectiveQualificationId !== null) {
-                $qNotEffective = clone $qQualifications;
-                $notEffectiveCount = (int) $qNotEffective
-                    ->whereNotNull("{$leadTable}.crm_state")
-                    ->where("{$leadTable}.crm_state", '!=', '')
-                    ->whereIn("{$leadTable}.crm_state", function ($sub) use ($notEffectiveQualificationId) {
-                        $sub->from('crm_state')
-                            ->select('id')
-                            ->where('qualification', $notEffectiveQualificationId);
-                    })
-                    ->count();
-            }
-
-
-            // ✅ FUNNELS + CALIFICADOS + VENTAS
+            // âœ… FUNNELS + CALIFICADOS + VENTAS
             [$funnelTable, $qualFunnelFk] = $this->resolveFunnelJoinInfo();
 
             $funnels = [];
@@ -471,25 +518,39 @@ class DashboardLeadsController extends Controller
             $salesValueSum = 0.0;
             $qualifiedFunnelId = null;
             $salesFunnelId = null;
+            $respondedFunnelId = null;
 
             if ($funnelTable && $qualFunnelFk) {
                 $qFunnels = clone $base;
-                $qFunnels = $this->applyDimensionFilters($qFunnels, $filters, $leadTable, true, true, true, true);
+                $qFunnels = $this->applyLeadDimensionFilters($qFunnels, $filters, $leadTable, true, true, true, true);
 
-                $rows = (clone $qFunnels)
+                $funnelRowsQuery = (clone $qFunnels)
                     ->leftJoin('crm_state as csf', 'csf.id', '=', "{$leadTable}.crm_state")
                     ->leftJoin('qualification as qlf', 'qlf.id', '=', 'csf.qualification')
                     ->leftJoin("{$funnelTable} as fn", 'fn.id', '=', "qlf.{$qualFunnelFk}")
-                    ->selectRaw("\n                        fn.id as funnel_id,\n                        COALESCE(fn.name, '') as name,\n                        COUNT(*) as total\n                    ")
-                    ->groupBy('fn.id', 'fn.name')
+                    ->selectRaw("
+                        CASE
+                            WHEN {$leadTable}.crm_state IS NULL OR {$leadTable}.crm_state = '' THEN '__LEADS__'
+                            WHEN fn.id IS NULL THEN '__NULL__'
+                            ELSE CAST(fn.id AS CHAR)
+                        END as funnel_id,
+                        CASE
+                            WHEN {$leadTable}.crm_state IS NULL OR {$leadTable}.crm_state = '' THEN 'Leads'
+                            WHEN fn.id IS NULL THEN 'Sin Funnel'
+                            ELSE fn.name
+                        END as name
+                    ");
+
+                $rows = DB::query()
+                    ->fromSub($funnelRowsQuery, 'funnel_rows')
+                    ->selectRaw('funnel_id, name, COUNT(*) as total')
+                    ->groupBy('funnel_id', 'name')
                     ->orderByDesc('total')
                     ->get();
 
                 foreach ($rows as $r) {
-                    if ($r->funnel_id === null) {
+                    if ($r->funnel_id === '__NULL__') {
                         $noFunnelCount = (int) $r->total;
-
-                        continue;
                     }
                     $funnels[] = [
                         'id' => (string) $r->funnel_id,
@@ -498,21 +559,26 @@ class DashboardLeadsController extends Controller
                     ];
                 }
 
+                $notEffectiveFunnelId = $this->findFunnelIdByName($funnelTable, 'Lead NO Efectivo');
                 $qualifiedFunnelId = $this->findFunnelIdByName($funnelTable, 'Oportunidades');
-                $salesFunnelId = $this->findFunnelIdByName($funnelTable, 'Ventas')
-                    ?: $this->findFunnelIdByName($funnelTable, 'Venta');
+                $respondedFunnelId = $this->findFunnelIdByName($funnelTable, 'Respondidos');
+                $salesFunnelId = $this->findFunnelIdByName($funnelTable, 'Ventas');
 
-                if ($qualifiedFunnelId !== null) {
-                    $qualifiedCount = $this->countLeadsByFunnelId($base, $filters, $leadTable, $funnelTable, $qualFunnelFk, $qualifiedFunnelId);
+                if ($notEffectiveFunnelId !== null) {
+                    $notEffectiveCount = $this->countLeadsByFunnelIds($base, $filters, $leadTable, $funnelTable, $qualFunnelFk, [$notEffectiveFunnelId]);
+                }
+
+                $qualifiedFunnelIds = array_values(array_filter([$qualifiedFunnelId, $respondedFunnelId], fn ($id) => $id !== null));
+                if (! empty($qualifiedFunnelIds)) {
+                    $qualifiedCount = $this->countLeadsByFunnelIds($base, $filters, $leadTable, $funnelTable, $qualFunnelFk, $qualifiedFunnelIds);
                 }
                 if ($salesFunnelId !== null) {
-                    $salesCount = $this->countLeadsByFunnelId($base, $filters, $leadTable, $funnelTable, $qualFunnelFk, $salesFunnelId);
-                    $salesValueSum = $this->sumLeadsValueByFunnelId($base, $filters, $leadTable, $funnelTable, $qualFunnelFk, $salesFunnelId);
+                    $salesCount = $this->countLeadsByFunnelIds($base, $filters, $leadTable, $funnelTable, $qualFunnelFk, [$salesFunnelId]);
+                    $salesValueSum = $this->sumLeadsValueByFunnelIds($base, $filters, $leadTable, $funnelTable, $qualFunnelFk, [$salesFunnelId]);
                 }
             }
 
-
-            // ✅ HISTÓRICO: Leads por Funnel (usando LeadFunnelHistory)
+            // âœ… HISTÃ“RICO: Leads por Funnel (usando LeadFunnelHistory)
             $funnelsHistory = [];
             $historyTable = (new LeadFunnelHistory)->getTable();
             $funnelTableForHistory = Schema::hasTable('funnels') ? 'funnels' : $funnelTable;
@@ -539,7 +605,6 @@ class DashboardLeadsController extends Controller
                 }
             }
 
-
             $metaSpend = $this->getMetaSpend($customerId, $integrationId, $filters, $from, $to);
 
             return [
@@ -562,22 +627,22 @@ class DashboardLeadsController extends Controller
                 'sales_value_sum' => (float) $salesValueSum,
 
                 'not_effective_count' => (int) $notEffectiveCount,
-                'not_effective_qualification_id' => $notEffectiveQualificationId,
+                'not_effective_funnel_id' => $notEffectiveFunnelId,
 
                 'calculated_at' => now()->toISOString(),
                 'window_from' => $from->toISOString(),
                 'window_to' => $to->toISOString(),
                 'window_days' => (int) $from->diffInDays($to),
                 'filters' => $filters,
-                
+
             ];
         });
     }
 
-    // =====================================================
-    // ✅ Listado por grupo (paginado / export)
-    // =====================================================
-    private function getLeadsForGroup(
+    /**
+     * Realiza la paginación del listado de leads agrupados por el grupo solicitado, aplicando los filtros correspondientes.
+     */
+    private function paginateGroupedLeads(
         ?int $customerId,
         ?int $integrationId,
         array $filters,
@@ -587,11 +652,18 @@ class DashboardLeadsController extends Controller
         Carbon $from,
         Carbon $to
     ) {
-        return $this->getLeadsForGroupQuery($customerId, $integrationId, $filters, $groupType, $groupId, $from, $to)
+        return $this->buildGroupedLeadsQuery($customerId, $integrationId, $filters, $groupType, $groupId, $from, $to)
             ->paginate($perPage);
     }
 
-    private function getLeadsForGroupQuery(
+    /**
+     * Construye el query base para obtener los leads agrupados por el grupo solicitado, aplicando los filtros correspondientes.
+     * Este método es utilizado tanto para la visualización paginada como para la exportación, garantizando consistencia entre ambos.
+     * Nota: se recomienda revisar y optimizar este método si se presentan problemas de rendimiento, ya que es el núcleo de las consultas del dashboard.
+     * Se han aplicado optimizaciones como selección de columnas necesarias, uso de índices (si existen), y limitación de joins según el tipo de grupo.
+     * En caso de necesitar más optimizaciones, se podrían considerar técnicas avanzadas como materialized views o tablas de resumen pre-calculadas, dependiendo del volumen de datos y frecuencia de actualización requerida.
+     */
+    private function buildGroupedLeadsQuery(
         ?int $customerId,
         ?int $integrationId,
         array $filters,
@@ -600,21 +672,21 @@ class DashboardLeadsController extends Controller
         Carbon $from,
         Carbon $to
     ): Builder {
-        $filters = $this->normalizeFilters($filters);
+        $filters = $this->sanitizeDashboardFilters($filters);
 
         $leadTable = (new Lead)->getTable();
 
         // Base: ventana por created_at del lead (mantiene consistencia con el total del dashboard)
         $q = Lead::query()->whereBetween("{$leadTable}.created_at", [$from, $to]);
-        $q = $this->applyBaseFilters($q, $customerId, $integrationId, $filters, $leadTable);
+        $q = $this->applyLeadScopeFilters($q, $customerId, $integrationId, $filters, $leadTable);
 
-        // Aplica filtros del dashboard excepto la dimensión del grupo
+        // Aplica filtros del dashboard excepto la dimensiÃ³n del grupo
         $applyChannel = $groupType !== 'campaign_origin';
         $applyPlatform = $groupType !== 'plataforma';
         $applyCrm = $groupType !== 'crm_state';
         $applyQual = $groupType !== 'qualification';
 
-        $q = $this->applyDimensionFilters($q, $filters, $leadTable, $applyChannel, $applyPlatform, $applyCrm, $applyQual);
+        $q = $this->applyLeadDimensionFilters($q, $filters, $leadTable, $applyChannel, $applyPlatform, $applyCrm, $applyQual);
 
         // Filtro por grupo (excepto funnel y funnel_history, que se filtran con joins)
         if ($groupType === 'campaign_origin') {
@@ -641,9 +713,11 @@ class DashboardLeadsController extends Controller
 
         if ($groupType === 'crm_state') {
             if ($groupId === '__NULL__') {
+                $q->leftJoin('crm_state as csg', 'csg.id', '=', "{$leadTable}.crm_state");
                 $q->where(function ($qq) use ($leadTable) {
                     $qq->whereNull("{$leadTable}.crm_state")
-                        ->orWhere("{$leadTable}.crm_state", '');
+                        ->orWhere("{$leadTable}.crm_state", '')
+                        ->orWhere('csg.unmanaged', true);
                 });
             } else {
                 $q->where("{$leadTable}.crm_state", $groupId);
@@ -667,7 +741,8 @@ class DashboardLeadsController extends Controller
 
         // joins para mostrar nombres
         $q->leftJoin('crm_state as cs', 'cs.id', '=', "{$leadTable}.crm_state")
-            ->leftJoin('qualification as ql', 'ql.id', '=', 'cs.qualification');
+            ->leftJoin('qualification as ql', 'ql.id', '=', 'cs.qualification')
+            ->leftJoin('campaign_objectives as co', 'co.id', '=', "{$leadTable}.campaign_objective");
 
         // join funnel solo si groupType=funnel
         if ($groupType === 'funnel') {
@@ -676,15 +751,14 @@ class DashboardLeadsController extends Controller
                 $q->leftJoin("{$funnelTable} as fn", 'fn.id', '=', "ql.{$qualFunnelFk}");
 
                 if ($groupId === '__LEADS__') {
-                    $leadNoEfectivoId = $this->findFunnelIdByName($funnelTable, 'Lead NO Efectivo');
-                    $q->where(function ($qq) use ($leadNoEfectivoId) {
-                        $qq->whereNull('fn.id');
-                        if ($leadNoEfectivoId !== null) {
-                            $qq->orWhere('fn.id', $leadNoEfectivoId);
-                        }
+                    $q->where(function ($qq) use ($leadTable) {
+                        $qq->whereNull("{$leadTable}.crm_state")
+                            ->orWhere("{$leadTable}.crm_state", '');
                     });
                 } elseif ($groupId === '__NULL__') {
-                    $q->whereNull('fn.id');
+                    $q->whereNotNull("{$leadTable}.crm_state")
+                        ->where("{$leadTable}.crm_state", '!=', '')
+                        ->whereNull('fn.id');
                 } else {
                     $q->where('fn.id', $groupId);
                 }
@@ -693,7 +767,7 @@ class DashboardLeadsController extends Controller
             }
         }
 
-        // ✅ join lead_funnel_histories solo si groupType=funnel_history
+        // âœ… join lead_funnel_histories solo si groupType=funnel_history
         $isHistory = false;
         $historyOrderIds = null;
         if ($groupType === 'funnel_history') {
@@ -705,7 +779,7 @@ class DashboardLeadsController extends Controller
                     $j->whereBetween('lfh.created_at', [$from, $to]);
                 });
 
-                // ✅ "Leads" histórico = (Lead + Lead NO Efectivo)
+                // âœ… "Leads" histÃ³rico = (Lead + Lead NO Efectivo)
                 if ($groupId === '__LEADS__') {
                     [$funnelTable] = $this->resolveFunnelJoinInfo();
                     $funnelTable = Schema::hasTable('funnels') ? 'funnels' : $funnelTable;
@@ -744,9 +818,10 @@ class DashboardLeadsController extends Controller
         // Select final
         $q->select("{$leadTable}.*")
             ->selectRaw("COALESCE(NULLIF(cs.name,''), NULLIF({$leadTable}.crm_state,''), 'Sin Estado') as crm_state_name")
+            ->selectRaw("COALESCE(NULLIF(co.nombre,''), 'Sin Campaign Objective') as campaign_objective_name")
             ->selectRaw("COALESCE(NULLIF(ql.name,''), 'Sin Cualificación') as qualification_name");
 
-        // Orden: para histórico prioriza el último paso por ese funnel dentro de la ventana
+        // Orden: para histÃ³rico prioriza el Ãºltimo paso por ese funnel dentro de la ventana
         if ($isHistory) {
             $historyTable = (new LeadFunnelHistory)->getTable();
 
@@ -768,7 +843,11 @@ class DashboardLeadsController extends Controller
         return $q;
     }
 
-    private function resolveGroupLabel(string $groupType, string $groupId): string
+    /*
+    * Resuelve la etiqueta legible para el grupo solicitado, para mostrar en el encabezado del listado de leads.
+    * Nota: se han manejado casos especiales para ciertos grupos (ej: "__NULL__ para fuentes/medios, "__LEADS__" para funnels), y se han aplicado consultas a las tablas relacionadas para obtener los nombres legibles cuando es posible.
+    */
+    private function resolveGroupDisplayLabel(string $groupType, string $groupId): string
     {
         if ($groupType === 'crm_state') {
             if ($groupId === '__NULL__') {
@@ -796,7 +875,6 @@ class DashboardLeadsController extends Controller
             return $groupId === '__NULL__' ? 'Sin Medio' : $groupId;
         }
 
-        
         if ($groupType === 'funnel_history') {
             if ($groupId === '__LEADS__') {
                 return 'Leads';
@@ -813,7 +891,7 @@ class DashboardLeadsController extends Controller
             return $name ? (string) $name : $groupId;
         }
 
-if ($groupType === 'funnel') {
+        if ($groupType === 'funnel') {
             if ($groupId === '__LEADS__') {
                 return 'Leads';
             }
@@ -835,7 +913,7 @@ if ($groupType === 'funnel') {
     }
 
     // =====================================================
-    // ✅ Helpers / filtros
+    // âœ… Helpers / filtros
     // =====================================================
     private function resolveFunnelJoinInfo(): array
     {
@@ -879,13 +957,32 @@ if ($groupType === 'funnel') {
         string $funnelId
     ): int {
         $q = clone $base;
-        $q = $this->applyDimensionFilters($q, $filters, $leadTable, true, true, true, true);
+        $q = $this->applyLeadDimensionFilters($q, $filters, $leadTable, true, true, true, true);
 
         return (int) $q
             ->leftJoin('crm_state as csf2', 'csf2.id', '=', "{$leadTable}.crm_state")
             ->leftJoin('qualification as qlf2', 'qlf2.id', '=', 'csf2.qualification')
             ->leftJoin("{$funnelTable} as fn2", 'fn2.id', '=', "qlf2.{$qualFunnelFk}")
             ->where('fn2.id', $funnelId)
+            ->count();
+    }
+
+    private function countLeadsByFunnelIds(
+        Builder $base,
+        array $filters,
+        string $leadTable,
+        string $funnelTable,
+        string $qualFunnelFk,
+        array $funnelIds
+    ): int {
+        $q = clone $base;
+        $q = $this->applyLeadDimensionFilters($q, $filters, $leadTable, true, true, true, true);
+
+        return (int) $q
+            ->leftJoin('crm_state as csf2', 'csf2.id', '=', "{$leadTable}.crm_state")
+            ->leftJoin('qualification as qlf2', 'qlf2.id', '=', 'csf2.qualification')
+            ->leftJoin("{$funnelTable} as fn2", 'fn2.id', '=', "qlf2.{$qualFunnelFk}")
+            ->whereIn('fn2.id', $funnelIds)
             ->count();
     }
 
@@ -902,7 +999,7 @@ if ($groupType === 'funnel') {
         }
 
         $q = clone $base;
-        $q = $this->applyDimensionFilters($q, $filters, $leadTable, true, true, true, true);
+        $q = $this->applyLeadDimensionFilters($q, $filters, $leadTable, true, true, true, true);
 
         return (float) $q
             ->leftJoin('crm_state as csf3', 'csf3.id', '=', "{$leadTable}.crm_state")
@@ -912,7 +1009,30 @@ if ($groupType === 'funnel') {
             ->sum("{$leadTable}.value");
     }
 
-    private function applyBaseFilters(
+    private function sumLeadsValueByFunnelIds(
+        Builder $base,
+        array $filters,
+        string $leadTable,
+        string $funnelTable,
+        string $qualFunnelFk,
+        array $funnelIds
+    ): float {
+        if (! Schema::hasColumn($leadTable, 'value')) {
+            return 0.0;
+        }
+
+        $q = clone $base;
+        $q = $this->applyLeadDimensionFilters($q, $filters, $leadTable, true, true, true, true);
+
+        return (float) $q
+            ->leftJoin('crm_state as csf3', 'csf3.id', '=', "{$leadTable}.crm_state")
+            ->leftJoin('qualification as qlf3', 'qlf3.id', '=', 'csf3.qualification')
+            ->leftJoin("{$funnelTable} as fn3", 'fn3.id', '=', "qlf3.{$qualFunnelFk}")
+            ->whereIn('fn3.id', $funnelIds)
+            ->sum("{$leadTable}.value");
+    }
+
+    private function applyLeadScopeFilters(
         Builder $q,
         ?int $customerId,
         ?int $integrationId,
@@ -935,7 +1055,7 @@ if ($groupType === 'funnel') {
         return $q;
     }
 
-    private function applyDimensionFilters(
+    private function applyLeadDimensionFilters(
         Builder $q,
         array $filters,
         string $leadTable,
@@ -998,58 +1118,63 @@ if ($groupType === 'funnel') {
     }
 
     // =========================
-    // ✅ Spend (MetaAdInsight)
+    // âœ… Spend (MetaAdInsight)
     // =========================
-private function getMetaSpend(
-    ?int $customerId,
-    ?int $integrationId,
-    array $filters,
-    Carbon $from,
-    Carbon $to
-): float {
-    $fromDate = $from->toDateString();
-    $toDate = $to->toDateString();
+    private function getMetaSpend(
+        ?int $customerId,
+        ?int $integrationId,
+        array $filters,
+        Carbon $from,
+        Carbon $to
+    ): float {
+        $fromDate = $from->toDateString();
+        $toDate = $to->toDateString();
 
-    $q = MetaAdInsight::query()->whereBetween('date_start', [$fromDate, $toDate]);
+        $q = MetaAdInsight::query()->whereBetween('date_start', [$fromDate, $toDate]);
 
-    // Filtrado por cliente e integración
-    if ($customerId !== null || $integrationId !== null) {
-        $q->whereHas('ad.adSet.campaign.account', function ($qq) use ($customerId, $integrationId) {
-            if ($customerId !== null) {
-                $qq->where('customer_id', $customerId);
-            }
-            if ($integrationId !== null && Schema::hasColumn($qq->getModel()->getTable(), 'integration_id')) {
-                $qq->where('integration_id', $integrationId);
-            }
-        });
-    }
-
-    $leadTable = (new Lead)->getTable();
-    [$leadCampaignCol, $metaCampaignCol] = $this->resolveLeadToMetaCampaignMapping($leadTable);
-
-    if ($leadCampaignCol && $metaCampaignCol) {
-        // Subquery para obtener los leads correspondientes a las campañas de Meta
-        $sub = Lead::query()->whereBetween("{$leadTable}.created_at", [$from, $to]);
-        $sub = $this->applyBaseFilters($sub, $customerId, $integrationId, $filters, $leadTable);
-        $sub = $this->applyDimensionFilters($sub, $filters, $leadTable, true, true, true, true);
-
-        $sub->whereNotNull("{$leadTable}.{$leadCampaignCol}")
-            ->where("{$leadTable}.{$leadCampaignCol}", '!=', '');  // Asegura que se filtren los leads con las campañas correctas
-
-        // Relación entre los leads y las campañas de Meta
-        $q->whereIn($metaCampaignCol, $sub->select("{$leadTable}.{$leadCampaignCol}")->distinct());
-    } else {
-        // Si no se encuentra la relación, revisamos si los filtros podrían incluir el gasto de Meta
-        if (!$this->filtersCouldIncludeMetaSpend($filters)) {
-            return 0.0;
+        // Filtrado por cliente e integraciÃ³n
+        if ($customerId !== null || $integrationId !== null) {
+            $q->whereHas('ad.adSet.campaign.account', function ($qq) use ($customerId, $integrationId) {
+                if ($customerId !== null) {
+                    $qq->where('customer_id', $customerId);
+                }
+                if ($integrationId !== null && Schema::hasColumn($qq->getModel()->getTable(), 'integration_id')) {
+                    $qq->where('integration_id', $integrationId);
+                }
+            });
         }
+
+        $leadTable = (new Lead)->getTable();
+        [$leadCampaignCol, $metaCampaignCol] = $this->resolveLeadToMetaCampaignMapping($leadTable);
+
+        if ($leadCampaignCol && $metaCampaignCol) {
+            // Subquery para obtener los leads correspondientes a las Campañas de Meta
+            $sub = Lead::query()->whereBetween("{$leadTable}.created_at", [$from, $to]);
+            $sub = $this->applyLeadScopeFilters($sub, $customerId, $integrationId, $filters, $leadTable);
+            $sub = $this->applyLeadDimensionFilters($sub, $filters, $leadTable, true, true, true, true);
+
+            $sub->whereNotNull("{$leadTable}.{$leadCampaignCol}")
+                ->where("{$leadTable}.{$leadCampaignCol}", '!=', '');  // Asegura que se filtren los leads con las Campañas correctas
+
+            // RelaciÃ³n entre los leads y las Campañas de Meta
+            $q->whereIn($metaCampaignCol, $sub->select("{$leadTable}.{$leadCampaignCol}")->distinct());
+        } else {
+            // Si no se encuentra la relaciÃ³n, revisamos si los filtros podrÃ­an incluir el gasto de Meta
+            if (! $this->filtersCouldIncludeMetaSpend($filters)) {
+                return 0.0;
+            }
+        }
+
+        // Finalmente, suma el gasto total de las Campañas de Meta que cumplen con los filtros
+        return (float) $q->sum('spend');
     }
 
-    // Finalmente, suma el gasto total de las campañas de Meta que cumplen con los filtros
-    return (float) $q->sum('spend');
-}
+    /*
+    * Dado que no hay una relación directa garantizada entre los leads y las campañas de Meta (ya que cada cliente puede tener su propia estructura de datos), este método intenta resolver dinámicamente cómo se relacionan los leads con las campañas de Meta para poder filtrar el gasto correctamente.
+    * Se buscan columnas comunes que podrían indicar esta relación (ej: meta_campaign_id, campaign_id
+    en los leads, y se asume que podrían corresponder con campaign_id o campaign_name en MetaAdInsight). Si no se encuentra una relación clara, se hace un análisis de los filtros aplicados para determinar si es posible que el gasto de Meta sea relevante para la consulta.
 
-
+    */
     private function resolveLeadToMetaCampaignMapping(string $leadTable): array
     {
         $idCandidates = ['meta_campaign_id', 'campaign_id', 'utm_campaign_id', 'campaignid'];
@@ -1071,6 +1196,11 @@ private function getMetaSpend(
         return [null, null];
     }
 
+    /**
+     * Analiza los filtros aplicados en el dashboard para determinar si podrían incluir campañas de Meta, lo que indicaría que el gasto de Meta es relevante para la consulta aunque no se haya podido resolver una relación directa entre leads y campañas de Meta.
+     * Se buscan tokens relacionados con Meta (ej: "meta", "facebook", "instagram", "fb", "ig", "whatsapp", "messenger") en los filtros de plataforma y campaña, considerando también casos donde se seleccione "Sin Medio" o "Sin Fuente".
+     * Si los filtros excluyen explícitamente cualquier término relacionado con Meta, entonces se puede concluir que el gasto de Meta no es relevante y retornar 0 sin hacer la consulta a MetaAdInsight.
+     */
     private function filtersCouldIncludeMetaSpend(array $filters): bool
     {
         $tokens = ['meta', 'facebook', 'fb', 'instagram', 'ig', 'whatsapp', 'messenger'];
@@ -1121,7 +1251,7 @@ private function getMetaSpend(
         return true;
     }
 
-    private function makeKey(
+    private function makeMetricsCacheKey(
         ?int $customerId,
         ?int $integrationId,
         string $userKey,
@@ -1143,7 +1273,10 @@ private function getMetaSpend(
         return "dash:leads:range:{$hash}";
     }
 
-    private function normalizeFilters(array $filters): array
+    /**
+     * Limpia y filtra los filtros del dashboard para asegurar que solo se incluyan parámetros válidos.
+     */
+    private function sanitizeDashboardFilters(array $filters): array
     {
         $allowed = Arr::only($filters, [
             'campaign_origin',
@@ -1153,6 +1286,9 @@ private function getMetaSpend(
             'crm_state',
             'qualification',
         ]);
+        /**
+         * Para 'campaign_origin', se permite un array de valores, pero se filtran los valores vacíos o nulos, y si después de eso no queda ningún valor, se elimina el filtro por completo. Esto asegura que no se apliquen filtros inválidos que podrían afectar los resultados de las métricas.
+         */
 
         if (array_key_exists('campaign_origin', $allowed)) {
             $arr = array_values((array) $allowed['campaign_origin']);
@@ -1177,10 +1313,11 @@ private function getMetaSpend(
         return $allowed;
     }
 
-    /**
-     * Construye todos los datos “de UI” para evitar lógica en el Blade.
-     */
-    private function buildLeadsDashboardUi(
+ /**
+  * Construye la estructura de datos necesaria para renderizar la vista del dashboard, a partir de las métricas calculadas y los parámetros de la consulta.
+  * Este método se encarga de transformar los datos crudos de las métricas en la información específica que se muestra en cada sección del dashboard, como los cards de canales/plataformas,
+  */
+    private function buildDashboardViewData(
         Request $request,
         ?int $customerId,
         ?int $integrationId,
@@ -1193,7 +1330,7 @@ private function getMetaSpend(
     ): array {
         $fromValue = $from->format('Y-m-d\TH:i');
         $toValue = $to->format('Y-m-d\TH:i');
-        $periodLabel = $from->format('Y-m-d H:i').' → '.$to->format('Y-m-d H:i');
+        $periodLabel = $from->format('Y-m-d H:i').' -> '.$to->format('Y-m-d H:i');
 
         $channels = $metric['channels'] ?? [];
         $platforms = $metric['platforms'] ?? [];
@@ -1204,44 +1341,28 @@ private function getMetaSpend(
         $baseCardsQuery = Arr::except($request->query(), ['crm_state', 'qualification', 'group_type', 'group_id', 'page']);
 
         $funnelsFromMetric = $metric['funnels'] ?? [];
-        $noFunnelCount = (int) ($metric['no_funnel_count'] ?? 0);
 
-        // ✅ Unificar "Sin Funnel" + "Lead NO Efectivo" => "Leads"
-        $leadNoEfectivoCount = 0;
-        $remainingFunnels = [];
-
+        // âœ… Unificar "Sin Funnel" + "Lead NO Efectivo" => "Leads"
+        $funnelByName = [];
         foreach ($funnelsFromMetric as $f) {
-            $n = mb_strtolower(trim((string) ($f['name'] ?? '')));
-            if ($n === mb_strtolower('Lead NO Efectivo')) {
-                $leadNoEfectivoCount += (int) ($f['count'] ?? 0);
-
+            $k = mb_strtolower(trim((string) ($f['name'] ?? '')));
+            if ($k === '') {
                 continue;
             }
-            $remainingFunnels[] = $f;
-        }
 
-        $leadsCount = $noFunnelCount + $leadNoEfectivoCount;
-
-        // ✅ Orden requerido: Leads, Respondidos, Oportunidades, Ventas
-        $funnelByName = [];
-        foreach ($remainingFunnels as $f) {
-            $k = mb_strtolower(trim((string) ($f['name'] ?? '')));
-            if ($k !== '') {
+            if (! isset($funnelByName[$k])) {
                 $funnelByName[$k] = $f;
+                continue;
             }
+
+            $funnelByName[$k]['count'] = (int) ($funnelByName[$k]['count'] ?? 0) + (int) ($f['count'] ?? 0);
         }
 
+
+        // âœ… Orden requerido: Leads, Respondidos, Oportunidades, Ventas
         $funnelRaw = [];
 
-        // 1) Leads (combinado)
-        $funnelRaw[] = [
-            'id' => '__LEADS__',
-            'name' => 'Leads',
-            'count' => $leadsCount,
-        ];
-
-        // 2..4) Orden fijo por nombre
-        foreach (['Respondidos', 'Oportunidades', 'Ventas'] as $wanted) {
+        foreach (['Leads', 'Respondidos', 'Lead NO Efectivo', 'Oportunidades', 'Ventas'] as $wanted) {
             $k = mb_strtolower($wanted);
             if (isset($funnelByName[$k])) {
                 $funnelRaw[] = [
@@ -1254,7 +1375,7 @@ private function getMetaSpend(
         }
 
         // Resto (si existe) al final, respetando orden original
-        foreach ($remainingFunnels as $f) {
+        foreach ($funnelsFromMetric as $f) {
             $k = mb_strtolower(trim((string) ($f['name'] ?? '')));
             if ($k !== '' && isset($funnelByName[$k])) {
                 $funnelRaw[] = [
@@ -1302,23 +1423,24 @@ private function getMetaSpend(
         $cardsQual = $mkCards($qualRaw, 'qualification');
         $cardsCrm = $mkCards($crmRaw, 'crm_state');
 
-
-        // ✅ Histórico Leads en el Funnel (desde LeadFunnelHistory)
+        // âœ… HistÃ³rico Leads en el Funnel (desde LeadFunnelHistory)
         $funnelHistoryFromMetric = $metric['funnels_history'] ?? [];
 
-        // ✅ Unificar "Lead" + "Lead NO Efectivo" => "Leads" (sin perder el click a listado)
+        // âœ… Unificar "Lead" + "Lead NO Efectivo" => "Leads" (sin perder el click a listado)
         $historyLeadCount = 0;
         $historyNoEfectivoCount = 0;
         $historyRemaining = [];
 
         foreach ($funnelHistoryFromMetric as $f) {
             $n = mb_strtolower(trim((string) ($f['name'] ?? '')));
-	        if ($n === 'lead' || $n === 'leads') {
+            if ($n === 'lead' || $n === 'leads') {
                 $historyLeadCount += (int) ($f['count'] ?? 0);
+
                 continue;
             }
             if ($n === mb_strtolower('Lead NO Efectivo')) {
                 $historyNoEfectivoCount += (int) ($f['count'] ?? 0);
+
                 continue;
             }
             $historyRemaining[] = $f;
@@ -1372,6 +1494,10 @@ private function getMetaSpend(
 
         // Calificados / Ventas
         $baseClick = Arr::except($request->query(), ['crm_state', 'qualification', 'group_type', 'group_id', 'page']);
+        $pendingUrl = route('dashboard.leads.list', array_merge($baseClick, [
+            'group_type' => 'crm_state',
+            'group_id' => '__NULL__',
+        ]));
         $qualifiedFunnelId = $metric['qualified_funnel_id'] ?? null;
         $salesFunnelId = $metric['sales_funnel_id'] ?? null;
 
@@ -1383,20 +1509,19 @@ private function getMetaSpend(
             ? route('dashboard.leads.list', array_merge($baseClick, ['group_type' => 'funnel', 'group_id' => $salesFunnelId]))
             : null;
 
-
-        // ✅ Leads NO Efectivos (por Qualification)
-        $notEffectiveQualificationId = $metric['not_effective_qualification_id'] ?? null;
-        $notEffectiveUrl = $notEffectiveQualificationId
-            ? route('dashboard.leads.list', array_merge($baseClick, ['group_type' => 'qualification', 'group_id' => $notEffectiveQualificationId]))
+        // âœ… Leads NO Efectivos (por Qualification)
+        $notEffectiveFunnelId = $metric['not_effective_funnel_id'] ?? null;
+        $notEffectiveUrl = $notEffectiveFunnelId
+            ? route('dashboard.leads.list', array_merge($baseClick, ['group_type' => 'funnel', 'group_id' => $notEffectiveFunnelId]))
             : null;
 
-        // ✅ Valor total ventas (suma de leads.value para funnel Ventas)
+        // âœ… Valor total ventas (suma de leads.value para funnel Ventas)
         $salesValueSum = (float) ($metric['sales_value_sum'] ?? 0);
         $salesValueFormatted = '$ '.number_format($salesValueSum, 0, ',', '.');
 
         // Donuts (datos + baseUrl para JS)
-        $channelsDonut = $this->prepareDonut($channels, 'campaign_origin');
-        $platformsDonut = $this->prepareDonut($platforms, 'plataforma');
+        $channelsDonut = $this->buildDonutChartData($channels, 'campaign_origin');
+        $platformsDonut = $this->buildDonutChartData($platforms, 'plataforma');
 
         $baseForChannels = route('dashboard.leads.list', Arr::except($request->query(), [
             'campaign_origin', 'crm_state', 'qualification', 'group_type', 'group_id', 'page',
@@ -1440,7 +1565,7 @@ private function getMetaSpend(
         $spendValue = (float) ($metric['spend'] ?? 0);
         $spendFormatted = '$ '.number_format($spendValue, 2, ',', '.');
 
-        $metaCampaigns = $this->buildMetaCampaignsTableUi(
+        $metaCampaigns = $this->buildMetaCampaignsTableData(
             $customerId,
             $integrationId,
             $metric['filters'] ?? [],
@@ -1449,26 +1574,72 @@ private function getMetaSpend(
             (string) $request->session()->getId()
         );
 
-        
+        $metaAdSets = $this->buildMetaAdSetsTableData(
+            $customerId,
+            $integrationId,
+            $metric['filters'] ?? [],
+            $from,
+            $to,
+            (string) $request->session()->getId()
+        );
 
-$metaAdSets = $this->buildMetaAdSetsTableUi(
-    $customerId,
-    $integrationId,
-    $metric['filters'] ?? [],
-    $from,
-    $to,
-    (string) $request->session()->getId()
-);
+        $metaAds = $this->buildMetaAdsTableData(
+            $customerId,
+            $integrationId,
+            $metric['filters'] ?? [],
+            $from,
+            $to,
+            (string) $request->session()->getId()
+        );
 
-$metaAds = $this->buildMetaAdsTableUi(
-    $customerId,
-    $integrationId,
-    $metric['filters'] ?? [],
-    $from,
-    $to,
-    (string) $request->session()->getId()
-);
-return [
+        $summaryCards = [
+            [
+                'title' => 'Leads no Efectivos',
+                'value' => (int) ($metric['not_effective_count'] ?? 0),
+                'url' => $notEffectiveUrl,
+                'missing' => 'No existe un funnel llamado "Lead NO Efectivo".',
+                'cta' => 'Ver lista',
+            ],
+            [
+                'title' => 'Leads calificados',
+                'value' => (int) ($metric['qualified_count'] ?? 0),
+                'url' => $qualifiedUrl,
+                'missing' => 'No existe un funnel llamado "Oportunidades" o "Respondidos".',
+                'cta' => 'Ver lista',
+            ],
+            [
+                'title' => 'Leads con ventas',
+                'value' => (int) ($metric['sales_count'] ?? 0),
+                'url' => $salesUrl,
+                'missing' => 'No existe un funnel llamado "Ventas".',
+                'cta' => 'Ver lista',
+                'extra_label' => 'Valor de ventas',
+                'extra_value' => $salesValueFormatted,
+            ],
+        ];
+
+        $metaSections = [
+            [
+                'title' => 'Campaña de Meta',
+                'empty_note' => 'Sin datos de campañas en el periodo.',
+                'footnote' => 'Mostrando hasta 200 campañas ordenadas por costo.',
+                'table' => $metaCampaigns,
+            ],
+            [
+                'title' => 'Grupo de anuncios de Meta',
+                'empty_note' => 'Sin datos de grupos de anuncios en el periodo.',
+                'footnote' => 'Mostrando hasta 200 grupos ordenados por costo.',
+                'table' => $metaAdSets,
+            ],
+            [
+                'title' => 'Anuncio de Meta',
+                'empty_note' => 'Sin datos de anuncios en el periodo.',
+                'footnote' => 'Mostrando hasta 200 anuncios ordenados por costo.',
+                'table' => $metaAds,
+            ],
+        ];
+
+        return [
             'header' => [
                 'selected_customer_name' => $selectedCustomer?->name ?? 'Todos los clientes',
                 'selected_customer_id' => $selectedCustomer?->id,
@@ -1488,6 +1659,7 @@ return [
                 'count' => (int) ($metric['count'] ?? 0),
                 'managed' => (int) ($metric['managed_count'] ?? 0),
                 'pending' => (int) ($metric['pending_count'] ?? 0),
+                'pending_url' => $pendingUrl,
                 'qualified' => (int) ($metric['qualified_count'] ?? 0),
                 'not_effective' => (int) ($metric['not_effective_count'] ?? 0),
                 'sales' => (int) ($metric['sales_count'] ?? 0),
@@ -1496,6 +1668,7 @@ return [
                 'calculated_at' => $metric['calculated_at'] ?? '-',
                 'spend_formatted' => $spendFormatted,
             ],
+            'summary_cards' => $summaryCards,
             'totals' => [
                 'total_leads' => $totalLeads,
             ],
@@ -1503,8 +1676,8 @@ return [
                 'not_effective_url' => $notEffectiveUrl,
                 'qualified_url' => $qualifiedUrl,
                 'sales_url' => $salesUrl,
-                'not_effective_missing' => 'No existe una cualificación llamada "Lead NO Efectivo".',
-                'qualified_missing' => 'No existe un funnel llamado "Oportunidades".',
+                'not_effective_missing' => 'No existe un funnel llamado "Lead NO Efectivo".',
+                'qualified_missing' => 'No existe un funnel llamado "Oportunidades" o "Respondidos".',
                 'sales_missing' => 'No existe un funnel llamado "Ventas".',
             ],
             'donuts' => [
@@ -1528,18 +1701,20 @@ return [
                 'meta_ad_sets' => $metaAdSets,
                 'meta_ads' => $metaAds,
             ],
+            'meta_sections' => $metaSections,
         ];
     }
 
-    private function prepareDonut(array $data, string $dimension): array
+    private function buildDonutChartData(array $data, string $dimension): array
     {
         if (empty($data)) {
             return ['keys' => [], 'labels' => [], 'values' => [], 'pairs' => [], 'total' => 0];
         }
 
         arsort($data);
-        $top = array_slice($data, 0, 4, true);
-        $rest = array_slice($data, 4, null, true);
+        $topCount = max(self::DONUT_MAX_ITEMS - 1, 1);
+        $top = array_slice($data, 0, $topCount, true);
+        $rest = array_slice($data, $topCount, null, true);
 
         if (! empty($rest)) {
             $top['__OTHER__'] = array_sum($rest);
@@ -1574,65 +1749,65 @@ return [
     }
 
     // ================================
-    // ✅ Tabla: Campañas Meta (Insights)
+    // âœ… Tabla: Campañas Meta (Insights)
     // ================================
-    
-private function buildMetaCampaignsTableUi(
-    ?int $customerId,
-    ?int $integrationId,
-    array $filters,
-    Carbon $from,
-    Carbon $to,
-    string $sessionId
-): array {
-    try {
-        $insightsTable = (new MetaAdInsight)->getTable();
 
-        if (! Schema::hasTable($insightsTable)) {
-            return [
-                'enabled' => false,
-                'note' => 'No existe la tabla meta_ad_insights.',
-                'columns' => [],
-                'rows' => [],
-            ];
-        }
+    private function buildMetaCampaignsTableData(
+        ?int $customerId,
+        ?int $integrationId,
+        array $filters,
+        Carbon $from,
+        Carbon $to,
+        string $sessionId
+    ): array {
+        try {
+            $insightsTable = (new MetaAdInsight)->getTable();
 
-        $userKey = (string) (auth()->id() ?? 'guest');
-        $key = 'dash_meta_campaigns:'.sha1(json_encode([
-            'customer_id' => $customerId,
-            'integration_id' => $integrationId,
-            'user' => $userKey,
-            'session' => $sessionId,
-            'filters' => $filters,
-            'from' => $from->format('Y-m-d H:i'),
-            'to' => $to->format('Y-m-d H:i'),
-        ]));
-
-        return Cache::remember($key, now()->addSeconds(60), function () use ($customerId, $integrationId, $filters, $from, $to, $insightsTable) {
-            $fromDate = $from->toDateString();
-            $toDate = $to->toDateString();
-
-            // -------------------------
-            // 1) INSIGHTS (resumen por campaña)
-            // -------------------------
-            $q = MetaAdInsight::query()
-                ->whereBetween('date_start', [$fromDate, $toDate]);
-
-            // Filtrado por cliente / integración a través de la jerarquía: Insight -> Ad -> AdSet -> Campaign -> Account
-            if ($customerId !== null || $integrationId !== null) {
-                $q->whereHas('ad.adSet.campaign.account', function ($qq) use ($customerId, $integrationId) {
-                    if ($customerId !== null) {
-                        $qq->where('customer_id', $customerId);
-                    }
-                    if ($integrationId !== null && Schema::hasColumn($qq->getModel()->getTable(), 'integration_id')) {
-                        $qq->where('integration_id', $integrationId);
-                    }
-                });
+            if (! Schema::hasTable($insightsTable)) {
+                return [
+                    'enabled' => false,
+                    'note' => 'No existe la tabla meta_ad_insights.',
+                    'columns' => [],
+                    'rows' => [],
+                ];
             }
 
-            // Solo lo que necesitamos para la tabla (y en el orden solicitado)
-            $rows = (clone $q)
-                ->selectRaw('
+            $userKey = (string) (auth()->id() ?? 'guest');
+            $key = 'dash_meta_campaigns:'.sha1(json_encode([
+                'customer_id' => $customerId,
+                'integration_id' => $integrationId,
+                'user' => $userKey,
+                'session' => $sessionId,
+                'filters' => $filters,
+                'from' => $from->format('Y-m-d H:i'),
+                'to' => $to->format('Y-m-d H:i'),
+            ]));
+
+            return Cache::remember($key, now()->addSeconds(60), function () use ($customerId, $integrationId, $filters, $from, $to) {
+                $fromDate = $from->toDateString();
+                $toDate = $to->toDateString();
+
+                // -------------------------
+                // 1) INSIGHTS (resumen por Campaña)
+                // -------------------------
+                $q = MetaAdInsight::query()
+                    ->whereBetween('date_start', [$fromDate, $toDate]);
+
+                // Filtrado por cliente / integraciÃ³n a travÃ©s de la jerarquÃ­a: Insight -> Ad -> AdSet -> Campaign -> Account
+                if ($customerId !== null || $integrationId !== null) {
+                    $q->whereHas('ad.adSet.campaign.account', function ($qq) use ($customerId, $integrationId) {
+                        if ($customerId !== null) {
+                            $qq->where('customer_id', $customerId);
+                        }
+                        if ($integrationId !== null && Schema::hasColumn($qq->getModel()->getTable(), 'integration_id')) {
+                            $qq->where('integration_id', $integrationId);
+                        }
+                    });
+                }
+
+                // Solo lo que necesitamos para la tabla (y en el orden solicitado)
+                $rows = (clone $q)
+                    ->selectRaw('
                     account_name,
                     account_id,
                     campaign_id,
@@ -1640,313 +1815,312 @@ private function buildMetaCampaignsTableUi(
                     SUM(spend) as spend,
                     MAX(status) as status
                 ')
-                ->groupBy('account_id', 'account_name', 'campaign_id', 'campaign_name')
-                ->orderByDesc('spend')
-                ->limit(200)
-                ->get();
+                    ->groupBy('account_id', 'account_name', 'campaign_id', 'campaign_name')
+                    ->orderByDesc('spend')
+                    ->limit(200)
+                    ->get();
 
-            // -------------------------
-            // 2) LEADS ENTRANTES y LEADS CALIFICADOS (por campaña)
-            // Relación: Lead.meta_id_ad -> MetaAd.meta_ad_id -> MetaAdSet -> MetaCampaign
-            // -------------------------
-            $leadTable = (new Lead)->getTable();
+                // -------------------------
+                // 2) LEADS ENTRANTES y LEADS CALIFICADOS (por Campaña)
+                // RelaciÃ³n: Lead.meta_id_ad -> MetaAd.meta_ad_id -> MetaAdSet -> MetaCampaign
+                // -------------------------
+                $leadTable = (new Lead)->getTable();
 
-            $leadCountsIncoming = [];
-            $leadCountsQualified = [];
-            $leadNote = null;
-
-            if (! Schema::hasColumn($leadTable, 'meta_id_ad')) {
-                $leadNote = '⚠️ Falta la columna leads.meta_id_ad. No se puede calcular Leads entrantes / calificados.';
-            } else {
-                $metaAdsTable = (new \App\Models\MetaAd)->getTable();
-                $metaAdSetsTable = (new \App\Models\MetaAdSet)->getTable();
-                $metaCampaignsTable = (new \App\Models\MetaCampaign)->getTable();
-
-                // Base de leads: mismos filtros y misma ventana del dashboard (leads.created_at)
-                $sub = Lead::query()->whereBetween("{$leadTable}.created_at", [$from, $to]);
-                $sub = $this->applyBaseFilters($sub, $customerId, $integrationId, $filters, $leadTable);
-                $sub = $this->applyDimensionFilters($sub, $filters, $leadTable, true, true, true, true);
-
-                                // Leads entrantes por campaña
                 $leadCountsIncoming = [];
                 $leadCountsQualified = [];
+                $leadNote = null;
 
-                // Validación mínima de tablas/columnas para joins
-                if (!Schema::hasTable($metaAdsTable) || !Schema::hasTable($metaAdSetsTable) || !Schema::hasTable($metaCampaignsTable)) {
-                $leadNote = '⚠️ No existen las tablas meta_ads / meta_ad_sets / meta_campaigns. No se puede calcular Leads entrantes / calificados.';
-                } elseif (!Schema::hasColumn($metaAdsTable, 'meta_ad_id') || !Schema::hasColumn($metaAdsTable, 'meta_ad_set_id')) {
-                $leadNote = '⚠️ Faltan columnas en meta_ads (meta_ad_id / meta_ad_set_id). No se puede calcular Leads entrantes / calificados.';
-                } elseif (!Schema::hasColumn($metaAdSetsTable, 'meta_campaign_id')) {
-                $leadNote = '⚠️ Falta la columna meta_ad_sets.meta_campaign_id. No se puede calcular Leads entrantes / calificados.';
+                if (! Schema::hasColumn($leadTable, 'meta_id_ad')) {
+                    $leadNote = 'âš ï¸ Falta la columna leads.meta_id_ad. No se puede calcular Leads entrantes / calificados.';
                 } else {
-                $hasMasExternal = Schema::hasColumn($metaAdSetsTable, 'meta_ad_set_id');         // externo (string)
-                $hasMcExternal  = Schema::hasColumn($metaCampaignsTable, 'meta_campaign_id');     // externo (string)
+                    $metaAdsTable = (new \App\Models\MetaAd)->getTable();
+                    $metaAdSetsTable = (new \App\Models\MetaAdSet)->getTable();
+                    $metaCampaignsTable = (new \App\Models\MetaCampaign)->getTable();
 
-                // Si existe meta_campaign_id, lo usamos para empatar con MetaAdInsight.campaign_id
-                $campaignIdExpr = $hasMcExternal ? 'mc.meta_campaign_id' : 'mc.id';
+                    // Base de leads: mismos filtros y misma ventana del dashboard (leads.created_at)
+                    $sub = Lead::query()->whereBetween("{$leadTable}.created_at", [$from, $to]);
+                    $sub = $this->applyLeadScopeFilters($sub, $customerId, $integrationId, $filters, $leadTable);
+                    $sub = $this->applyLeadDimensionFilters($sub, $filters, $leadTable, true, true, true, true);
 
-                $joinMas = function ($join) use ($hasMasExternal) {
-                // Soporta ambos esquemas:
-                // 1) ma.meta_ad_set_id -> mas.id (FK interno)
-                // 2) ma.meta_ad_set_id -> mas.meta_ad_set_id (ID externo)
-                $join->on('mas.id', '=', 'ma.meta_ad_set_id');
-                if ($hasMasExternal) {
-                $join->orOn('mas.meta_ad_set_id', '=', 'ma.meta_ad_set_id');
-                }
-                };
+                    // Leads entrantes por Campaña
+                    $leadCountsIncoming = [];
+                    $leadCountsQualified = [];
 
-                $joinMc = function ($join) use ($hasMcExternal) {
-                // Soporta ambos esquemas:
-                // 1) mas.meta_campaign_id -> mc.id (FK interno)
-                // 2) mas.meta_campaign_id -> mc.meta_campaign_id (ID externo)
-                $join->on('mc.id', '=', 'mas.meta_campaign_id');
-                if ($hasMcExternal) {
-                $join->orOn('mc.meta_campaign_id', '=', 'mas.meta_campaign_id');
-                }
-                };
+                    // ValidaciÃ³n mÃ­nima de tablas/columnas para joins
+                    if (! Schema::hasTable($metaAdsTable) || ! Schema::hasTable($metaAdSetsTable) || ! Schema::hasTable($metaCampaignsTable)) {
+                        $leadNote = 'âš ï¸ No existen las tablas meta_ads / meta_ad_sets / meta_campaigns. No se puede calcular Leads entrantes / calificados.';
+                    } elseif (! Schema::hasColumn($metaAdsTable, 'meta_ad_id') || ! Schema::hasColumn($metaAdsTable, 'meta_ad_set_id')) {
+                        $leadNote = 'âš ï¸ Faltan columnas en meta_ads (meta_ad_id / meta_ad_set_id). No se puede calcular Leads entrantes / calificados.';
+                    } elseif (! Schema::hasColumn($metaAdSetsTable, 'meta_campaign_id')) {
+                        $leadNote = 'âš ï¸ Falta la columna meta_ad_sets.meta_campaign_id. No se puede calcular Leads entrantes / calificados.';
+                    } else {
+                        $hasMasExternal = Schema::hasColumn($metaAdSetsTable, 'meta_ad_set_id');         // externo (string)
+                        $hasMcExternal = Schema::hasColumn($metaCampaignsTable, 'meta_campaign_id');     // externo (string)
 
-                // Leads entrantes (COUNT DISTINCT para evitar duplicados por joins OR)
-                $leadCountsIncoming = (clone $sub)
-                ->whereNotNull("{$leadTable}.meta_id_ad")
-                ->where("{$leadTable}.meta_id_ad", '!=', '')
-                ->join("{$metaAdsTable} as ma", 'ma.meta_ad_id', '=', "{$leadTable}.meta_id_ad")
-                ->join("{$metaAdSetsTable} as mas", $joinMas)
-                ->join("{$metaCampaignsTable} as mc", $joinMc)
-                ->whereRaw("{$campaignIdExpr} IS NOT NULL")
-                ->whereRaw("{$campaignIdExpr} != ''")
-                ->selectRaw("{$campaignIdExpr} as campaign_id, COUNT(DISTINCT {$leadTable}.id) as leads")
-                ->groupBy(DB::raw($campaignIdExpr))
-                ->pluck('leads', 'campaign_id')
-                ->toArray();
+                        // Si existe meta_campaign_id, lo usamos para empatar con MetaAdInsight.campaign_id
+                        $campaignIdExpr = $hasMcExternal ? 'mc.meta_campaign_id' : 'mc.id';
 
-                // Leads calificados: excluye Qualifications específicas
-                $excluded = [mb_strtolower('Lead NO Efectivo'), mb_strtolower('Sin Gestionar'), mb_strtolower('N/A')];
+                        $joinMas = function ($join) use ($hasMasExternal) {
+                            // Soporta ambos esquemas:
+                            // 1) ma.meta_ad_set_id -> mas.id (FK interno)
+                            // 2) ma.meta_ad_set_id -> mas.meta_ad_set_id (ID externo)
+                            $join->on('mas.id', '=', 'ma.meta_ad_set_id');
+                            if ($hasMasExternal) {
+                                $join->orOn('mas.meta_ad_set_id', '=', 'ma.meta_ad_set_id');
+                            }
+                        };
 
-                $qualifiedCampaignExpr = $hasMcExternal ? 'mcq.meta_campaign_id' : 'mcq.id';
+                        $joinMc = function ($join) use ($hasMcExternal) {
+                            // Soporta ambos esquemas:
+                            // 1) mas.meta_campaign_id -> mc.id (FK interno)
+                            // 2) mas.meta_campaign_id -> mc.meta_campaign_id (ID externo)
+                            $join->on('mc.id', '=', 'mas.meta_campaign_id');
+                            if ($hasMcExternal) {
+                                $join->orOn('mc.meta_campaign_id', '=', 'mas.meta_campaign_id');
+                            }
+                        };
 
-                $leadCountsQualified = (clone $sub)
-                ->whereNotNull("{$leadTable}.meta_id_ad")
-                ->where("{$leadTable}.meta_id_ad", '!=', '')
-                ->join("{$metaAdsTable} as maq", 'maq.meta_ad_id', '=', "{$leadTable}.meta_id_ad")
-                ->join("{$metaAdSetsTable} as masq", function ($join) use ($hasMasExternal) {
-                $join->on('masq.id', '=', 'maq.meta_ad_set_id');
-                if ($hasMasExternal) {
-                $join->orOn('masq.meta_ad_set_id', '=', 'maq.meta_ad_set_id');
-                }
-                })
-                ->join("{$metaCampaignsTable} as mcq", function ($join) use ($hasMcExternal) {
-                $join->on('mcq.id', '=', 'masq.meta_campaign_id');
-                if ($hasMcExternal) {
-                $join->orOn('mcq.meta_campaign_id', '=', 'masq.meta_campaign_id');
-                }
-                })
-                ->join('crm_state as csq', 'csq.id', '=', "{$leadTable}.crm_state")
-                ->join('qualification as qlq', 'qlq.id', '=', 'csq.qualification')
-                ->whereRaw("{$qualifiedCampaignExpr} IS NOT NULL")
-                ->whereRaw("{$qualifiedCampaignExpr} != ''")
-                ->whereNotNull('qlq.name')
-                ->whereRaw('LOWER(TRIM(qlq.name)) NOT IN (?,?,?)', $excluded)
-                ->selectRaw("{$qualifiedCampaignExpr} as campaign_id, COUNT(DISTINCT {$leadTable}.id) as leads")
-                ->groupBy(DB::raw($qualifiedCampaignExpr))
-                ->pluck('leads', 'campaign_id')
-                ->toArray();
+                        // Leads entrantes (COUNT DISTINCT para evitar duplicados por joins OR)
+                        $leadCountsIncoming = (clone $sub)
+                            ->whereNotNull("{$leadTable}.meta_id_ad")
+                            ->where("{$leadTable}.meta_id_ad", '!=', '')
+                            ->join("{$metaAdsTable} as ma", 'ma.meta_ad_id', '=', "{$leadTable}.meta_id_ad")
+                            ->join("{$metaAdSetsTable} as mas", $joinMas)
+                            ->join("{$metaCampaignsTable} as mc", $joinMc)
+                            ->whereRaw("{$campaignIdExpr} IS NOT NULL")
+                            ->whereRaw("{$campaignIdExpr} != ''")
+                            ->selectRaw("{$campaignIdExpr} as campaign_id, COUNT(DISTINCT {$leadTable}.id) as leads")
+                            ->groupBy(DB::raw($campaignIdExpr))
+                            ->pluck('leads', 'campaign_id')
+                            ->toArray();
 
-                $leadNote = $leadNote ?: 'ℹ️ Leads entrantes/calificados calculados desde leads.meta_id_ad → meta_ads(meta_ad_id) → meta_ad_sets(meta_ad_set_id/id) → meta_campaigns(meta_campaign_id/id).';
-                }
-            }
+                        // Leads calificados: excluye Qualifications especÃ­ficas
+                        $excluded = [mb_strtolower('Lead NO Efectivo'), mb_strtolower('Sin Gestionar'), mb_strtolower('N/A')];
 
-            $fmtInt = fn ($n) => number_format((int) $n, 0, ',', '.');
-            $fmtMoney = fn ($n) => '$ '.number_format((float) $n, 2, ',', '.');
+                        $qualifiedCampaignExpr = $hasMcExternal ? 'mcq.meta_campaign_id' : 'mcq.id';
 
-            // ✅ Campos solicitados
-            $columns = [
-                ['key' => 'nombre',              'label' => 'Nombre Campaña'],
-                ['key' => 'costo',               'label' => 'Costo Campaña'],
-                ['key' => 'leads',               'label' => 'Leads Campaña'],
-                ['key' => 'leads_calificados',   'label' => 'Leads calificados Campaña'],
-                ['key' => 'leads_no_calificados','label' => 'Leads no calificados Campaña'],
-                ['key' => 'roas',                'label' => 'ROAS Campaña'],
-            ];
+                        $leadCountsQualified = (clone $sub)
+                            ->whereNotNull("{$leadTable}.meta_id_ad")
+                            ->where("{$leadTable}.meta_id_ad", '!=', '')
+                            ->join("{$metaAdsTable} as maq", 'maq.meta_ad_id', '=', "{$leadTable}.meta_id_ad")
+                            ->join("{$metaAdSetsTable} as masq", function ($join) use ($hasMasExternal) {
+                                $join->on('masq.id', '=', 'maq.meta_ad_set_id');
+                                if ($hasMasExternal) {
+                                    $join->orOn('masq.meta_ad_set_id', '=', 'maq.meta_ad_set_id');
+                                }
+                            })
+                            ->join("{$metaCampaignsTable} as mcq", function ($join) use ($hasMcExternal) {
+                                $join->on('mcq.id', '=', 'masq.meta_campaign_id');
+                                if ($hasMcExternal) {
+                                    $join->orOn('mcq.meta_campaign_id', '=', 'masq.meta_campaign_id');
+                                }
+                            })
+                            ->join('crm_state as csq', 'csq.id', '=', "{$leadTable}.crm_state")
+                            ->join('qualification as qlq', 'qlq.id', '=', 'csq.qualification')
+                            ->whereRaw("{$qualifiedCampaignExpr} IS NOT NULL")
+                            ->whereRaw("{$qualifiedCampaignExpr} != ''")
+                            ->whereNotNull('qlq.name')
+                            ->whereRaw('LOWER(TRIM(qlq.name)) NOT IN (?,?,?)', $excluded)
+                            ->selectRaw("{$qualifiedCampaignExpr} as campaign_id, COUNT(DISTINCT {$leadTable}.id) as leads")
+                            ->groupBy(DB::raw($qualifiedCampaignExpr))
+                            ->pluck('leads', 'campaign_id')
+                            ->toArray();
 
-            $outRows = [];
-            foreach ($rows as $r) {
-                $campaignId = (string) ($r->campaign_id ?? '');
-                $incoming = isset($leadCountsIncoming[$campaignId]) ? (int) $leadCountsIncoming[$campaignId] : 0;
-                $qualified = isset($leadCountsQualified[$campaignId]) ? (int) $leadCountsQualified[$campaignId] : 0;
-
-                $noCal = max(0, $incoming - $qualified);
-                $spend = (float) ($r->spend ?? 0);
-                $roas = $incoming > 0 ? round($spend / $incoming, 2) : null;
-
-                $outRows[] = [
-                    'nombre' => (string) ($r->campaign_name ?? '-'),
-                    'costo' => $fmtMoney($spend),
-                    'leads' => $fmtInt($incoming),
-                    'leads_calificados' => $fmtInt($qualified),
-                    'leads_no_calificados' => $fmtInt($noCal),
-                    'roas' => $roas === null ? '-' : $fmtMoney($roas),
-                ];
-            }
-
-            return [
-                'enabled' => count($outRows) > 0,
-                'note' => $leadNote,
-                'columns' => $columns,
-                'rows' => $outRows,
-            ];
-        });
-    } catch (\Throwable $e) {
-        return [
-            'enabled' => false,
-            'note' => 'Error cargando campañas: '.$e->getMessage(),
-            'columns' => [],
-            'rows' => [],
-        ];
-    }
-}
-
-
-// ================================
-// ✅ Tablas Meta: Grupos de anuncios (AdSets) y Anuncios (Ads)
-// (mismas fechas/filtros del dashboard; sin cambiar la lógica existente)
-// ================================
-
-private function buildMetaAdSetsTableUi(
-    ?int $customerId,
-    ?int $integrationId,
-    array $filters,
-    Carbon $from,
-    Carbon $to,
-    string $sessionId
-): array {
-    try {
-        $insightsTable = (new MetaAdInsight)->getTable();
-        $leadTable = (new Lead)->getTable();
-
-        $metaAdsTable = (new \App\Models\MetaAd)->getTable();
-        $metaAdSetsTable = (new \App\Models\MetaAdSet)->getTable();
-
-        if (!Schema::hasTable($insightsTable) || !Schema::hasTable($metaAdsTable) || !Schema::hasTable($metaAdSetsTable)) {
-            return ['enabled' => false, 'note' => 'No existen tablas necesarias (meta_ad_insights / meta_ads / meta_ad_sets).', 'columns' => [], 'rows' => []];
-        }
-
-        if (!Schema::hasColumn($insightsTable, 'spend') || !Schema::hasColumn($insightsTable, 'date_start') || !Schema::hasColumn($insightsTable, 'meta_ad_id')) {
-            return ['enabled' => false, 'note' => 'Faltan columnas en meta_ad_insights (spend / date_start / meta_ad_id).', 'columns' => [], 'rows' => []];
-        }
-
-        if (!Schema::hasColumn($leadTable, 'meta_id_ad') || !Schema::hasColumn($metaAdsTable, 'meta_ad_id') || !Schema::hasColumn($metaAdsTable, 'meta_ad_set_id')) {
-            return ['enabled' => false, 'note' => 'Faltan columnas para calcular leads por grupo (leads.meta_id_ad / meta_ads.meta_ad_id / meta_ads.meta_ad_set_id).', 'columns' => [], 'rows' => []];
-        }
-
-        $hasExternalId = Schema::hasColumn($metaAdSetsTable, 'meta_ad_set_id');
-        $hasName = Schema::hasColumn($metaAdSetsTable, 'name');
-
-        $userKey = (string) (auth()->id() ?? 'guest');
-        $cacheKey = 'dash_meta_ad_sets_v3:'.sha1(json_encode([
-            'customer_id' => $customerId,
-            'integration_id' => $integrationId,
-            'user' => $userKey,
-            'session' => $sessionId,
-            'filters' => $filters,
-            'from' => $from->format('Y-m-d H:i'),
-            'to' => $to->format('Y-m-d H:i'),
-        ]));
-
-        return Cache::remember($cacheKey, now()->addSeconds(60), function () use (
-            $customerId, $integrationId, $filters, $from, $to,
-            $insightsTable, $leadTable, $metaAdsTable, $metaAdSetsTable,
-            $hasExternalId, $hasName
-        ) {
-            $fromDate = $from->toDateString();
-            $toDate = $to->toDateString();
-
-            $idExpr = $hasExternalId ? 'mas.meta_ad_set_id' : 'mas.id';
-            $nameExpr = $hasName ? 'mas.name' : 'mas.id';
-
-            // -------------------------
-            // 1) Spend por AdSet (desde insights)
-            // -------------------------
-            $spendQ = DB::table("{$insightsTable} as i")
-                ->whereBetween('i.date_start', [$fromDate, $toDate])
-                ->join("{$metaAdsTable} as ma", 'ma.id', '=', 'i.meta_ad_id')
-                ->join("{$metaAdSetsTable} as mas", function ($join) use ($hasExternalId) {
-                    $join->on('mas.id', '=', 'ma.meta_ad_set_id');
-                    if ($hasExternalId) {
-                        $join->orOn('mas.meta_ad_set_id', '=', 'ma.meta_ad_set_id');
+                        $leadNote = $leadNote ?: ' Leads entrantes/calificados calculados desde leads.meta_id_ad - meta_ads(meta_ad_id) - meta_ad_sets(meta_ad_set_id/id) - meta_campaigns(meta_campaign_id/id).';
                     }
-                });
-
-            // ✅ Filtrado por cliente (Customer -> MetaAdAccount -> MetaAdInsight)
-            if ($customerId !== null || $integrationId !== null) {
-                $accTable = (new MetaAdAccount)->getTable();
-                $accQ = MetaAdAccount::query();
-
-                if ($customerId !== null) {
-                    $accQ->where('customer_id', $customerId);
-                }
-                if ($integrationId !== null && Schema::hasColumn($accTable, 'integration_id')) {
-                    $accQ->where('integration_id', $integrationId);
                 }
 
-                $accIds = (clone $accQ)->pluck('id')->map(fn ($v) => (string) $v)->all();
-                $accMetaIds = Schema::hasColumn($accTable, 'meta_account_id')
-                    ? (clone $accQ)->pluck('meta_account_id')->filter()->map(fn ($v) => (string) $v)->all()
-                    : [];
-                $allowed = array_values(array_unique(array_merge($accIds, $accMetaIds)));
+                $fmtInt = fn ($n) => number_format((int) $n, 0, ',', '.');
+                $fmtMoney = fn ($n) => '$ '.number_format((float) $n, 2, ',', '.');
 
-                if (!empty($allowed) && Schema::hasColumn($insightsTable, 'account_id')) {
-                    $spendQ->whereIn('i.account_id', $allowed);
-                } else {
-                    $spendQ->whereRaw('1=0');
+                // âœ… Campos solicitados
+                $columns = [
+                    ['key' => 'nombre',              'label' => 'Nombre Campaña'],
+                    ['key' => 'costo',               'label' => 'Costo Campaña'],
+                    ['key' => 'leads',               'label' => 'Leads Campaña'],
+                    ['key' => 'leads_calificados',   'label' => 'Leads calificados Campaña'],
+                    ['key' => 'leads_no_calificados', 'label' => 'Leads no calificados Campaña'],
+                    ['key' => 'roas',                'label' => 'ROAS Campaña'],
+                ];
+
+                $outRows = [];
+                foreach ($rows as $r) {
+                    $campaignId = (string) ($r->campaign_id ?? '');
+                    $incoming = isset($leadCountsIncoming[$campaignId]) ? (int) $leadCountsIncoming[$campaignId] : 0;
+                    $qualified = isset($leadCountsQualified[$campaignId]) ? (int) $leadCountsQualified[$campaignId] : 0;
+
+                    $noCal = max(0, $incoming - $qualified);
+                    $spend = (float) ($r->spend ?? 0);
+                    $roas = $incoming > 0 ? round($spend / $incoming, 2) : null;
+
+                    $outRows[] = [
+                        'nombre' => (string) ($r->campaign_name ?? '-'),
+                        'costo' => $fmtMoney($spend),
+                        'leads' => $fmtInt($incoming),
+                        'leads_calificados' => $fmtInt($qualified),
+                        'leads_no_calificados' => $fmtInt($noCal),
+                        'roas' => $roas === null ? '-' : $fmtMoney($roas),
+                    ];
                 }
+
+                return [
+                    'enabled' => count($outRows) > 0,
+                    'note' => $leadNote,
+                    'columns' => $columns,
+                    'rows' => $outRows,
+                ];
+            });
+        } catch (\Throwable $e) {
+            return [
+                'enabled' => false,
+                'note' => 'Error cargando Campañas: '.$e->getMessage(),
+                'columns' => [],
+                'rows' => [],
+            ];
+        }
+    }
+
+    // ================================
+    // âœ… Tablas Meta: Grupos de anuncios (AdSets) y Anuncios (Ads)
+    // (mismas fechas/filtros del dashboard; sin cambiar la lÃ³gica existente)
+    // ================================
+
+    private function buildMetaAdSetsTableData(
+        ?int $customerId,
+        ?int $integrationId,
+        array $filters,
+        Carbon $from,
+        Carbon $to,
+        string $sessionId
+    ): array {
+        try {
+            $insightsTable = (new MetaAdInsight)->getTable();
+            $leadTable = (new Lead)->getTable();
+
+            $metaAdsTable = (new \App\Models\MetaAd)->getTable();
+            $metaAdSetsTable = (new \App\Models\MetaAdSet)->getTable();
+
+            if (! Schema::hasTable($insightsTable) || ! Schema::hasTable($metaAdsTable) || ! Schema::hasTable($metaAdSetsTable)) {
+                return ['enabled' => false, 'note' => 'No existen tablas necesarias (meta_ad_insights / meta_ads / meta_ad_sets).', 'columns' => [], 'rows' => []];
             }
 
-            $spendRows = $spendQ
-                ->selectRaw("
+            if (! Schema::hasColumn($insightsTable, 'spend') || ! Schema::hasColumn($insightsTable, 'date_start') || ! Schema::hasColumn($insightsTable, 'meta_ad_id')) {
+                return ['enabled' => false, 'note' => 'Faltan columnas en meta_ad_insights (spend / date_start / meta_ad_id).', 'columns' => [], 'rows' => []];
+            }
+
+            if (! Schema::hasColumn($leadTable, 'meta_id_ad') || ! Schema::hasColumn($metaAdsTable, 'meta_ad_id') || ! Schema::hasColumn($metaAdsTable, 'meta_ad_set_id')) {
+                return ['enabled' => false, 'note' => 'Faltan columnas para calcular leads por grupo (leads.meta_id_ad / meta_ads.meta_ad_id / meta_ads.meta_ad_set_id).', 'columns' => [], 'rows' => []];
+            }
+
+            $hasExternalId = Schema::hasColumn($metaAdSetsTable, 'meta_ad_set_id');
+            $hasName = Schema::hasColumn($metaAdSetsTable, 'name');
+
+            $userKey = (string) (auth()->id() ?? 'guest');
+            $cacheKey = 'dash_meta_ad_sets_v3:'.sha1(json_encode([
+                'customer_id' => $customerId,
+                'integration_id' => $integrationId,
+                'user' => $userKey,
+                'session' => $sessionId,
+                'filters' => $filters,
+                'from' => $from->format('Y-m-d H:i'),
+                'to' => $to->format('Y-m-d H:i'),
+            ]));
+
+            return Cache::remember($cacheKey, now()->addSeconds(60), function () use (
+                $customerId, $integrationId, $filters, $from, $to,
+                $insightsTable, $leadTable, $metaAdsTable, $metaAdSetsTable,
+                $hasExternalId, $hasName
+            ) {
+                $fromDate = $from->toDateString();
+                $toDate = $to->toDateString();
+
+                $idExpr = $hasExternalId ? 'mas.meta_ad_set_id' : 'mas.id';
+                $nameExpr = $hasName ? 'mas.name' : 'mas.id';
+
+                // -------------------------
+                // 1) Spend por AdSet (desde insights)
+                // -------------------------
+                $spendQ = DB::table("{$insightsTable} as i")
+                    ->whereBetween('i.date_start', [$fromDate, $toDate])
+                    ->join("{$metaAdsTable} as ma", 'ma.id', '=', 'i.meta_ad_id')
+                    ->join("{$metaAdSetsTable} as mas", function ($join) use ($hasExternalId) {
+                        $join->on('mas.id', '=', 'ma.meta_ad_set_id');
+                        if ($hasExternalId) {
+                            $join->orOn('mas.meta_ad_set_id', '=', 'ma.meta_ad_set_id');
+                        }
+                    });
+
+                // âœ… Filtrado por cliente (Customer -> MetaAdAccount -> MetaAdInsight)
+                if ($customerId !== null || $integrationId !== null) {
+                    $accTable = (new MetaAdAccount)->getTable();
+                    $accQ = MetaAdAccount::query();
+
+                    if ($customerId !== null) {
+                        $accQ->where('customer_id', $customerId);
+                    }
+                    if ($integrationId !== null && Schema::hasColumn($accTable, 'integration_id')) {
+                        $accQ->where('integration_id', $integrationId);
+                    }
+
+                    $accIds = (clone $accQ)->pluck('id')->map(fn ($v) => (string) $v)->all();
+                    $accMetaIds = Schema::hasColumn($accTable, 'meta_account_id')
+                        ? (clone $accQ)->pluck('meta_account_id')->filter()->map(fn ($v) => (string) $v)->all()
+                        : [];
+                    $allowed = array_values(array_unique(array_merge($accIds, $accMetaIds)));
+
+                    if (! empty($allowed) && Schema::hasColumn($insightsTable, 'account_id')) {
+                        $spendQ->whereIn('i.account_id', $allowed);
+                    } else {
+                        $spendQ->whereRaw('1=0');
+                    }
+                }
+
+                $spendRows = $spendQ
+                    ->selectRaw("
                     mas.id as pk,
                     {$idExpr} as meta_id,
                     {$nameExpr} as nombre,
                     SUM(i.spend) as costo_anuncio
                 ")
-                ->groupBy('pk', DB::raw($idExpr), DB::raw($nameExpr))
-                ->orderByDesc('costo_anuncio')
-                ->limit(200)
-                ->get();
+                    ->groupBy('pk', DB::raw($idExpr), DB::raw($nameExpr))
+                    ->orderByDesc('costo_anuncio')
+                    ->limit(200)
+                    ->get();
 
-            $byPk = [];
-            foreach ($spendRows as $r) {
-                $pk = (int) $r->pk;
-                $byPk[$pk] = [
-                    'pk' => $pk,
-                    'meta_id' => (string) ($r->meta_id ?? $pk),
-                    'nombre' => (string) ($r->nombre ?? $pk),
-                    'costo_anuncio' => (float) ($r->costo_anuncio ?? 0),
-                ];
-            }
+                $byPk = [];
+                foreach ($spendRows as $r) {
+                    $pk = (int) $r->pk;
+                    $byPk[$pk] = [
+                        'pk' => $pk,
+                        'meta_id' => (string) ($r->meta_id ?? $pk),
+                        'nombre' => (string) ($r->nombre ?? $pk),
+                        'costo_anuncio' => (float) ($r->costo_anuncio ?? 0),
+                    ];
+                }
 
-            // -------------------------
-            // 2) Leads por AdSet (desde leads)
-            // -------------------------
-            $excluded = ["lead no efectivo", "sin gestionar", "n/a"];
-            $excludedSql = "'".implode("','", array_map(fn ($s) => str_replace("'", "''", $s), $excluded))."'";
+                // -------------------------
+                // 2) Leads por AdSet (desde leads)
+                // -------------------------
+                $excluded = ['lead no efectivo', 'sin gestionar', 'n/a'];
+                $excludedSql = "'".implode("','", array_map(fn ($s) => str_replace("'", "''", $s), $excluded))."'";
 
-            $base = Lead::query()->whereBetween("{$leadTable}.created_at", [$from, $to]);
-            $base = $this->applyBaseFilters($base, $customerId, $integrationId, $filters, $leadTable);
-            $base = $this->applyDimensionFilters($base, $filters, $leadTable, true, true, true, true);
+                $base = Lead::query()->whereBetween("{$leadTable}.created_at", [$from, $to]);
+                $base = $this->applyLeadScopeFilters($base, $customerId, $integrationId, $filters, $leadTable);
+                $base = $this->applyLeadDimensionFilters($base, $filters, $leadTable, true, true, true, true);
 
-            $leadAgg = (clone $base)
-                ->whereNotNull("{$leadTable}.meta_id_ad")
-                ->where("{$leadTable}.meta_id_ad", '!=', '')
-                ->join("{$metaAdsTable} as maL", 'maL.meta_ad_id', '=', "{$leadTable}.meta_id_ad")
-                ->join("{$metaAdSetsTable} as masL", function ($join) use ($hasExternalId) {
-                    $join->on('masL.id', '=', 'maL.meta_ad_set_id');
-                    if ($hasExternalId) {
-                        $join->orOn('masL.meta_ad_set_id', '=', 'maL.meta_ad_set_id');
-                    }
-                })
-                ->leftJoin('crm_state as cs', 'cs.id', '=', "{$leadTable}.crm_state")
-                ->leftJoin('qualification as q', 'q.id', '=', 'cs.qualification')
-                ->selectRaw("
+                $leadAgg = (clone $base)
+                    ->whereNotNull("{$leadTable}.meta_id_ad")
+                    ->where("{$leadTable}.meta_id_ad", '!=', '')
+                    ->join("{$metaAdsTable} as maL", 'maL.meta_ad_id', '=', "{$leadTable}.meta_id_ad")
+                    ->join("{$metaAdSetsTable} as masL", function ($join) use ($hasExternalId) {
+                        $join->on('masL.id', '=', 'maL.meta_ad_set_id');
+                        if ($hasExternalId) {
+                            $join->orOn('masL.meta_ad_set_id', '=', 'maL.meta_ad_set_id');
+                        }
+                    })
+                    ->leftJoin('crm_state as cs', 'cs.id', '=', "{$leadTable}.crm_state")
+                    ->leftJoin('qualification as q', 'q.id', '=', 'cs.qualification')
+                    ->selectRaw("
                     masL.id as pk,
                     COUNT(DISTINCT {$leadTable}.id) as total_leads,
                     COUNT(DISTINCT IF(
@@ -1955,222 +2129,224 @@ private function buildMetaAdSetsTableUi(
                         NULL
                     )) as leads_calificados
                 ")
-                ->groupBy('pk')
-                ->get();
+                    ->groupBy('pk')
+                    ->get();
 
-            $totals = [];
-            $qualified = [];
-            foreach ($leadAgg as $r) {
-                $pk = (int) $r->pk;
-                $totals[$pk] = (int) ($r->total_leads ?? 0);
-                $qualified[$pk] = (int) ($r->leads_calificados ?? 0);
-            }
+                $totals = [];
+                $qualified = [];
+                foreach ($leadAgg as $r) {
+                    $pk = (int) $r->pk;
+                    $totals[$pk] = (int) ($r->total_leads ?? 0);
+                    $qualified[$pk] = (int) ($r->leads_calificados ?? 0);
+                }
 
-            // Completa nombres para adsets con leads pero sin spend
-            $missingPks = array_diff(array_keys($totals), array_keys($byPk));
-            if (!empty($missingPks)) {
-                $cols = [
-                    'id as pk',
-                    DB::raw(($hasExternalId ? 'meta_ad_set_id' : 'id').' as meta_id'),
-                    DB::raw(($hasName ? 'name' : 'id').' as nombre'),
+                // Completa nombres para adsets con leads pero sin spend
+                $missingPks = array_diff(array_keys($totals), array_keys($byPk));
+                if (! empty($missingPks)) {
+                    $cols = [
+                        'id as pk',
+                        DB::raw(($hasExternalId ? 'meta_ad_set_id' : 'id').' as meta_id'),
+                        DB::raw(($hasName ? 'name' : 'id').' as nombre'),
+                    ];
+
+                    $extra = DB::table($metaAdSetsTable)->whereIn('id', $missingPks)->select($cols)->get();
+                    foreach ($extra as $r) {
+                        $pk = (int) $r->pk;
+                        $byPk[$pk] = [
+                            'pk' => $pk,
+                            'meta_id' => (string) ($r->meta_id ?? $pk),
+                            'nombre' => (string) ($r->nombre ?? $pk),
+                            'costo_anuncio' => 0.0,
+                        ];
+                    }
+                }
+
+                // Orden: spend desc, luego leads desc
+                uasort($byPk, function ($a, $b) use ($totals) {
+                    $as = (float) ($a['costo_anuncio'] ?? 0);
+                    $bs = (float) ($b['costo_anuncio'] ?? 0);
+                    if ($as === $bs) {
+                        $al = (int) ($totals[$a['pk']] ?? 0);
+                        $bl = (int) ($totals[$b['pk']] ?? 0);
+
+                        return $bl <=> $al;
+                    }
+
+                    return $bs <=> $as;
+                });
+
+                $fmtInt = fn ($n) => number_format((int) $n, 0, ',', '.');
+                $fmtMoney = fn ($n) => '$ '.number_format((float) $n, 2, ',', '.');
+
+                $columns = [
+                    ['key' => 'nombre',               'label' => 'Nombre Grupo de anuncios'],
+                    ['key' => 'costo_anuncio',        'label' => 'Costo anuncio Grupo de anuncios'],
+                    ['key' => 'leads_anuncio',        'label' => 'Leads anuncio Grupo de anuncios'],
+                    ['key' => 'leads_calificados',    'label' => 'Leads calificados Grupo de anuncios'],
+                    ['key' => 'leads_no_calificados', 'label' => 'Leads no calificados Grupo de anuncios'],
+                    ['key' => 'roas',                 'label' => 'ROAS Grupo de anuncios'],
                 ];
 
-                $extra = DB::table($metaAdSetsTable)->whereIn('id', $missingPks)->select($cols)->get();
-                foreach ($extra as $r) {
-                    $pk = (int) $r->pk;
-                    $byPk[$pk] = [
-                        'pk' => $pk,
-                        'meta_id' => (string) ($r->meta_id ?? $pk),
-                        'nombre' => (string) ($r->nombre ?? $pk),
-                        'costo_anuncio' => 0.0,
+                $rows = [];
+                foreach ($byPk as $pk => $d) {
+                    $total = (int) ($totals[$pk] ?? 0);
+                    $cal = (int) ($qualified[$pk] ?? 0);
+                    $noCal = max(0, $total - $cal);
+
+                    $spend = (float) ($d['costo_anuncio'] ?? 0);
+                    $roas = $total > 0 ? round($spend / $total, 2) : null;
+
+                    if ($spend <= 0 && $total <= 0) {
+                        continue;
+                    }
+
+                    $rows[] = [
+                        'nombre' => $d['nombre'] ?: '-',
+                        'costo_anuncio' => $fmtMoney($spend),
+                        'leads_anuncio' => $fmtInt($total),
+                        'leads_calificados' => $fmtInt($cal),
+                        'leads_no_calificados' => $fmtInt($noCal),
+                        'roas' => $roas === null ? '-' : $fmtMoney($roas),
                     ];
                 }
-            }
 
-            // Orden: spend desc, luego leads desc
-            uasort($byPk, function ($a, $b) use ($totals) {
-                $as = (float) ($a['costo_anuncio'] ?? 0);
-                $bs = (float) ($b['costo_anuncio'] ?? 0);
-                if ($as === $bs) {
-                    $al = (int) ($totals[$a['pk']] ?? 0);
-                    $bl = (int) ($totals[$b['pk']] ?? 0);
-                    return $bl <=> $al;
-                }
-                return $bs <=> $as;
-            });
+                $rows = array_slice($rows, 0, 200);
 
-            $fmtInt = fn ($n) => number_format((int) $n, 0, ',', '.');
-            $fmtMoney = fn ($n) => '$ '.number_format((float) $n, 2, ',', '.');
-
-            $columns = [
-                ['key' => 'nombre',               'label' => 'Nombre Grupo de anuncios'],
-                ['key' => 'costo_anuncio',        'label' => 'Costo anuncio Grupo de anuncios'],
-                ['key' => 'leads_anuncio',        'label' => 'Leads anuncio Grupo de anuncios'],
-                ['key' => 'leads_calificados',    'label' => 'Leads calificados Grupo de anuncios'],
-                ['key' => 'leads_no_calificados', 'label' => 'Leads no calificados Grupo de anuncios'],
-                ['key' => 'roas',                 'label' => 'ROAS Grupo de anuncios'],
-            ];
-
-            $rows = [];
-            foreach ($byPk as $pk => $d) {
-                $total = (int) ($totals[$pk] ?? 0);
-                $cal = (int) ($qualified[$pk] ?? 0);
-                $noCal = max(0, $total - $cal);
-
-                $spend = (float) ($d['costo_anuncio'] ?? 0);
-                $roas = $total > 0 ? round($spend / $total, 2) : null;
-
-                if ($spend <= 0 && $total <= 0) {
-                    continue;
-                }
-
-                $rows[] = [
-                    'nombre' => $d['nombre'] ?: '-',
-                    'costo_anuncio' => $fmtMoney($spend),
-                    'leads_anuncio' => $fmtInt($total),
-                    'leads_calificados' => $fmtInt($cal),
-                    'leads_no_calificados' => $fmtInt($noCal),
-                    'roas' => $roas === null ? '-' : $fmtMoney($roas),
+                return [
+                    'enabled' => count($rows) > 0,
+                    'note' => ' Calculo por Grupo (AdSet): spend desde insights (filtrado por cuenta) + leads desde leads.meta_id_ad - meta_ads - meta_ad_sets.',
+                    'columns' => $columns,
+                    'rows' => $rows,
                 ];
-            }
-
-            $rows = array_slice($rows, 0, 200);
-
-            return [
-                'enabled' => count($rows) > 0,
-                'note' => 'ℹ️ Cálculo por Grupo (AdSet): spend desde insights (filtrado por cuenta) + leads desde leads.meta_id_ad → meta_ads → meta_ad_sets.',
-                'columns' => $columns,
-                'rows' => $rows,
-            ];
-        });
-    } catch (\Throwable $e) {
-        return ['enabled' => false, 'note' => 'Error cargando grupos: '.$e->getMessage(), 'columns' => [], 'rows' => []];
+            });
+        } catch (\Throwable $e) {
+            return ['enabled' => false, 'note' => 'Error cargando grupos: '.$e->getMessage(), 'columns' => [], 'rows' => []];
+        }
     }
-}
 
-private function buildMetaAdsTableUi(
-    ?int $customerId,
-    ?int $integrationId,
-    array $filters,
-    Carbon $from,
-    Carbon $to,
-    string $sessionId
-): array {
-    try {
-        $insightsTable = (new MetaAdInsight)->getTable();
-        $leadTable = (new Lead)->getTable();
+    private function buildMetaAdsTableData(
+        ?int $customerId,
+        ?int $integrationId,
+        array $filters,
+        Carbon $from,
+        Carbon $to,
+        string $sessionId
+    ): array {
+        try {
+            $insightsTable = (new MetaAdInsight)->getTable();
+            $leadTable = (new Lead)->getTable();
 
-        $metaAdsTable = (new \App\Models\MetaAd)->getTable();
+            $metaAdsTable = (new \App\Models\MetaAd)->getTable();
 
-        if (!Schema::hasTable($insightsTable) || !Schema::hasTable($metaAdsTable)) {
-            return ['enabled' => false, 'note' => 'No existen tablas necesarias (meta_ad_insights / meta_ads).', 'columns' => [], 'rows' => []];
-        }
-
-        if (!Schema::hasColumn($insightsTable, 'spend') || !Schema::hasColumn($insightsTable, 'date_start') || !Schema::hasColumn($insightsTable, 'meta_ad_id')) {
-            return ['enabled' => false, 'note' => 'Faltan columnas en meta_ad_insights (spend / date_start / meta_ad_id).', 'columns' => [], 'rows' => []];
-        }
-
-        if (!Schema::hasColumn($leadTable, 'meta_id_ad') || !Schema::hasColumn($metaAdsTable, 'meta_ad_id')) {
-            return ['enabled' => false, 'note' => 'Faltan columnas para calcular leads por anuncio (leads.meta_id_ad / meta_ads.meta_ad_id).', 'columns' => [], 'rows' => []];
-        }
-
-        $hasExternalId = Schema::hasColumn($metaAdsTable, 'meta_ad_id');
-        $hasName = Schema::hasColumn($metaAdsTable, 'name');
-
-        $userKey = (string) (auth()->id() ?? 'guest');
-        $cacheKey = 'dash_meta_ads_v3:'.sha1(json_encode([
-            'customer_id' => $customerId,
-            'integration_id' => $integrationId,
-            'user' => $userKey,
-            'session' => $sessionId,
-            'filters' => $filters,
-            'from' => $from->format('Y-m-d H:i'),
-            'to' => $to->format('Y-m-d H:i'),
-        ]));
-
-        return Cache::remember($cacheKey, now()->addSeconds(60), function () use (
-            $customerId, $integrationId, $filters, $from, $to,
-            $insightsTable, $leadTable, $metaAdsTable,
-            $hasExternalId, $hasName
-        ) {
-            $fromDate = $from->toDateString();
-            $toDate = $to->toDateString();
-
-            $idExpr = $hasExternalId ? 'ma.meta_ad_id' : 'ma.id';
-            $nameExpr = $hasName ? 'ma.name' : 'ma.id';
-
-            // -------------------------
-            // 1) Spend por Anuncio (desde insights)
-            // -------------------------
-            $spendQ = DB::table("{$insightsTable} as i")
-                ->whereBetween('i.date_start', [$fromDate, $toDate])
-                ->join("{$metaAdsTable} as ma", 'ma.id', '=', 'i.meta_ad_id');
-
-            // ✅ Filtrado por cliente (Customer -> MetaAdAccount -> MetaAdInsight)
-            if ($customerId !== null || $integrationId !== null) {
-                $accTable = (new MetaAdAccount)->getTable();
-                $accQ = MetaAdAccount::query();
-
-                if ($customerId !== null) {
-                    $accQ->where('customer_id', $customerId);
-                }
-                if ($integrationId !== null && Schema::hasColumn($accTable, 'integration_id')) {
-                    $accQ->where('integration_id', $integrationId);
-                }
-
-                $accIds = (clone $accQ)->pluck('id')->map(fn ($v) => (string) $v)->all();
-                $accMetaIds = Schema::hasColumn($accTable, 'meta_account_id')
-                    ? (clone $accQ)->pluck('meta_account_id')->filter()->map(fn ($v) => (string) $v)->all()
-                    : [];
-                $allowed = array_values(array_unique(array_merge($accIds, $accMetaIds)));
-
-                if (!empty($allowed) && Schema::hasColumn($insightsTable, 'account_id')) {
-                    $spendQ->whereIn('i.account_id', $allowed);
-                } else {
-                    $spendQ->whereRaw('1=0');
-                }
+            if (! Schema::hasTable($insightsTable) || ! Schema::hasTable($metaAdsTable)) {
+                return ['enabled' => false, 'note' => 'No existen tablas necesarias (meta_ad_insights / meta_ads).', 'columns' => [], 'rows' => []];
             }
 
-            $spendRows = $spendQ
-                ->selectRaw("
+            if (! Schema::hasColumn($insightsTable, 'spend') || ! Schema::hasColumn($insightsTable, 'date_start') || ! Schema::hasColumn($insightsTable, 'meta_ad_id')) {
+                return ['enabled' => false, 'note' => 'Faltan columnas en meta_ad_insights (spend / date_start / meta_ad_id).', 'columns' => [], 'rows' => []];
+            }
+
+            if (! Schema::hasColumn($leadTable, 'meta_id_ad') || ! Schema::hasColumn($metaAdsTable, 'meta_ad_id')) {
+                return ['enabled' => false, 'note' => 'Faltan columnas para calcular leads por anuncio (leads.meta_id_ad / meta_ads.meta_ad_id).', 'columns' => [], 'rows' => []];
+            }
+
+            $hasExternalId = Schema::hasColumn($metaAdsTable, 'meta_ad_id');
+            $hasName = Schema::hasColumn($metaAdsTable, 'name');
+
+            $userKey = (string) (auth()->id() ?? 'guest');
+            $cacheKey = 'dash_meta_ads_v3:'.sha1(json_encode([
+                'customer_id' => $customerId,
+                'integration_id' => $integrationId,
+                'user' => $userKey,
+                'session' => $sessionId,
+                'filters' => $filters,
+                'from' => $from->format('Y-m-d H:i'),
+                'to' => $to->format('Y-m-d H:i'),
+            ]));
+
+            return Cache::remember($cacheKey, now()->addSeconds(60), function () use (
+                $customerId, $integrationId, $filters, $from, $to,
+                $insightsTable, $leadTable, $metaAdsTable,
+                $hasExternalId, $hasName
+            ) {
+                $fromDate = $from->toDateString();
+                $toDate = $to->toDateString();
+
+                $idExpr = $hasExternalId ? 'ma.meta_ad_id' : 'ma.id';
+                $nameExpr = $hasName ? 'ma.name' : 'ma.id';
+
+                // -------------------------
+                // 1) Spend por Anuncio (desde insights)
+                // -------------------------
+                $spendQ = DB::table("{$insightsTable} as i")
+                    ->whereBetween('i.date_start', [$fromDate, $toDate])
+                    ->join("{$metaAdsTable} as ma", 'ma.id', '=', 'i.meta_ad_id');
+
+                // âœ… Filtrado por cliente (Customer -> MetaAdAccount -> MetaAdInsight)
+                if ($customerId !== null || $integrationId !== null) {
+                    $accTable = (new MetaAdAccount)->getTable();
+                    $accQ = MetaAdAccount::query();
+
+                    if ($customerId !== null) {
+                        $accQ->where('customer_id', $customerId);
+                    }
+                    if ($integrationId !== null && Schema::hasColumn($accTable, 'integration_id')) {
+                        $accQ->where('integration_id', $integrationId);
+                    }
+
+                    $accIds = (clone $accQ)->pluck('id')->map(fn ($v) => (string) $v)->all();
+                    $accMetaIds = Schema::hasColumn($accTable, 'meta_account_id')
+                        ? (clone $accQ)->pluck('meta_account_id')->filter()->map(fn ($v) => (string) $v)->all()
+                        : [];
+                    $allowed = array_values(array_unique(array_merge($accIds, $accMetaIds)));
+
+                    if (! empty($allowed) && Schema::hasColumn($insightsTable, 'account_id')) {
+                        $spendQ->whereIn('i.account_id', $allowed);
+                    } else {
+                        $spendQ->whereRaw('1=0');
+                    }
+                }
+
+                $spendRows = $spendQ
+                    ->selectRaw("
                     ma.id as pk,
                     {$idExpr} as meta_id,
                     {$nameExpr} as nombre,
                     SUM(i.spend) as costo_anuncio
                 ")
-                ->groupBy('pk', DB::raw($idExpr), DB::raw($nameExpr))
-                ->orderByDesc('costo_anuncio')
-                ->limit(200)
-                ->get();
+                    ->groupBy('pk', DB::raw($idExpr), DB::raw($nameExpr))
+                    ->orderByDesc('costo_anuncio')
+                    ->limit(200)
+                    ->get();
 
-            $byPk = [];
-            foreach ($spendRows as $r) {
-                $pk = (int) $r->pk;
-                $byPk[$pk] = [
-                    'pk' => $pk,
-                    'meta_id' => (string) ($r->meta_id ?? $pk),
-                    'nombre' => (string) ($r->nombre ?? $pk),
-                    'costo_anuncio' => (float) ($r->costo_anuncio ?? 0),
-                ];
-            }
+                $byPk = [];
+                foreach ($spendRows as $r) {
+                    $pk = (int) $r->pk;
+                    $byPk[$pk] = [
+                        'pk' => $pk,
+                        'meta_id' => (string) ($r->meta_id ?? $pk),
+                        'nombre' => (string) ($r->nombre ?? $pk),
+                        'costo_anuncio' => (float) ($r->costo_anuncio ?? 0),
+                    ];
+                }
 
-            // -------------------------
-            // 2) Leads por Anuncio (desde leads)
-            // -------------------------
-            $excluded = ["lead no efectivo", "sin gestionar", "n/a"];
-            $excludedSql = "'".implode("','", array_map(fn ($s) => str_replace("'", "''", $s), $excluded))."'";
+                // -------------------------
+                // 2) Leads por Anuncio (desde leads)
+                // -------------------------
+                $excluded = ['lead no efectivo', 'sin gestionar', 'n/a'];
+                $excludedSql = "'".implode("','", array_map(fn ($s) => str_replace("'", "''", $s), $excluded))."'";
 
-            $base = Lead::query()->whereBetween("{$leadTable}.created_at", [$from, $to]);
-            $base = $this->applyBaseFilters($base, $customerId, $integrationId, $filters, $leadTable);
-            $base = $this->applyDimensionFilters($base, $filters, $leadTable, true, true, true, true);
+                $base = Lead::query()->whereBetween("{$leadTable}.created_at", [$from, $to]);
+                $base = $this->applyLeadScopeFilters($base, $customerId, $integrationId, $filters, $leadTable);
+                $base = $this->applyLeadDimensionFilters($base, $filters, $leadTable, true, true, true, true);
 
-            $leadAgg = (clone $base)
-                ->whereNotNull("{$leadTable}.meta_id_ad")
-                ->where("{$leadTable}.meta_id_ad", '!=', '')
-                ->join("{$metaAdsTable} as maL", 'maL.meta_ad_id', '=', "{$leadTable}.meta_id_ad")
-                ->leftJoin('crm_state as cs', 'cs.id', '=', "{$leadTable}.crm_state")
-                ->leftJoin('qualification as q', 'q.id', '=', 'cs.qualification')
-                ->selectRaw("
+                $leadAgg = (clone $base)
+                    ->whereNotNull("{$leadTable}.meta_id_ad")
+                    ->where("{$leadTable}.meta_id_ad", '!=', '')
+                    ->join("{$metaAdsTable} as maL", 'maL.meta_ad_id', '=', "{$leadTable}.meta_id_ad")
+                    ->leftJoin('crm_state as cs', 'cs.id', '=', "{$leadTable}.crm_state")
+                    ->leftJoin('qualification as q', 'q.id', '=', 'cs.qualification')
+                    ->selectRaw("
                     maL.id as pk,
                     COUNT(DISTINCT {$leadTable}.id) as total_leads,
                     COUNT(DISTINCT IF(
@@ -2179,109 +2355,110 @@ private function buildMetaAdsTableUi(
                         NULL
                     )) as leads_calificados
                 ")
-                ->groupBy('pk')
-                ->get();
+                    ->groupBy('pk')
+                    ->get();
 
-            $totals = [];
-            $qualified = [];
-            foreach ($leadAgg as $r) {
-                $pk = (int) $r->pk;
-                $totals[$pk] = (int) ($r->total_leads ?? 0);
-                $qualified[$pk] = (int) ($r->leads_calificados ?? 0);
-            }
+                $totals = [];
+                $qualified = [];
+                foreach ($leadAgg as $r) {
+                    $pk = (int) $r->pk;
+                    $totals[$pk] = (int) ($r->total_leads ?? 0);
+                    $qualified[$pk] = (int) ($r->leads_calificados ?? 0);
+                }
 
-            // Completa nombres para anuncios con leads pero sin spend
-            $missingPks = array_diff(array_keys($totals), array_keys($byPk));
-            if (!empty($missingPks)) {
-                $cols = [
-                    'id as pk',
-                    DB::raw(($hasExternalId ? 'meta_ad_id' : 'id').' as meta_id'),
-                    DB::raw(($hasName ? 'name' : 'id').' as nombre'),
+                // Completa nombres para anuncios con leads pero sin spend
+                $missingPks = array_diff(array_keys($totals), array_keys($byPk));
+                if (! empty($missingPks)) {
+                    $cols = [
+                        'id as pk',
+                        DB::raw(($hasExternalId ? 'meta_ad_id' : 'id').' as meta_id'),
+                        DB::raw(($hasName ? 'name' : 'id').' as nombre'),
+                    ];
+
+                    $extra = DB::table($metaAdsTable)->whereIn('id', $missingPks)->select($cols)->get();
+                    foreach ($extra as $r) {
+                        $pk = (int) $r->pk;
+                        $byPk[$pk] = [
+                            'pk' => $pk,
+                            'meta_id' => (string) ($r->meta_id ?? $pk),
+                            'nombre' => (string) ($r->nombre ?? $pk),
+                            'costo_anuncio' => 0.0,
+                        ];
+                    }
+                }
+
+                // Orden: spend desc, luego leads desc
+                uasort($byPk, function ($a, $b) use ($totals) {
+                    $as = (float) ($a['costo_anuncio'] ?? 0);
+                    $bs = (float) ($b['costo_anuncio'] ?? 0);
+                    if ($as === $bs) {
+                        $al = (int) ($totals[$a['pk']] ?? 0);
+                        $bl = (int) ($totals[$b['pk']] ?? 0);
+
+                        return $bl <=> $al;
+                    }
+
+                    return $bs <=> $as;
+                });
+
+                $fmtInt = fn ($n) => number_format((int) $n, 0, ',', '.');
+                $fmtMoney = fn ($n) => '$ '.number_format((float) $n, 2, ',', '.');
+
+                $columns = [
+                    ['key' => 'nombre',               'label' => 'Nombre Anuncio'],
+                    ['key' => 'costo_anuncio',        'label' => 'Costo anuncio'],
+                    ['key' => 'leads_anuncio',        'label' => 'Leads anuncio'],
+                    ['key' => 'leads_calificados',    'label' => 'Leads calificados Anuncio'],
+                    ['key' => 'leads_no_calificados', 'label' => 'Leads no calificados Anuncio'],
+                    ['key' => 'roas',                 'label' => 'ROAS Anuncio'],
                 ];
 
-                $extra = DB::table($metaAdsTable)->whereIn('id', $missingPks)->select($cols)->get();
-                foreach ($extra as $r) {
-                    $pk = (int) $r->pk;
-                    $byPk[$pk] = [
-                        'pk' => $pk,
-                        'meta_id' => (string) ($r->meta_id ?? $pk),
-                        'nombre' => (string) ($r->nombre ?? $pk),
-                        'costo_anuncio' => 0.0,
+                $rows = [];
+                foreach ($byPk as $pk => $d) {
+                    $total = (int) ($totals[$pk] ?? 0);
+                    $cal = (int) ($qualified[$pk] ?? 0);
+                    $noCal = max(0, $total - $cal);
+
+                    $spend = (float) ($d['costo_anuncio'] ?? 0);
+                    $roas = $total > 0 ? round($spend / $total, 2) : null;
+
+                    if ($spend <= 0 && $total <= 0) {
+                        continue;
+                    }
+
+                    $rows[] = [
+                        'nombre' => $d['nombre'] ?: '-',
+                        'costo_anuncio' => $fmtMoney($spend),
+                        'leads_anuncio' => $fmtInt($total),
+                        'leads_calificados' => $fmtInt($cal),
+                        'leads_no_calificados' => $fmtInt($noCal),
+                        'roas' => $roas === null ? '-' : $fmtMoney($roas),
                     ];
                 }
-            }
 
-            // Orden: spend desc, luego leads desc
-            uasort($byPk, function ($a, $b) use ($totals) {
-                $as = (float) ($a['costo_anuncio'] ?? 0);
-                $bs = (float) ($b['costo_anuncio'] ?? 0);
-                if ($as === $bs) {
-                    $al = (int) ($totals[$a['pk']] ?? 0);
-                    $bl = (int) ($totals[$b['pk']] ?? 0);
-                    return $bl <=> $al;
-                }
-                return $bs <=> $as;
-            });
+                $rows = array_slice($rows, 0, 200);
 
-            $fmtInt = fn ($n) => number_format((int) $n, 0, ',', '.');
-            $fmtMoney = fn ($n) => '$ '.number_format((float) $n, 2, ',', '.');
-
-            $columns = [
-                ['key' => 'nombre',               'label' => 'Nombre Anuncio'],
-                ['key' => 'costo_anuncio',        'label' => 'Costo anuncio'],
-                ['key' => 'leads_anuncio',        'label' => 'Leads anuncio'],
-                ['key' => 'leads_calificados',    'label' => 'Leads calificados Anuncio'],
-                ['key' => 'leads_no_calificados', 'label' => 'Leads no calificados Anuncio'],
-                ['key' => 'roas',                 'label' => 'ROAS Anuncio'],
-            ];
-
-            $rows = [];
-            foreach ($byPk as $pk => $d) {
-                $total = (int) ($totals[$pk] ?? 0);
-                $cal = (int) ($qualified[$pk] ?? 0);
-                $noCal = max(0, $total - $cal);
-
-                $spend = (float) ($d['costo_anuncio'] ?? 0);
-                $roas = $total > 0 ? round($spend / $total, 2) : null;
-
-                if ($spend <= 0 && $total <= 0) {
-                    continue;
-                }
-
-                $rows[] = [
-                    'nombre' => $d['nombre'] ?: '-',
-                    'costo_anuncio' => $fmtMoney($spend),
-                    'leads_anuncio' => $fmtInt($total),
-                    'leads_calificados' => $fmtInt($cal),
-                    'leads_no_calificados' => $fmtInt($noCal),
-                    'roas' => $roas === null ? '-' : $fmtMoney($roas),
+                return [
+                    'enabled' => count($rows) > 0,
+                    'note' => 'Calculo por Anuncio: spend desde insights (filtrado por cuenta) + leads desde leads.meta_id_ad emparejado con meta_ads.meta_ad_id.',
+                    'columns' => $columns,
+                    'rows' => $rows,
                 ];
-            }
-
-            $rows = array_slice($rows, 0, 200);
-
-            return [
-                'enabled' => count($rows) > 0,
-                'note' => 'ℹ️ Cálculo por Anuncio: spend desde insights (filtrado por cuenta) + leads desde leads.meta_id_ad emparejado con meta_ads.meta_ad_id.',
-                'columns' => $columns,
-                'rows' => $rows,
-            ];
-        });
-    } catch (\Throwable $e) {
-        return ['enabled' => false, 'note' => 'Error cargando anuncios: '.$e->getMessage(), 'columns' => [], 'rows' => []];
+            });
+        } catch (\Throwable $e) {
+            return ['enabled' => false, 'note' => 'Error cargando anuncios: '.$e->getMessage(), 'columns' => [], 'rows' => []];
+        }
     }
-}
 
-
-     /**
-     * Transforma el paginator de leads a filas listas para renderizar sin lógica en el Blade.
+    /**
+     * Transforma el paginator de leads a filas listas para renderizar sin lÃ³gica en el Blade.
      */
-    private function transformLeadRows($paginator)
+    private function transformLeadListRows($paginator)
     {
         $paginator->getCollection()->transform(function ($lead) {
-            $phone = $this->firstNonEmpty($lead, ['telefono', 'phone', 'phone_number', 'celular', 'movil']);
-            $first = $this->firstNonEmpty($lead, ['nombre', 'first_name', 'name', 'nombres']);
-            $last = $this->firstNonEmpty($lead, ['apellido', 'last_name', 'lastname', 'apellidos']);
+            $phone = $this->firstFilledFieldValue($lead, ['telefono', 'phone', 'phone_number', 'celular', 'movil']);
+            $first = $this->firstFilledFieldValue($lead, ['nombre', 'first_name', 'name', 'nombres']);
+            $last = $this->firstFilledFieldValue($lead, ['apellido', 'last_name', 'lastname', 'apellidos']);
 
             $fuente = $lead->campaign_origin;
             $medio = $lead->plataforma;
@@ -2300,6 +2477,7 @@ private function buildMetaAdsTableUi(
                 'last_name' => $last ?: '-',
                 'fuente' => ($fuente === null || $fuente === '') ? 'Sin Fuente' : $fuente,
                 'medio' => ($medio === null || $medio === '') ? 'Sin Medio' : $medio,
+                'campaign_objective' => $lead->campaign_objective_name ?? 'Sin Campaign Objective',
                 'crm_state' => $lead->crm_state_name ?? 'Sin Estado',
                 'qualification' => $lead->qualification_name ?? 'Sin Cualificación',
                 'value' => $value,
@@ -2311,7 +2489,7 @@ private function buildMetaAdsTableUi(
         return $paginator;
     }
 
-    private function firstNonEmpty($obj, array $fields): ?string
+    private function firstFilledFieldValue($obj, array $fields): ?string
     {
         foreach ($fields as $f) {
             $v = data_get($obj, $f);

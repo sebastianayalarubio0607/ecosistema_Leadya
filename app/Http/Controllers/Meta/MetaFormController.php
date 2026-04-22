@@ -12,6 +12,9 @@ use App\Models\MetaPage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
+/**
+ * Controlador para gestionar los formularios de Meta en la app
+ */
 class MetaFormController extends Controller
 {
     public function index(Request $request)

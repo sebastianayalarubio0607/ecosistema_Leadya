@@ -33,15 +33,15 @@
         @error('integrationtype_id') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
     </div>
 
-    <div>
+    <div data-base-url-block>
         <label class="block mb-1 text-white/70">URL *</label>
-        <input name="url" value="{{ old('url', $integration->url ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40" placeholder="https://..." required>
+        <input name="url" value="{{ old('url', $integration->url ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40" placeholder="https://..." data-base-url-input>
         @error('url') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
     </div>
 
     <input type="hidden" name="status" value="{{ old('status', $integration->status ?? 1) }}">
 
-    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="kommo freshworks">
+    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="kommo freshworks hubspot">
         <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
             <p class="text-sm text-white/70">
                 Si está desactivado, se usa el ID de integración como prefijo del <span class="font-mono">crm_id</span>.
@@ -111,6 +111,47 @@
         </div>
     </div>
 
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden" data-show-for="hubspot">
+        <div>
+            <label class="block mb-1 text-white/70">access_token *</label>
+            <input name="access_token" value="{{ old('access_token', $integration->tokent ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="hubspot">
+            @error('access_token') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+            @error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+        </div>
+        <div>
+            <label class="block mb-1 text-white/70">url_consulta_lead *</label>
+            <input name="url_consulta_lead" value="{{ old('url_consulta_lead', $integration->url_consulta_lead ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="https://..." data-required-for="hubspot">
+            @error('url_consulta_lead') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+        </div>
+        <div>
+            <label class="block mb-1 text-white/70">url_negocio *</label>
+            <input name="url_negocio" value="{{ old('url_negocio', $integration->url_negocio ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="https://..." data-required-for="hubspot">
+            @error('url_negocio') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+        </div>
+        <div>
+            <label class="block mb-1 text-white/70">url_creacionlead *</label>
+            <input name="url_creacionlead" value="{{ old('url_creacionlead', $integration->url_creacionlead ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="https://..." data-required-for="hubspot">
+            @error('url_creacionlead') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+        </div>
+        <div class="md:col-span-2">
+            <label class="block mb-1 text-white/70">dealname *</label>
+            <input name="dealname" value="{{ old('dealname', $integration->dealname ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="Quiero comprar variable soy variavle" data-required-for="hubspot">
+            @error('dealname') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+            <p class="mt-1 text-xs text-white/50">Acepta variables dinámicas<span class="font-mono"></span></p>
+        </div>
+        <div>
+            <label class="block mb-1 text-white/70">dealstage *</label>
+            <input name="dealstage" value="{{ old('dealstage', $integration->dealstage ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="hubspot">
+            @error('dealstage') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+        </div>
+        <div class="md:col-span-2">
+            <label class="block mb-1 text-white/70">body *</label>
+            <textarea name="body" rows="10" class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-sm text-white" placeholder='properties email variable,firstname' data-required-for="hubspot">{{ old('body', $integration->body ?? '') }}</textarea>
+            @error('body') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+            <p class="mt-1 text-xs text-white/50">Debe ser JSON válido y acepta variables dinámicas<span class="font-mono"></span>.</p>
+        </div>
+    </div>
+
     @if(isset($integration) && $integration->exists)
         <div class="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3">
             <div class="text-sm text-white/70">
@@ -133,6 +174,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const conditionalBlocks = document.querySelectorAll('[data-show-for]');
   const crmPrefixToggle = document.querySelector('[data-crm-prefix-toggle]');
   const crmPrefixInput = document.querySelector('[data-crm-prefix-input]');
+  const baseUrlBlock = document.querySelector('[data-base-url-block]');
+  const baseUrlInput = document.querySelector('[data-base-url-input]');
 
   function normalizeTypeKey(raw) {
     const key = (raw || '').trim().toLowerCase();
@@ -142,6 +185,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (key.includes('freshworks')) return 'freshworks';
     if (key.includes('salesforce')) return 'salesforce';
     if (key.includes('monday')) return 'monday';
+    if (key.includes('hubspot')) return 'hubspot';
     return key;
   }
 
@@ -165,7 +209,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function refreshCrmPrefixRequirement() {
     if (!crmPrefixInput || !crmPrefixToggle) return;
     const key = getSelectedKey();
-    const supportsCustomPrefix = key === 'kommo' || key === 'freshworks';
+    const supportsCustomPrefix = key === 'kommo' || key === 'freshworks' || key === 'hubspot';
     const isEnabled = supportsCustomPrefix && crmPrefixToggle.checked;
 
     crmPrefixInput.disabled = !isEnabled;
@@ -181,6 +225,13 @@ document.addEventListener('DOMContentLoaded', () => {
       const shouldShow = hasError || (key && showFor.includes(key));
       setBlockVisible(block, shouldShow, key);
     });
+
+    if (baseUrlBlock && baseUrlInput) {
+      const shouldHideBaseUrl = key === 'hubspot';
+      baseUrlBlock.classList.toggle('hidden', shouldHideBaseUrl);
+      baseUrlInput.disabled = shouldHideBaseUrl;
+      baseUrlInput.required = !shouldHideBaseUrl;
+    }
 
     refreshCrmPrefixRequirement();
   }

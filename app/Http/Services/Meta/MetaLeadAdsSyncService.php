@@ -3,6 +3,7 @@
 namespace App\Http\Services\Meta;
 
 use App\Http\Services\Integration\IntegrationService;
+use App\Http\Services\Lead\LeadFunnelHistoryService;
 use App\Jobs\ProcessLeadIntegrationsJob;
 use App\Models\Lead;
 use App\Models\MetaAccessToken;
@@ -14,16 +15,35 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\Log;
 
 /**
- * Service for syncing leads with Meta's advertising platform.
+ * Servicio principal para sincronizar páginas, formularios y leads de Meta Lead Ads.
+ * Este servicio se encarga de:
+ * - Intercambiar tokens de acceso de corta duración por tokens de larga duración.
+ * - Sincronizar las páginas de Meta asociadas a los tokens de acceso.
+ * - Sincronizar los formularios de generación de leads (Lead Ads) para las páginas activas.
+ * - Sincronizar los leads generados a partir de los formularios, creando o actualizando registros de leads en la base de datos.
+ * - Manejar errores y registrar información relevante para depuración y monitoreo.
+ * - Proporcionar métodos auxiliares para normalizar datos y resolver mapeos de campos entre los formularios de Meta y los campos de leads en el sistema.   
  */
 class MetaLeadAdsSyncService
 {
+/**
+ * MetaLeadAdsSyncService constructor.
+ */
     public function __construct(
         private readonly MetaGraphService $graphService,
         private readonly IntegrationService $integrationService,
+        private readonly LeadFunnelHistoryService $leadFunnelHistoryService,
     ) {
     }
 
+    /**
+     * Intercambia un token de acceso de corta duración por un token de larga duración utilizando la API de Graph de Meta.
+      * Requiere el ID de la aplicación y el secreto de la aplicación para realizar el intercambio.
+      * Retorna un array con los detalles del token de larga duración, incluyendo 'access_token', 'token_type', 'expires_in', etc.
+      * Lanza una excepción si las credenciales de Meta no están configuradas o si la API devuelve un error.
+      * @throws \RuntimeException
+      * @throws \Illuminate\Http\Client\RequestException
+     */
     public function exchangeLongLivedToken(string $shortLivedToken, ?string $metaAppId = null, ?string $metaAppSecret = null): array
     {
         $appId = $metaAppId ?: config('services.meta.app_id');
@@ -39,6 +59,16 @@ class MetaLeadAdsSyncService
         ]);
     }
 
+    /**
+     * Llena un modelo de MetaAccessToken con los detalles del token de larga duración obtenido a partir de un token de corta duración.
+      * Si el tipo de token no es un token de acceso de usuario, simplemente copia el token corto al largo sin realizar el intercambio.
+      * Para tokens de acceso de usuario, realiza el intercambio utilizando la función exchangeLongLivedToken y llena los campos del modelo con la información obtenida.
+      * Retorna el modelo de MetaAccessToken actualizado pero no guardado en la base de datos.
+      * Lanza una excepción si hay problemas durante el intercambio del token, que debe ser manejada por el llamador.
+      * @throws \RuntimeException
+      * @throws \Illuminate\Http\Client\RequestException
+       * @return MetaAccessToken
+     */
     public function fillLongLivedToken(MetaAccessToken $accessToken, string $shortLivedToken): MetaAccessToken
     {
         if ($accessToken->token_type !== MetaAccessToken::TYPE_USER_ACCESS_TOKEN) {
@@ -74,6 +104,17 @@ class MetaLeadAdsSyncService
         return $accessToken;
     }
 
+    /**
+     * Refresca un token de acceso de Meta si está próximo a expirar, actualizando su información con un token de larga duración.
+      * Si el token no es del tipo de token de acceso de usuario, simplemente actualiza la marca de tiempo de actualización sin realizar el intercambio.
+      * Para tokens de acceso de usuario, intenta obtener un nuevo token de larga duración utilizando el token corto actual y actualiza el modelo con la nueva información.
+      * Guarda los cambios en la base de datos y retorna el modelo actualizado.
+      * Si ocurre un error durante el proceso, registra el error en el modelo y en los logs, y lanza la excepción para que sea manejada por el llamador.
+      * @throws \RuntimeException
+      * @throws \Illuminate\Http\Client\RequestException
+       * @return MetaAccessToken
+     */
+
     public function refreshToken(MetaAccessToken $accessToken): MetaAccessToken
     {
         try {
@@ -96,6 +137,15 @@ class MetaLeadAdsSyncService
 
         return $accessToken;
     }
+    /**
+     * Busca todos los tokens de acceso activos que estén próximos a expirar y los refresca.
+      * Si se proporciona un token específico, solo se intentará refrescar ese token.
+      * Retorna un array con el conteo de tokens verificados y tokens refrescados.
+      * Lanza excepciones si hay problemas durante el proceso de refresco, que deben ser manejadas por el llamador.
+     * @throws \RuntimeException
+     * @throws \Illuminate\Http\Client\RequestException
+      * @return array
+     */
 
     public function refreshDueTokens(?MetaAccessToken $onlyToken = null): array
     {
@@ -120,6 +170,11 @@ class MetaLeadAdsSyncService
         return ['tokens_checked' => $tokens->count(), 'tokens_refreshed' => $refreshed];
     }
 
+    /**
+     * Sync pages for all active user access tokens or a specific token if provided.
+      * Returns an array with counts of processed tokens, created pages, and updated pages.
+      * Throws exceptions if there are issues with syncing, which should be handled by the caller.
+     */
     public function syncPages(?MetaAccessToken $onlyToken = null): array
     {
         $tokens = $onlyToken
@@ -183,6 +238,9 @@ class MetaLeadAdsSyncService
         return ['tokens_processed' => $tokens->count(), 'pages_created' => $created, 'pages_updated' => $updated];
     }
 
+/**
+ *  
+ */
     public function syncForms(?MetaPage $onlyPage = null): array
     {
         $pages = MetaPage::query()
@@ -252,10 +310,18 @@ class MetaLeadAdsSyncService
         return ['pages_processed' => $pages->count(), 'forms_created' => $created, 'forms_updated' => $updated];
     }
 
+/**
+ * Sincroniza los leads de los formularios de Meta Lead Ads, creando o actualizando registros de leads en la base de datos.
+      * Si se proporciona un formulario específico, solo se sincronizarán los leads de ese formulario.
+      * Si se proporcionan fechas de inicio y fin, solo se sincronizarán los leads creados dentro de ese rango.
+      * Retorna un array con el conteo de formularios procesados, leads creados, leads actualizados, y las fechas del rango utilizado para la sincronización.
+      * Lanza excepciones si hay problemas durante la sincronización, que deben ser manejadas por el llamador.
+ */
     public function syncLeads(?MetaForm $onlyForm = null, ?Carbon $from = null, ?Carbon $to = null): array
     {
+        /** @var \Carbon\Carbon $fromDate */
         ['from' => $fromDate, 'to' => $toDate] = $this->resolveWindow($from, $to);
-
+ //       $fromDate = $fromDate->copy()->subDays(30);
         $forms = MetaForm::query()
             ->with([
                 'page',
@@ -271,12 +337,13 @@ class MetaLeadAdsSyncService
         $created = 0;
         $updated = 0;
 
+        // Procesar cada formulario y sus leads
         foreach ($forms as $form) {
             try {
                 if (blank($form->page?->page_access_token)) {
                     throw new \RuntimeException('La página asociada no tiene page_access_token para consultar leads.');
                 }
-
+// Log::info('Syncing leads for form', ['meta_form_id' => $form->id, 'from' => $fromDate->toDateTimeString(), 'to' => $toDate->toDateTimeString()]);
                 $leads = $this->graphService->paginatedGet($form->meta_form_id.'/leads', [
                     'fields' => 'id,created_time,ad_id,form_id,field_data,campaign_id',
                     'access_token' => $form->page->page_access_token,
@@ -284,7 +351,7 @@ class MetaLeadAdsSyncService
                     'to_date' => $toDate->toDateTimeString(),
                     'limit' => 500,
                 ]);
-
+// Log::info('Leads fetched from Meta', ['meta_form_id' => $form->id, 'leads_count' => count($leads)]);
                 foreach ($leads as $leadData) {
                     try {
                         $result = $this->upsertLeadFromMeta($form, $leadData);
@@ -324,6 +391,11 @@ class MetaLeadAdsSyncService
         ];
     }
 
+    /**
+     * Get available fields from a Meta form's questions to be used in field mappings.
+      * Returns an array of available fields with 'name' and 'label' keys.
+       * Throws exceptions if the form's raw payload is missing or malformed.
+     */
     public function availableMetaFields(MetaForm $form): array
     {
         $questions = collect(data_get($form->raw_payload, 'questions', []));
@@ -338,6 +410,9 @@ class MetaLeadAdsSyncService
             ->all();
     }
 
+    /**
+     * Upsert a lead from Meta data.
+     */
     private function upsertLeadFromMeta(MetaForm $form, array $leadData): array
     {
         $leadData = $this->normalizeMetaLeadData($leadData);
@@ -396,6 +471,7 @@ class MetaLeadAdsSyncService
         }
 
         $lead = Lead::create($payload);
+        $this->leadFunnelHistoryService->recordIfFunnelChanged($lead);
         $this->dispatchLeadIntegrations($lead);
 
         return ['created' => 1, 'updated' => 0];

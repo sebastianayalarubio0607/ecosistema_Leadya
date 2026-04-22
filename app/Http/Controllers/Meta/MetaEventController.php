@@ -6,6 +6,9 @@ use App\Http\Controllers\Controller;
 use App\Models\MetaEvent;
 use Illuminate\Http\Request;
 
+/**
+ * Controlador para gestionar los eventos de Meta en la app
+ */
 class MetaEventController extends Controller
 {
     public function index(Request $request)

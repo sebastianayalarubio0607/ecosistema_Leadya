@@ -18,6 +18,11 @@ class CrmState extends Model
         'name',
         'qualification',
         'meta_event_id',
+        'unmanaged',
+    ];
+
+    protected $casts = [
+        'unmanaged' => 'boolean',
     ];
 
     public function leads()

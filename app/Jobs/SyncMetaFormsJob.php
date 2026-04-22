@@ -11,19 +11,31 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Trabajo para sincronizar los formularios de Meta
+ */
 class SyncMetaFormsJob implements ShouldQueue
 {
+    /**
+     * The number of times the job may be attempted.
+     */
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public int $tries = 3;
     public array $backoff = [60, 300, 900];
 
+    /**
+     * Create a new job instance.
+     */
     public function __construct(
         public ?int $metaPageId = null,
     ) {
         $this->onQueue('meta');
     }
 
+    /**
+     * Execute the job.
+     */
     public function handle(MetaLeadAdsSyncService $service): void
     {
         $page = $this->metaPageId ? MetaPage::find($this->metaPageId) : null;

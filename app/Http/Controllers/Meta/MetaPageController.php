@@ -11,6 +11,9 @@ use App\Models\MetaPage;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
+/**
+ * Controlador para gestionar las páginas de Meta en la app
+ */
 class MetaPageController extends Controller
 {
     public function index(Request $request)

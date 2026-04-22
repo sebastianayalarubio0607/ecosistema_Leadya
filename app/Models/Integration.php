@@ -50,6 +50,11 @@ class Integration extends Model
         'username',
         'password',
         'body',
+        'url_consulta_lead',
+        'url_negocio',
+        'url_creacionlead',
+        'dealname',
+        'dealstage',
     ];
 
     public function crmIdPrefix(): string

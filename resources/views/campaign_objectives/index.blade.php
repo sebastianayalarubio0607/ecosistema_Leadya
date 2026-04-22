@@ -1,10 +1,10 @@
 @extends('meta.layout')
 
-@section('title', 'CRM States')
-@section('subtitle', 'Estados del CRM + asignación a Meta Event (conversión)')
+@section('title', 'Campaign Objectives')
+@section('subtitle', 'Catálogo de objetivos de campaña')
 
 @section('header_actions')
-    <a href="{{ route('crmstates.create') }}"
+    <a href="{{ route('campaign_objectives.create') }}"
        class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10">
         + Nuevo
     </a>
@@ -15,16 +15,16 @@
         <form method="GET" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
             <div class="md:col-span-10">
                 <label class="block mb-1 text-white/70">Buscar</label>
-                <input name="q" value="{{ $q }}"
+                <input name="q" value="{{ $q ?? request('q') }}"
                        class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
-                       placeholder="Buscar por ID o nombre">
+                       placeholder="Buscar por nombre">
             </div>
 
             <div class="md:col-span-2 flex gap-2">
                 <button class="w-full px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">
                     Buscar
                 </button>
-                <a href="{{ route('crmstates.index') }}"
+                <a href="{{ route('campaign_objectives.index') }}"
                    class="w-full text-center px-4 py-2 rounded-xl bg-zinc-950/25 hover:bg-white/10 text-white border border-white/10">
                     Limpiar
                 </a>
@@ -37,38 +37,34 @@
                     <tr>
                         <th class="text-left px-3 py-2">ID</th>
                         <th class="text-left px-3 py-2">Nombre</th>
-                        <th class="text-left px-3 py-2">Sin gestionar</th>
-                        <th class="text-left px-3 py-2">Qualification</th>
-                        <th class="text-left px-3 py-2">Meta Event</th>
+                        <th class="text-left px-3 py-2">Estado</th>
+                        <th class="text-left px-3 py-2">Actualizado</th>
                         <th class="text-left px-3 py-2 w-56">Acciones</th>
                     </tr>
                 </thead>
 
                 <tbody class="divide-y divide-white/10 text-white/80">
-                    @forelse($crmstates as $it)
+                    @forelse($campaignObjectives as $campaignObjective)
                         <tr class="hover:bg-white/5">
+                            <td class="px-3 py-2">{{ $campaignObjective->id }}</td>
+                            <td class="px-3 py-2">{{ $campaignObjective->nombre }}</td>
                             <td class="px-3 py-2">
-                                {{ $it->id }}
-                                <div class="text-xs text-white/50">
-                                    Leads: {{ method_exists($it, 'leads') ? $it->leads()->count() : '—' }}
-                                </div>
+                                <span class="px-2 py-1 rounded-lg text-xs border {{ $campaignObjective->estado ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
+                                    {{ $campaignObjective->estado ? 'Activo' : 'Inactivo' }}
+                                </span>
                             </td>
-                            <td class="px-3 py-2">{{ $it->name }}</td>
-                            <td class="px-3 py-2">{{ $it->unmanaged ? 'Sí' : 'No' }}</td>
-                            <td class="px-3 py-2">{{ $it->qualificationModel?->name ?? '—' }}</td>
-                            <td class="px-3 py-2">{{ $it->metaEvent?->nombre ?? '—' }}</td>
+                            <td class="px-3 py-2">{{ optional($campaignObjective->updated_at)->format('Y-m-d H:i') }}</td>
                             <td class="px-3 py-2">
                                 <div class="flex items-center gap-2">
                                     <a class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs"
-                                       href="{{ route('crmstates.show', $it) }}">Ver</a>
-
+                                       href="{{ route('campaign_objectives.show', $campaignObjective) }}">Ver</a>
                                     <a class="px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-white/10 text-xs"
-                                       href="{{ route('crmstates.edit', $it) }}">Editar</a>
-
-                                    <form action="{{ route('crmstates.destroy', $it) }}" method="POST">
-                                        @csrf @method('DELETE')
+                                       href="{{ route('campaign_objectives.edit', $campaignObjective) }}">Editar</a>
+                                    <form action="{{ route('campaign_objectives.destroy', $campaignObjective) }}" method="POST">
+                                        @csrf
+                                        @method('DELETE')
                                         <button class="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-300/20 text-xs"
-                                                onclick="return confirm('¿Eliminar CRM State?')">
+                                                onclick="return confirm('¿Eliminar objetivo de campaña?')">
                                             Eliminar
                                         </button>
                                     </form>
@@ -77,13 +73,13 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="px-3 py-8 text-center text-white/60">No hay CRM States.</td>
+                            <td colspan="5" class="px-3 py-8 text-center text-white/60">No hay objetivos de campaña registrados.</td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
 
-        <div>{{ $crmstates->links() }}</div>
+        <div>{{ $campaignObjectives->links() }}</div>
     </div>
 @endsection

@@ -38,7 +38,7 @@
         <main class="flex-1 p-6">
             <div class="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden flex flex-col">
                 <div class="overflow-x-auto custom-scrollbar">
-                    <table class="w-full border-collapse min-w-[1400px]">
+                    <table class="w-full border-collapse min-w-[1560px]">
                         <thead>
                             <tr class="bg-slate-900 text-slate-300 text-[11px] uppercase tracking-[0.1em] font-bold">
                                 <th class="p-4 text-left w-[220px]">Base URL</th>
@@ -46,6 +46,7 @@
                                 <th class="p-4 text-left w-[160px]">Origen</th>
                                 <th class="p-4 text-left w-[140px]">Geo</th>
                                 <th class="p-4 text-left w-[120px]">Idioma</th>
+                                <th class="p-4 text-left w-[180px]">Campaign Objective</th>
                                 <th class="p-4 text-left w-[160px]">Servicio</th>
                                 <th class="p-4 text-left w-[140px]">Site Link</th>
                                 <th class="p-4 text-left bg-indigo-950 text-indigo-200 border-l border-indigo-900">Resultados</th>
@@ -81,6 +82,7 @@
                 <td class="p-3">${createSelect('platform', optionsData.platform, id)}</td>
                 <td class="p-3">${createSelect('geo', optionsData.geo, id)}</td>
                 <td class="p-3">${createSelect('language', optionsData.language, id)}</td>
+                <td class="p-3">${createSelect('campaign_objective', optionsData.campaign_objective, id)}</td>
                 
                 <td class="p-3">
                     <input type="text" maxlength="20" placeholder="Letras únicamente" 
@@ -142,6 +144,7 @@
             const platformEl = row.querySelector('.select-platform');
             const geoEl = row.querySelector('.select-geo');
             const langEl = row.querySelector('.select-language');
+            const campaignObjectiveEl = row.querySelector('.select-campaign_objective');
             const service = row.querySelector('.service-input').value;
             const sitelink = row.querySelector('.sitelink-input').value;
 
@@ -162,6 +165,7 @@
 
                 // 3. URL
                 let finalUrl = `${baseUrl}?effective_lead=${lead}&campaign_origin=${originEl.value}&platform=${platformEl.value}&geo=${geoEl.value}&language=${langEl.value}&services=${service}`;
+                if (campaignObjectiveEl.value) finalUrl += `&campaign_objective=${campaignObjectiveEl.value}`;
                 if (sitelink) finalUrl += `&site_link=${sitelink}`;
                 
                 row.querySelector('.result-url').value = finalUrl;

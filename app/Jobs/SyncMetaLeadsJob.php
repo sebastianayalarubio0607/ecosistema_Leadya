@@ -12,6 +12,13 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 
+/**
+ * Trabajo para sincronizar los leads de los formularios de Meta Lead Ads, creando o actualizando registros de leads en la base de datos.
+ * Si se proporciona un formulario específico, solo se sincronizarán los leads de ese formulario.
+ * Si se proporcionan fechas de inicio y fin, solo se sincronizarán los leads creados dentro de ese rango.
+ * Retorna un array con el conteo de formularios procesados, leads creados, leads actualizados, y las fechas del rango utilizado para la sincronización.        
+ * 
+ */
 class SyncMetaLeadsJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;

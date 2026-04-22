@@ -11,6 +11,9 @@ use App\Models\MetaFormFieldMapping;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
+/**
+ * Controlador para gestionar los mappings de campos entre formularios de Meta y campos de Lead en la app
+ */
 class MetaFormFieldMappingController extends Controller
 {
     public function index(Request $request)

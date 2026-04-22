@@ -82,7 +82,9 @@ class LeadController extends Controller
         */
         $lead = $this->leadsService->createLead($lead);
 
-        // ✅ HISTÓRICO INICIAL (si crm_state null => funnel "Lead")
+        /**
+         * Registra el cambio en el funnel del lead, si es que aplica. Esto se hace después de crear el lead para asegurar que cualquier cambio relevante en el estado del lead se capture correctamente en el historial del funnel. El servicio LeadFunnelHistoryService se encarga de determinar si hubo un cambio significativo en el funnel y registra esa información para su posterior análisis o visualización.
+         */
         $historyService->recordIfFunnelChanged($lead);
 
         /*

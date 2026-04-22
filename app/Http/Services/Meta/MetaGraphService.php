@@ -4,6 +4,9 @@ namespace App\Http\Services\Meta;
 
 use Illuminate\Support\Facades\Http;
 
+/**
+ * Servicio para interactuar con la API de Graph de Meta
+ */
 class MetaGraphService
 {
     public function get(string $path, array $query = []): array

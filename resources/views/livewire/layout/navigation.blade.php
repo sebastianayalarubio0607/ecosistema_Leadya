@@ -153,6 +153,12 @@ new class extends Component {
             'active' => ['origins.*'],
             'icon' => 'origins',
         ],
+                [
+            'label' => 'campaign objectives',
+            'route' => 'campaign_objectives.index',
+            'active' => ['campaign_objectives.*'],
+            'icon' => 'campaign_objectives',
+        ],
     ];
 
     // ✅ Esta variable es la que te falta y por eso cae el error

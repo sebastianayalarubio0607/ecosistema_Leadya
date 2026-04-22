@@ -9,6 +9,7 @@ use App\Http\Services\Integration\LetyIntegrationService;
 use App\Http\Services\Integration\SalesforceIntegrationService;
 use App\Http\Services\Integration\ZohoIntegrationService;
 use App\Http\Services\Integration\MondayIntegrationService;
+use App\Http\Services\Integration\HubspotIntegrationService;
 use App\Models\Integration;
 use App\Models\Lead;
 use App\Models\LeadIntegration;
@@ -25,6 +26,7 @@ class IntegrationService
     private $FreshworksIntegrationService;
     private $SalesforceIntegrationService;
     private $MondayIntegrationService;
+    private $HubspotIntegrationService;
 
     public function __construct(
         GoogleSheetsIntegrationService $GooglesheetsIntegrationService,
@@ -33,7 +35,8 @@ class IntegrationService
         ZohoIntegrationService $ZohoIntegrationService,
         FreshworksIntegrationService $FreshworksIntegrationService,
         SalesforceIntegrationService $SalesforceIntegrationService,
-        MondayIntegrationService $MondayIntegrationService
+        MondayIntegrationService $MondayIntegrationService,
+        HubspotIntegrationService $HubspotIntegrationService
     ) {
         $this->GooglesheetsIntegrationService = $GooglesheetsIntegrationService;
         $this->KommoIntegrationService = $KommoIntegrationService;
@@ -42,6 +45,7 @@ class IntegrationService
         $this->FreshworksIntegrationService = $FreshworksIntegrationService;
         $this->SalesforceIntegrationService = $SalesforceIntegrationService;
         $this->MondayIntegrationService = $MondayIntegrationService;
+        $this->HubspotIntegrationService = $HubspotIntegrationService;
     }
 
     public function getActiveIntegrations($customer_id)
@@ -84,6 +88,7 @@ class IntegrationService
                 'freshworks' => fn() => $this->FreshworksIntegrationService->sendToFreshworks($lead, $integration),
                 'salesforce' => fn() => $this->SalesforceIntegrationService->sendToSalesforce($lead, $integration),
                 'monday' => fn() => $this->MondayIntegrationService->sendToMonday($lead, $integration),
+                'hubspot' => fn() => $this->HubspotIntegrationService->sendToHubspot($lead, $integration),
             ];
 
             $serviceMap = [
@@ -94,6 +99,7 @@ class IntegrationService
                 'freshworks' => $this->FreshworksIntegrationService::class,
                 'salesforce' => $this->SalesforceIntegrationService::class,
                 'monday' => $this->MondayIntegrationService::class,
+                'hubspot' => $this->HubspotIntegrationService::class,
             ];
 
             $handler = $handlers[$type] ?? null;
@@ -200,6 +206,17 @@ class IntegrationService
                 'crm_id_email_present' => filled($integration->crm_Id_email),
                 'crm_id_service_present' => filled($integration->crm_Id_service),
                 'crm_id_fuente_present' => filled($integration->crm_Id_fuente),
+            ],
+            'hubspot' => [
+                'integration_url' => $integration->url,
+                'url_present' => filled($integration->url),
+                'search_url_present' => filled($integration->url_consulta_lead),
+                'deal_url_present' => filled($integration->url_negocio),
+                'create_lead_url_present' => filled($integration->url_creacionlead),
+                'token_present' => filled($integration->tokent),
+                'dealname_present' => filled($integration->dealname),
+                'dealstage_present' => filled($integration->dealstage),
+                'body_present' => filled($integration->body),
             ],
             default => [
                 'integration_url' => $integration->url,

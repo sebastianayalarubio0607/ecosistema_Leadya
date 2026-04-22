@@ -21,7 +21,7 @@ class ZohoIntegrationService
             throw new RuntimeException('No existe api_domain configurado para Zoho.');
         }
 
-        $url = $apiDomain . '/crm/v8/Leads/upsert';
+        $url = $apiDomain.'/crm/v8/Leads/upsert';
         $source = ($lead->campaign_origin && in_array($lead->campaign_origin, ['fb', 'meta', 'ig', 'wa', 'mg', 'th']))
             ? 'Meta ADS'
             : 'Google Ads';
@@ -37,6 +37,9 @@ class ZohoIntegrationService
             'Description' => $this->firstNonEmpty($lead->message, 'sin comentarios'),
             'Lead_Status' => 'Sin gestion',
             'Lead_Source' => $this->firstNonEmpty($source, 'Sitio web'),
+            'UTM_Campaign' => $lead->service ,
+            'UTM_Medium' => $lead->plataforma ,
+            'UTM_Source' => $source,
         ];
 
         $numberWorkers = $this->firstInteger($lead->number_workers ?? null);
@@ -65,7 +68,7 @@ class ZohoIntegrationService
         $response = Http::acceptJson()
             ->asJson()
             ->withHeaders([
-                'Authorization' => 'Zoho-oauthtoken ' . $oauth['access_token'],
+                'Authorization' => 'Zoho-oauthtoken '.$oauth['access_token'],
             ])
             ->post($url, $payload);
 
@@ -79,7 +82,7 @@ class ZohoIntegrationService
             $zohoLeadId = $item['details']['id'] ?? $item['id'] ?? null;
 
             if ($zohoLeadId !== null) {
-                $lead->crm_id = $integration->id . '-' . $zohoLeadId;
+                $lead->crm_id = $integration->id.'-'.$zohoLeadId;
                 $lead->save();
 
                 Log::info('LEAD UPDATED crm_id', [
@@ -164,7 +167,7 @@ class ZohoIntegrationService
             throw new RuntimeException('No existe accounts_url configurado para Zoho (integrations.url).');
         }
 
-        if (!$integration->client_id || !$integration->client_secret || !$integration->refresh_token) {
+        if (! $integration->client_id || ! $integration->client_secret || ! $integration->refresh_token) {
             throw new RuntimeException('Faltan credenciales OAuth de Zoho (client_id, client_secret, refresh_token).');
         }
 
@@ -176,7 +179,7 @@ class ZohoIntegrationService
         ];
 
         $refreshResponse = Http::acceptJson()->post(
-            $accountsUrl . '/oauth/v2/token?' . http_build_query($query)
+            $accountsUrl.'/oauth/v2/token?'.http_build_query($query)
         );
 
         Log::info('ZOHO REFRESH RESPONSE', [
@@ -185,20 +188,20 @@ class ZohoIntegrationService
             'body' => $refreshResponse->body(),
         ]);
 
-        if (!$refreshResponse->successful()) {
+        if (! $refreshResponse->successful()) {
             Log::error('ZOHO TOKEN REFRESH FAILED', [
                 'integration_id' => $integration->id,
                 'status' => $refreshResponse->status(),
                 'body' => $refreshResponse->body(),
             ]);
 
-            throw new RuntimeException('No se pudo refrescar token Zoho: ' . $refreshResponse->body());
+            throw new RuntimeException('No se pudo refrescar token Zoho: '.$refreshResponse->body());
         }
 
         $data = $refreshResponse->json();
         $accessToken = trim((string) ($data['access_token'] ?? ''));
         if ($accessToken === '') {
-            throw new RuntimeException('Respuesta de Zoho sin access_token. body: ' . $refreshResponse->body());
+            throw new RuntimeException('Respuesta de Zoho sin access_token. body: '.$refreshResponse->body());
         }
 
         $expiresIn = isset($data['expires_in']) ? (int) $data['expires_in'] : null;

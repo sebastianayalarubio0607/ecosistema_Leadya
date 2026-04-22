@@ -33,6 +33,10 @@
                 <div class="text-xs text-white/50">Qualification</div>
                 <div class="text-white">{{ $crmstate->qualificationModel?->name ?? '—' }}</div>
             </div>
+            <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                <div class="text-xs text-white/50">Sin gestionar</div>
+                <div class="text-white">{{ $crmstate->unmanaged ? 'Sí' : 'No' }}</div>
+            </div>
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-3">

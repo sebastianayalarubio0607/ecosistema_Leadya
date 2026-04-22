@@ -7,6 +7,9 @@ use App\Http\Services\Meta\MetaInsightsSyncService;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 
+/**
+ * Controlador para sincronizar insights de Meta
+ */
 class MetaSyncController extends Controller
 {
     public function syncInsightsYesterday(Request $request, MetaInsightsSyncService $service): RedirectResponse

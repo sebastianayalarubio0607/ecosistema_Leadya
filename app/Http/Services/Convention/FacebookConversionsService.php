@@ -21,7 +21,7 @@ class FacebookConversionsService
     {
         $customer = Customer::findOrFail($customerId);
 
-        $pixelId     = data_get($customer, 'fb_pixel_id');
+        $pixelId = data_get($customer, 'fb_pixel_id');
         $accessToken = data_get($customer, 'fb_access_token');
 
         // ✅ test_event_code: intenta desde Lead, luego Customer, luego constante
@@ -34,6 +34,13 @@ class FacebookConversionsService
             $testCode = null;
         }
 
+        if ($lead->meta_lead_id) {
+            $leadIdMeta = $lead->meta_lead_id;
+
+        } else {
+            $leadIdMeta = $lead->id;
+        }
+
         /**
          * ✅ event_name según crmState/metaEvent/nombre
          * Si crmState es null/vacío/no existe => "Lead"
@@ -42,7 +49,7 @@ class FacebookConversionsService
         $event_name = 'Lead';
         $usedFallbackLeadEvent = true;
 
-        if (!empty($lead->crm_state)) {
+        if (! empty($lead->crm_state)) {
             $lead->loadMissing('crmState.metaEvent');
             $dbEventName = $lead->crmState?->metaEvent?->nombre;
 
@@ -52,7 +59,7 @@ class FacebookConversionsService
             }
         }
 
-        if (!$pixelId || !$accessToken) {
+        if (! $pixelId || ! $accessToken) {
             return [
                 'ok' => false,
                 'error' => 'Faltan credenciales de Facebook (pixel o access token).',
@@ -69,14 +76,14 @@ class FacebookConversionsService
         $endpoint = "https://graph.facebook.com/v24.0/{$pixelId}/events?access_token={$accessToken}";
 
         $event_time = $userData['created_at'];
-        $event_id   = "lead_{$lead->id}_{$event_time}";
+        $event_id = "lead_{$leadIdMeta}_{$event_time}";
 
         $event = [
             'event_name' => $event_name,
             'event_time' => $event_time,
             'event_id' => $event_id,
             'action_source' => 'website',
-            'event_source_url' =>  'https://app.leadsya.com/',
+            'event_source_url' => 'https://app.leadsya.com/',
 
             'user_data' => $this->filterNulls([
                 'client_ip_address' => $customData['client_ip'] ?? null,
@@ -93,7 +100,7 @@ class FacebookConversionsService
                 'ct' => $userData['ct'] ?? null,
                 'country' => $userData['country'] ?? null,
 
-                'external_id' => !empty($userData['external_id']) ? [$userData['external_id']] : null,
+                'external_id' => ! empty($userData['external_id']) ? [$userData['external_id']] : null,
             ]),
 
             'custom_data' => $this->filterNulls(array_merge(
@@ -101,7 +108,7 @@ class FacebookConversionsService
                     'content_name' => $lead->service ?? null,
                     'lead_source' => $lead->campaign_origin ?? $lead->utm_source ?? null,
 
-                    'lead_id' => $lead->id,
+                    'lead_id' => $leadIdMeta,
                     'lead_key' => $this->buildLeadKey($lead),
 
                     'status' => $lead->status ?? null,
@@ -123,11 +130,9 @@ class FacebookConversionsService
             'data' => [$event],
         ];
 
-        if (!empty($testCode)) {
+        if (! empty($testCode)) {
             $payload['test_event_code'] = $testCode;
         }
-
-
 
         $response = Http::asJson()
             ->timeout(15)
@@ -167,11 +172,11 @@ class FacebookConversionsService
      */
     protected function buildPayload(Lead $lead): array
     {
-        $email   = $lead->email ?? null;
-        $phone   = $lead->phone ?? null;
-        $fname   = $lead->name ?? null;
-        $lname   = $lead->last_name ?? null;
-        $city    = $lead->city ?? null;
+        $email = $lead->email ?? null;
+        $phone = $lead->phone ?? null;
+        $fname = $lead->name ?? null;
+        $lname = $lead->last_name ?? null;
+        $city = $lead->city ?? null;
         $country = $lead->country ?? null;
 
         $fbp = $lead->fbp ?? null;
@@ -215,7 +220,7 @@ class FacebookConversionsService
         $customData = array_filter([
             'agent' => $lead->agent ?? null,
             'client_ip' => $rawIp,
-        ], fn ($v) => !is_null($v) && $v !== '');
+        ], fn ($v) => ! is_null($v) && $v !== '');
 
         return [$userData, $customData];
     }
@@ -227,14 +232,16 @@ class FacebookConversionsService
     protected function extractFirstIp(?string $ip): ?string
     {
         $ip = trim((string) $ip);
-        if ($ip === '') return null;
+        if ($ip === '') {
+            return null;
+        }
 
         if (str_contains($ip, ',')) {
             $ip = trim(explode(',', $ip)[0]);
         }
 
         // opcional: solo devolver si es IP válida
-        if (!filter_var($ip, FILTER_VALIDATE_IP)) {
+        if (! filter_var($ip, FILTER_VALIDATE_IP)) {
             return null;
         }
 
@@ -246,14 +253,16 @@ class FacebookConversionsService
         $phone = trim((string) ($lead->phone ?? ''));
         $service = trim((string) ($lead->service ?? ''));
 
-        $key = trim($phone . '_' . $service, '_');
+        $key = trim($phone.'_'.$service, '_');
 
         return $key !== '' ? $key : (string) $lead->id;
     }
 
     protected function normalizeValue($value): float
     {
-        if ($value === null || $value === '') return 0.0;
+        if ($value === null || $value === '') {
+            return 0.0;
+        }
 
         if (is_string($value)) {
             $value = str_replace([',', ' '], ['', ''], $value);
@@ -268,7 +277,9 @@ class FacebookConversionsService
     protected function extractStandardEventCustomData(Lead $lead): array
     {
         $fc = $lead->fields_custom ?? [];
-        if (!is_array($fc)) $fc = [];
+        if (! is_array($fc)) {
+            $fc = [];
+        }
 
         $allowed = [
             'content_ids',
@@ -294,7 +305,7 @@ class FacebookConversionsService
 
     protected function filterNulls(array $data): array
     {
-        return array_filter($data, static fn ($v) => !is_null($v) && $v !== '');
+        return array_filter($data, static fn ($v) => ! is_null($v) && $v !== '');
     }
 
     protected function normLower(?string $v): string
@@ -310,6 +321,7 @@ class FacebookConversionsService
     protected function normalizePhone(string $phone): string
     {
         $digits = preg_replace('/\D+/', '', $phone);
+
         return ltrim($digits, '0');
     }
 

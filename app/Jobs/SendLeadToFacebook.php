@@ -11,7 +11,14 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Throwable;
-
+/**
+ * Trabajo para enviar un lead a Facebook Conversions API de forma asíncrona.
+ * Esto permite que el proceso de creación/actualización del lead no se vea afectado por la latencia o posibles errores en la comunicación con Facebook, mejorando la experiencia del usuario y la robustez del sistema.
+ * El trabajo recibe el ID del lead y el ID del cliente, y utiliza el FacebookConversionsService para enviar el evento a Facebook.
+ * Se configuran reintentos y backoff para manejar posibles fallos temporales en la comunicación con Facebook, y se asigna el trabajo a una cola específica para tracking, lo que ayuda a organizar y priorizar las tareas en el sistema de colas.
+ * En caso de fallo, se registra el error en los logs y se lanza una excepción para que el sistema de colas pueda manejar el reintento según la configuración establecida.
+ * Además, se registra un log detallado de cada intento de envío a Facebook Conversions API en la tabla FacebookConversionLog, lo que permite tener un historial de los eventos enviados y los errores ocurridos, facilitando la monitorización y el diagnóstico de problemas relacionados con la integración de
+ */
 class SendLeadToFacebook implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;

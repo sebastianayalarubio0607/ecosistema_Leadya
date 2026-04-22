@@ -57,6 +57,7 @@ class LeadService
             'page'            => 'sometimes|nullable|string|max:255',
             'page_url'        => 'sometimes|nullable|string|max:10000',
             'campaign_origin' => 'sometimes|nullable|string|max:255',
+            'campaign_objective' => 'sometimes|nullable|integer',
             'message'         => 'sometimes|nullable|string|max:10000',
             'customer_id'     => 'required|integer|exists:customers,id',
             'fbp'             => 'sometimes|nullable|string|max:255',
@@ -68,6 +69,7 @@ class LeadService
             'meta_id_ad'      => 'sometimes|nullable|string|max:255',
             'value'           => 'sometimes|nullable|numeric',
             'crm_state'       => 'sometimes|nullable|string|max:255',
+            
 
             'number_workers'  => 'sometimes|nullable|integer',
             'number_locations' => 'sometimes|nullable|integer',
@@ -82,6 +84,7 @@ class LeadService
             'campo_text_3'    => 'sometimes|nullable|string',
             'campo_text_4'    => 'sometimes|nullable|string',
             'campo_text_5'    => 'sometimes|nullable|string',
+            
         ]);
     }
 

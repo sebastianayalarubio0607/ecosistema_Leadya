@@ -65,6 +65,7 @@ class CrmStateWebController extends Controller
             'name'           => ['required', 'string', 'max:255'],
             'qualification'  => ['required', 'exists:qualification,id'],
             'meta_event_id'  => ['nullable', 'exists:meta_events,id'],
+            'unmanaged'      => ['nullable', 'boolean'],
         ], [
             'external_id.regex' => 'El ID ingresado solo puede tener letras, números, guion (-) y guion bajo (_).',
         ]);
@@ -76,6 +77,7 @@ class CrmStateWebController extends Controller
             'name' => $request->string('name'),
             'qualification' => $request->input('qualification'),
             'meta_event_id' => $request->input('meta_event_id'),
+            'unmanaged' => $request->boolean('unmanaged'),
         ]);
 
         return redirect()
@@ -129,7 +131,10 @@ class CrmStateWebController extends Controller
             'name'          => ['required', 'string', 'max:255'],
             'qualification' => ['required', 'exists:qualification,id'],
             'meta_event_id' => ['nullable', 'exists:meta_events,id'],
+            'unmanaged'     => ['nullable', 'boolean'],
         ]);
+
+        $validated['unmanaged'] = $request->boolean('unmanaged');
 
         $crmstate->update($validated);
 

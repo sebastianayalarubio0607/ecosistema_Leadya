@@ -37,6 +37,7 @@ class Lead extends Model
         'page',
         'page_url',
         'campaign_origin',
+        'campaign_objective',
         'message',
         'fbp',
         'fbc',
@@ -151,6 +152,11 @@ class Lead extends Model
     public function campaignOrigin(): BelongsTo
     {
         return $this->belongsTo(Origin::class, 'campaign_origin', 'code');
+    }
+
+    public function campaignObjective(): BelongsTo
+    {
+        return $this->belongsTo(CampaignObjective::class, 'campaign_objective');
     }
 
     public static function metaMappableFields(): array
