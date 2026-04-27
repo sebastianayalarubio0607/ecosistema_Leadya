@@ -43,7 +43,7 @@ class IntegrationWebController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $request->validate($this->rules());
+        $validated = $request->validate($this->rules($request));
         $payload = $this->normalizePayloadByType($validated);
         $payload = $this->hydrateZohoTokensFromAuthorizationCode($payload);
         $payload = $this->hydrateSalesforceTokenFromCredentials($payload);
@@ -81,7 +81,7 @@ class IntegrationWebController extends Controller
 
     public function update(Request $request, Integration $integration)
     {
-        $validated = $request->validate($this->rules(true));
+        $validated = $request->validate($this->rules($request, true));
         $payload = $this->normalizePayloadByType($validated);
         $payload = $this->hydrateSalesforceTokenFromCredentials($payload);
 
@@ -105,15 +105,19 @@ class IntegrationWebController extends Controller
             ->with('success', 'Integracion eliminada.');
     }
 
-    private function rules(bool $updating = false): array
+    private function rules(Request $request, bool $updating = false): array
     {
+        $typeName = $this->normalizeIntegrationTypeName(
+            Integrationtype::whereKey($request->input('integrationtype_id'))->value('name')
+        );
+
         $rules = [
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'integrationtype_id' => 'required|exists:integrationtypes,id',
             'customer_id' => 'required|exists:customers,id',
-            'url' => 'nullable|url',
-            'status' => 'nullable|boolean',
+            'url' => ($typeName === 'hubspot' ? 'nullable' : 'required').'|url',
+            'status' => 'required|boolean',
             'crm_Id_phone' => ['nullable', 'string', 'max:255'],
             'crm_Id_service' => ['nullable', 'string', 'max:255'],
             'crm_Id_fuente' => ['nullable', 'string', 'max:255'],
@@ -146,6 +150,36 @@ class IntegrationWebController extends Controller
             'dealname' => ['nullable', 'string'],
             'dealstage' => ['nullable', 'string', 'max:255'],
         ];
+
+        if ($typeName === 'freshworks') {
+            $rules['tokent'] = ['required', 'string'];
+            $rules['territory_id'] = ['required', 'string', 'max:255'];
+            $rules['owner_id'] = ['required', 'string', 'max:255'];
+            $rules['city'] = ['required', 'string', 'max:255'];
+            $rules['lead_source_id'] = ['required', 'string', 'max:255'];
+            $rules['custom_field'] = ['required', 'string'];
+        }
+
+        if ($typeName === 'salesforce') {
+            $rules['url_credenciales'] = ['required', 'url', 'max:255'];
+            $rules['username'] = ['required', 'string', 'max:255'];
+            $rules['password'] = ['required', 'string'];
+            $rules['body'] = ['required', 'string'];
+        }
+
+        if ($typeName === 'monday') {
+            $rules['tokent'] = ['required', 'string'];
+        }
+
+        if ($typeName === 'hubspot') {
+            $rules['access_token'] = ['required', 'string'];
+            $rules['url_consulta_lead'] = ['required', 'url', 'max:255'];
+            $rules['url_negocio'] = ['required', 'url', 'max:255'];
+            $rules['url_creacionlead'] = ['required', 'url', 'max:255'];
+            $rules['dealname'] = ['required', 'string'];
+            $rules['dealstage'] = ['required', 'string', 'max:255'];
+            $rules['body'] = ['required', 'string'];
+        }
 
         if ($updating) {
             $rules['regenerate_public_key'] = 'nullable|boolean';
@@ -286,12 +320,6 @@ class IntegrationWebController extends Controller
 
     private function validateKommoPayload(array $payload): array
     {
-        if (empty($payload['tokent'])) {
-            throw ValidationException::withMessages([
-                'tokent' => 'Para Kommo el campo token es obligatorio.',
-            ]);
-        }
-
         return $payload;
     }
 

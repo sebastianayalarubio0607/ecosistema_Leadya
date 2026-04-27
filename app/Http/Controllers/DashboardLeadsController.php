@@ -580,6 +580,7 @@ class DashboardLeadsController extends Controller
 
             // âœ… HISTÃ“RICO: Leads por Funnel (usando LeadFunnelHistory)
             $funnelsHistory = [];
+            $funnelsHistoryDaily = [];
             $historyTable = (new LeadFunnelHistory)->getTable();
             $funnelTableForHistory = Schema::hasTable('funnels') ? 'funnels' : $funnelTable;
 
@@ -603,6 +604,24 @@ class DashboardLeadsController extends Controller
                         'count' => (int) $r->total,
                     ];
                 }
+
+                $rowsHDaily = DB::table("{$historyTable} as lfh")
+                    ->join("{$funnelTableForHistory} as fnh", 'fnh.id', '=', 'lfh.funnel_id')
+                    ->whereBetween('lfh.created_at', [$from, $to])
+                    ->whereIn('lfh.lead_id', $leadIdsSub)
+                    ->selectRaw("DATE(lfh.created_at) as day, lfh.funnel_id as funnel_id, COALESCE(fnh.name, '') as name, COUNT(DISTINCT lfh.lead_id) as total")
+                    ->groupByRaw('DATE(lfh.created_at), lfh.funnel_id, fnh.name')
+                    ->orderBy('day')
+                    ->get();
+
+                foreach ($rowsHDaily as $r) {
+                    $funnelsHistoryDaily[] = [
+                        'date' => (string) $r->day,
+                        'id' => (string) $r->funnel_id,
+                        'name' => (string) $r->name,
+                        'count' => (int) $r->total,
+                    ];
+                }
             }
 
             $metaSpend = $this->getMetaSpend($customerId, $integrationId, $filters, $from, $to);
@@ -619,6 +638,7 @@ class DashboardLeadsController extends Controller
 
                 'funnels' => $funnels,
                 'funnels_history' => $funnelsHistory,
+                'funnels_history_daily' => $funnelsHistoryDaily,
                 'no_funnel_count' => $noFunnelCount,
                 'qualified_count' => $qualifiedCount,
                 'qualified_funnel_id' => $qualifiedFunnelId,
@@ -785,13 +805,13 @@ class DashboardLeadsController extends Controller
                     $funnelTable = Schema::hasTable('funnels') ? 'funnels' : $funnelTable;
 
                     $leadId = $funnelTable ? $this->findFunnelIdByName($funnelTable, 'Lead') : null;
-                    $noEffId = $funnelTable ? $this->findFunnelIdByName($funnelTable, 'Lead NO Efectivo') : null;
-                    $ids = array_values(array_filter([$leadId, $noEffId]));
+                    $leadsId = $funnelTable ? $this->findFunnelIdByName($funnelTable, 'Leads') : null;
+                    $ids = array_values(array_filter([$leadId, $leadsId]));
 
                     // Fallback por variaciones comunes (Lead/Leads)
                     if (empty($ids) && $funnelTable) {
                         $ids = DB::table($funnelTable)
-                            ->whereRaw('LOWER(TRIM(name)) IN (?,?,?)', ['lead', 'leads', 'lead no efectivo'])
+                            ->whereRaw('LOWER(TRIM(name)) IN (?,?)', ['lead', 'leads'])
                             ->pluck('id')
                             ->map(fn ($v) => (string) $v)
                             ->all();
@@ -1427,46 +1447,29 @@ class DashboardLeadsController extends Controller
         $funnelHistoryFromMetric = $metric['funnels_history'] ?? [];
 
         // âœ… Unificar "Lead" + "Lead NO Efectivo" => "Leads" (sin perder el click a listado)
-        $historyLeadCount = 0;
-        $historyNoEfectivoCount = 0;
-        $historyRemaining = [];
+        $historyByName = [];
 
         foreach ($funnelHistoryFromMetric as $f) {
-            $n = mb_strtolower(trim((string) ($f['name'] ?? '')));
-            if ($n === 'lead' || $n === 'leads') {
-                $historyLeadCount += (int) ($f['count'] ?? 0);
-
-                continue;
-            }
-            if ($n === mb_strtolower('Lead NO Efectivo')) {
-                $historyNoEfectivoCount += (int) ($f['count'] ?? 0);
-
-                continue;
-            }
-            $historyRemaining[] = $f;
-        }
-
-        $historyLeadsCount = $historyLeadCount + $historyNoEfectivoCount;
-
-        // Orden sugerido: Leads, Respondidos, Oportunidades, Ventas, resto
-        $historyByName = [];
-        foreach ($historyRemaining as $f) {
             $k = mb_strtolower(trim((string) ($f['name'] ?? '')));
-            if ($k !== '') {
-                $historyByName[$k] = $f;
+            if ($k === 'lead') {
+                $k = 'leads';
+                $f['name'] = 'Leads';
             }
+            if ($k === '') {
+                continue;
+            }
+
+            if (! isset($historyByName[$k])) {
+                $historyByName[$k] = $f;
+                continue;
+            }
+
+            $historyByName[$k]['count'] = (int) ($historyByName[$k]['count'] ?? 0) + (int) ($f['count'] ?? 0);
         }
 
         $funnelHistoryRaw = [];
 
-        // 1) Leads (combinado)
-        $funnelHistoryRaw[] = [
-            'id' => '__LEADS__',
-            'name' => 'Leads',
-            'count' => $historyLeadsCount,
-        ];
-
-        foreach (['Respondidos', 'Oportunidades', 'Ventas'] as $wanted) {
+        foreach (['Leads', 'Respondidos', 'Lead NO Efectivo', 'Oportunidades', 'Ventas'] as $wanted) {
             $k = mb_strtolower($wanted);
             if (isset($historyByName[$k])) {
                 $funnelHistoryRaw[] = [
@@ -1478,7 +1481,10 @@ class DashboardLeadsController extends Controller
             }
         }
 
-        foreach ($historyRemaining as $f) {
+        foreach ($funnelHistoryFromMetric as $f) {
+            if (mb_strtolower(trim((string) ($f['name'] ?? ''))) === 'lead') {
+                $f['name'] = 'Leads';
+            }
             $k = mb_strtolower(trim((string) ($f['name'] ?? '')));
             if ($k !== '' && isset($historyByName[$k])) {
                 $funnelHistoryRaw[] = [
@@ -1491,6 +1497,55 @@ class DashboardLeadsController extends Controller
         }
 
         $cardsFunnelsHistory = $mkCards($funnelHistoryRaw, 'funnel_history');
+
+        $historyDailyRows = $metric['funnels_history_daily'] ?? [];
+        $historyChartLabels = [];
+        $historyChartNames = [];
+        $historyChartValues = [];
+        foreach ($historyDailyRows as $row) {
+            $date = (string) ($row['date'] ?? '');
+            $name = (string) ($row['name'] ?? '');
+            if (mb_strtolower(trim($name)) === 'lead') {
+                $name = 'Leads';
+            }
+            if ($date === '' || $name === '') {
+                continue;
+            }
+
+            $historyChartLabels[$date] = $date;
+            $historyChartNames[mb_strtolower($name)] = $name;
+            $historyChartValues[$name][$date] = ($historyChartValues[$name][$date] ?? 0) + (int) ($row['count'] ?? 0);
+        }
+
+        $historyChartNameByKey = $historyChartNames;
+        $historyChartOrderedNames = [];
+        foreach (['Leads', 'Respondidos', 'Lead NO Efectivo', 'Oportunidades', 'Ventas'] as $wanted) {
+            $k = mb_strtolower($wanted);
+            if (isset($historyChartNames[$k])) {
+                $historyChartOrderedNames[] = $historyChartNames[$k];
+                unset($historyChartNames[$k]);
+            }
+        }
+        foreach ($historyChartNames as $name) {
+            $historyChartOrderedNames[] = $name;
+        }
+
+        $historyChartLabels = array_values($historyChartLabels);
+        $historyChartDatasets = array_map(function ($name) use ($historyChartLabels, $historyChartValues) {
+            return [
+                'label' => $name,
+                'data' => array_map(fn ($date) => (int) ($historyChartValues[$name][$date] ?? 0), $historyChartLabels),
+            ];
+        }, $historyChartOrderedNames);
+
+        $opportunitiesSalesChartDatasets = array_map(function ($wanted) use ($historyChartLabels, $historyChartValues, $historyChartNameByKey) {
+            $name = $historyChartNameByKey[mb_strtolower($wanted)] ?? $wanted;
+
+            return [
+                'label' => $wanted,
+                'data' => array_map(fn ($date) => (int) ($historyChartValues[$name][$date] ?? 0), $historyChartLabels),
+            ];
+        }, ['Oportunidades', 'Ventas']);
 
         // Calificados / Ventas
         $baseClick = Arr::except($request->query(), ['crm_state', 'qualification', 'group_type', 'group_id', 'page']);
@@ -1695,6 +1750,16 @@ class DashboardLeadsController extends Controller
                 'funnels_history' => $cardsFunnelsHistory,
                 'qualifications' => $cardsQual,
                 'crm_states' => $cardsCrm,
+            ],
+            'charts' => [
+                'funnels_history_daily' => [
+                    'labels' => $historyChartLabels,
+                    'datasets' => $historyChartDatasets,
+                ],
+                'opportunities_sales_daily' => [
+                    'labels' => $historyChartLabels,
+                    'datasets' => $opportunitiesSalesChartDatasets,
+                ],
             ],
             'tables' => [
                 'meta_campaigns' => $metaCampaigns,
@@ -1940,7 +2005,7 @@ class DashboardLeadsController extends Controller
                     ['key' => 'leads',               'label' => 'Leads Campaña'],
                     ['key' => 'leads_calificados',   'label' => 'Leads calificados Campaña'],
                     ['key' => 'leads_no_calificados', 'label' => 'Leads no calificados Campaña'],
-                    ['key' => 'roas',                'label' => 'ROAS Campaña'],
+                    ['key' => 'SPL',                'label' => 'SPL Campaña'],
                 ];
 
                 $outRows = [];
@@ -1951,7 +2016,7 @@ class DashboardLeadsController extends Controller
 
                     $noCal = max(0, $incoming - $qualified);
                     $spend = (float) ($r->spend ?? 0);
-                    $roas = $incoming > 0 ? round($spend / $incoming, 2) : null;
+                    $SPL = $incoming > 0 ? round($spend / $incoming, 2) : null;
 
                     $outRows[] = [
                         'nombre' => (string) ($r->campaign_name ?? '-'),
@@ -1959,7 +2024,7 @@ class DashboardLeadsController extends Controller
                         'leads' => $fmtInt($incoming),
                         'leads_calificados' => $fmtInt($qualified),
                         'leads_no_calificados' => $fmtInt($noCal),
-                        'roas' => $roas === null ? '-' : $fmtMoney($roas),
+                        'SPL' => $SPL === null ? '-' : $fmtMoney($SPL),
                     ];
                 }
 
@@ -2184,7 +2249,7 @@ class DashboardLeadsController extends Controller
                     ['key' => 'leads_anuncio',        'label' => 'Leads anuncio Grupo de anuncios'],
                     ['key' => 'leads_calificados',    'label' => 'Leads calificados Grupo de anuncios'],
                     ['key' => 'leads_no_calificados', 'label' => 'Leads no calificados Grupo de anuncios'],
-                    ['key' => 'roas',                 'label' => 'ROAS Grupo de anuncios'],
+                    ['key' => 'SPL',                 'label' => 'SPL Grupo de anuncios'],
                 ];
 
                 $rows = [];
@@ -2194,7 +2259,7 @@ class DashboardLeadsController extends Controller
                     $noCal = max(0, $total - $cal);
 
                     $spend = (float) ($d['costo_anuncio'] ?? 0);
-                    $roas = $total > 0 ? round($spend / $total, 2) : null;
+                    $SPL = $total > 0 ? round($spend / $total, 2) : null;
 
                     if ($spend <= 0 && $total <= 0) {
                         continue;
@@ -2206,7 +2271,7 @@ class DashboardLeadsController extends Controller
                         'leads_anuncio' => $fmtInt($total),
                         'leads_calificados' => $fmtInt($cal),
                         'leads_no_calificados' => $fmtInt($noCal),
-                        'roas' => $roas === null ? '-' : $fmtMoney($roas),
+                        'SPL' => $SPL === null ? '-' : $fmtMoney($SPL),
                     ];
                 }
 
@@ -2410,7 +2475,7 @@ class DashboardLeadsController extends Controller
                     ['key' => 'leads_anuncio',        'label' => 'Leads anuncio'],
                     ['key' => 'leads_calificados',    'label' => 'Leads calificados Anuncio'],
                     ['key' => 'leads_no_calificados', 'label' => 'Leads no calificados Anuncio'],
-                    ['key' => 'roas',                 'label' => 'ROAS Anuncio'],
+                    ['key' => 'SPL',                 'label' => 'SPL Anuncio'],
                 ];
 
                 $rows = [];
@@ -2420,7 +2485,7 @@ class DashboardLeadsController extends Controller
                     $noCal = max(0, $total - $cal);
 
                     $spend = (float) ($d['costo_anuncio'] ?? 0);
-                    $roas = $total > 0 ? round($spend / $total, 2) : null;
+                    $SPL = $total > 0 ? round($spend / $total, 2) : null;
 
                     if ($spend <= 0 && $total <= 0) {
                         continue;
@@ -2432,7 +2497,7 @@ class DashboardLeadsController extends Controller
                         'leads_anuncio' => $fmtInt($total),
                         'leads_calificados' => $fmtInt($cal),
                         'leads_no_calificados' => $fmtInt($noCal),
-                        'roas' => $roas === null ? '-' : $fmtMoney($roas),
+                        'SPL' => $SPL === null ? '-' : $fmtMoney($SPL),
                     ];
                 }
 

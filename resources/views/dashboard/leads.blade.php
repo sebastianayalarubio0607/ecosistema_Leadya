@@ -91,7 +91,7 @@
             <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 col-span-1">
                 <div class="text-sm text-white/60">Leads en el periodo seleccionado</div>
                 <div class="text-3xl font-bold text-white">{{ $ui['summary']['count'] }}</div>
-                Periodo: <br>
+                <span class="text-3xl font-bold text-white">Periodo:</span> <br>
                 <span class="text-xs text-white/80 font-semibold">{{ $ui['summary']['period_label'] }}</span>
             </div>
 
@@ -150,12 +150,59 @@
             @include('dashboard.partials.funnel-stack', [
                 'title' => 'Historico Leads en el Funnel',
                 'cards' => $ui['cards']['funnels_history'],
-                'totalLabel' => null,
-                'totalValue' => null,
+                'totalLabel' => 'Total',
+                'totalValue' => $ui['totals']['total_leads'],
                 'stackGap' => 'space-y-4',
                 'cardPadding' => 'p-2',
                 'variant' => 'history',
             ])
+        </div>
+
+        @php($historyDailyChart = $ui['charts']['funnels_history_daily'] ?? ['labels' => [], 'datasets' => []])
+        <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 w-full">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-white font-semibold">Historico Leads en el Funnel por dia</h3>
+                <div class="text-xs text-white/50">
+                    Total:
+                    <span class="text-white/80 font-semibold">{{ $ui['totals']['total_leads'] }}</span>
+                </div>
+            </div>
+            <div class="h-80 w-full">
+                <canvas id="funnelHistoryDailyChart"
+                        data-labels='@json($historyDailyChart['labels'])'
+                        data-datasets='@json($historyDailyChart['datasets'])'></canvas>
+            </div>
+        </div>
+
+        @php($opportunitiesSalesChart = $ui['charts']['opportunities_sales_daily'] ?? ['labels' => [], 'datasets' => []])
+        <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 w-full">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-white font-semibold">Oportunidades vs Ventas por dia</h3>
+                <div class="text-xs text-white/50">
+                    Total:
+                    <span class="text-white/80 font-semibold">{{ $ui['totals']['total_leads'] }}</span>
+                </div>
+            </div>
+            <div class="h-80 w-full">
+                <canvas id="opportunitiesSalesDailyChart"
+                        data-labels='@json($opportunitiesSalesChart['labels'])'
+                        data-datasets='@json($opportunitiesSalesChart['datasets'])'></canvas>
+            </div>
+        </div>
+
+        <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 w-full">
+            <div class="flex items-center justify-between mb-3">
+                <h3 class="text-white font-semibold">Tendencia Oportunidades vs Ventas por dia</h3>
+                <div class="text-xs text-white/50">
+                    Total:
+                    <span class="text-white/80 font-semibold">{{ $ui['totals']['total_leads'] }}</span>
+                </div>
+            </div>
+            <div class="h-80 w-full">
+                <canvas id="opportunitiesSalesDailyLineChart"
+                        data-labels='@json($opportunitiesSalesChart['labels'])'
+                        data-datasets='@json($opportunitiesSalesChart['datasets'])'></canvas>
+            </div>
         </div>
 
         <h2 class="text-2xl text-white font-bold">Datos de Meta - {{ $ui['header']['selected_customer_name'] }}</h2>
@@ -174,12 +221,12 @@
             const COLORS = ["#8B5CF6", "#22C55E", "#06B6D4", "#F59E0B", "#EC4899"];
             const charts = window.__LEADSYA_CHARTS || (window.__LEADSYA_CHARTS = {});
 
-            function loadChartJs() {
-                if (window.Chart) return Promise.resolve();
+            function loadECharts() {
+                if (window.echarts) return Promise.resolve();
 
                 return new Promise((resolve, reject) => {
                     const script = document.createElement("script");
-                    script.src = "https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js";
+                    script.src = "https://cdn.jsdelivr.net/npm/echarts@5.5.1/dist/echarts.min.js";
                     script.onload = resolve;
                     script.onerror = reject;
                     document.head.appendChild(script);
@@ -236,9 +283,39 @@
                 });
             }
 
+            function chartContainer(element) {
+                if (!element) return null;
+                if (element.tagName.toLowerCase() !== "canvas") return element;
+
+                const container = document.createElement("div");
+                container.id = element.id;
+                container.className = "h-full w-full";
+                Object.keys(element.dataset).forEach((key) => {
+                    container.dataset[key] = element.dataset[key];
+                });
+                element.replaceWith(container);
+
+                return container;
+            }
+
+            function disposeChart(chartId) {
+                if (!charts[chartId]) return;
+
+                if (typeof charts[chartId].dispose === "function") {
+                    charts[chartId].dispose();
+                } else if (typeof charts[chartId].destroy === "function") {
+                    charts[chartId].destroy();
+                }
+                delete charts[chartId];
+            }
+
+            function chartTextColor(alpha = ".75") {
+                return `rgba(255,255,255,${alpha})`;
+            }
+
             function buildDonut(canvasId, legendId) {
-                const canvas = document.getElementById(canvasId);
-                if (!canvas) return;
+                const canvas = chartContainer(document.getElementById(canvasId));
+                if (!canvas || !window.echarts) return;
 
                 const labels = JSON.parse(canvas.dataset.labels || "[]");
                 const values = JSON.parse(canvas.dataset.values || "[]");
@@ -248,39 +325,143 @@
 
                 if (!labels.length || !values.length) return;
 
-                if (charts[canvasId]) {
-                    charts[canvasId].destroy();
-                    delete charts[canvasId];
-                }
+                disposeChart(canvasId);
 
                 renderLegend(legendId, labels, values, keys, baseUrl, groupType);
 
-                const context = canvas.getContext("2d");
-                charts[canvasId] = new Chart(context, {
-                    type: "doughnut",
-                    data: {
-                        labels,
-                        datasets: [{
-                            data: values,
-                            backgroundColor: labels.map((_, index) => COLORS[index % COLORS.length]),
-                            borderColor: "rgba(255,255,255,.08)",
-                            borderWidth: 1,
-                            hoverOffset: 6
-                        }]
+                charts[canvasId] = echarts.init(canvas, null, { renderer: "canvas" });
+                charts[canvasId].setOption({
+                    color: COLORS,
+                    tooltip: {
+                        trigger: "item",
+                        backgroundColor: "rgba(15,23,42,.96)",
+                        borderColor: "rgba(255,255,255,.12)",
+                        textStyle: { color: "#fff" },
+                        formatter: "{b}<br/><strong>{c}</strong> ({d}%)"
                     },
-                    options: {
-                        responsive: true,
-                        maintainAspectRatio: false,
-                        cutout: "62%",
-                        plugins: {
-                            legend: {
-                                display: false
-                            }
+                    legend: { show: false },
+                    series: [{
+                        
+                       type: 'pie',
+      radius: ['40%', '70%'],
+      avoidLabelOverlap: false,
+      padAngle: 0,
+      itemStyle: {
+        borderRadius: 0
+      },
+                        label: { show: false },
+                        emphasis: {
+                            scale: true,
+                            scaleSize: 2
                         },
-                        onClick: (_, elements) => {
-                            if (!elements || !elements.length) return;
-                            goToGroup(baseUrl, groupType, keys[elements[0].index]);
+                        data: labels.map((label, index) => ({
+                            name: label,
+                            value: values[index] ?? 0
+                        }))
+                    }]
+                });
+                charts[canvasId].on("click", (params) => {
+                    goToGroup(baseUrl, groupType, keys[params.dataIndex]);
+                });
+            }
+
+            function buildFunnelHistoryDailyChart(canvasId = "funnelHistoryDailyChart", stacked = true, type = "bar") {
+                const canvas = chartContainer(document.getElementById(canvasId));
+                if (!canvas || !window.echarts) return;
+
+                const labels = JSON.parse(canvas.dataset.labels || "[]");
+                const rawDatasets = JSON.parse(canvas.dataset.datasets || "[]");
+                if (!labels.length || !rawDatasets.length) return;
+
+                const chartId = canvas.id;
+                disposeChart(chartId);
+
+                const datasets = rawDatasets.map((dataset, index) => {
+                    const color = COLORS[index % COLORS.length];
+
+                    return {
+                        type,
+                        label: dataset.label,
+                        name: dataset.label,
+                        data: dataset.data,
+                        stack: stacked ? "total" : null,
+                        smooth: type === "line",
+                        symbol: type === "line" ? "circle" : "none",
+                        symbolSize: type === "line" ? 7 : 0,
+                        barMaxWidth: 42,
+                        lineStyle: {
+                            width: 3,
+                            color
+                        },
+                        itemStyle: {
+                            color,
+                            borderRadius: type === "bar" ? [0, 5, 0, 0] : 0
+                        },
+                        areaStyle: type === "line" ? {
+                            opacity: 0.18,
+                            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                                { offset: 0, color },
+                                { offset: 1, color: "rgba(255,255,255,0)" }
+                            ])
+                        } : undefined,
+                        emphasis: {
+                            focus: "series"
                         }
+                    };
+                });
+
+                charts[chartId] = echarts.init(canvas, null, { renderer: "canvas" });
+                charts[chartId].setOption({
+                    color: COLORS,
+                    tooltip: {
+                        trigger: "axis",
+                        backgroundColor: "rgba(15,23,42,.96)",
+                        borderColor: "rgba(255,255,255,.12)",
+                        textStyle: { color: "#fff" },
+                        axisPointer: {
+                            type: type === "line" ? "line" : "shadow",
+                            lineStyle: { color: "rgba(255,255,255,.25)" },
+                            shadowStyle: { color: "rgba(255,255,255,.06)" }
+                        }
+                    },
+                    legend: {
+                        top: 0,
+                        right: 0,
+                        icon: "roundRect",
+                        textStyle: { color: chartTextColor(".78") }
+                    },
+                    grid: {
+                        left: 36,
+                        right: 18,
+                        top: 48,
+                        bottom: 32,
+                        containLabel: true
+                    },
+                    xAxis: {
+                        type: "category",
+                        boundaryGap: type !== "line",
+                        data: labels,
+                        axisLabel: { color: chartTextColor(".68") },
+                        axisLine: { lineStyle: { color: "rgba(255,255,255,.12)" } },
+                        axisTick: { show: false },
+                        splitLine: { show: false }
+                    },
+                    yAxis: {
+                        type: "value",
+                        minInterval: 1,
+                        axisLabel: { color: chartTextColor(".68") },
+                        axisLine: { show: false },
+                        axisTick: { show: false },
+                        splitLine: { lineStyle: { color: "rgba(255,255,255,.08)" } }
+                    },
+                    series: datasets
+                });
+            }
+
+            function resizeCharts() {
+                Object.values(charts).forEach((chart) => {
+                    if (chart && typeof chart.resize === "function") {
+                        chart.resize();
                     }
                 });
             }
@@ -381,12 +562,16 @@
             }
 
             async function init() {
-                await loadChartJs();
+                await loadECharts();
                 buildDonut("donutChannels", "legendChannels");
                 buildDonut("donutPlatforms", "legendPlatforms");
+                buildFunnelHistoryDailyChart();
+                buildFunnelHistoryDailyChart("opportunitiesSalesDailyChart", false);
+                buildFunnelHistoryDailyChart("opportunitiesSalesDailyLineChart", false, "line");
                 setupSortableTables();
                 setupDatetimeMax();
                 setInterval(setupDatetimeMax, 60 * 1000);
+                window.addEventListener("resize", resizeCharts, { passive: true });
             }
 
             init();

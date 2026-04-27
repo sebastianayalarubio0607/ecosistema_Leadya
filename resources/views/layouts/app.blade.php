@@ -15,9 +15,17 @@
         <!-- Scripts -->
         @vite(['resources/css/app.css', 'resources/js/app.js'])
     </head>
+    
+    <style>
+        /* Fondo Degradado según Manual de Marca y Referencia */
+        .bg-leadsya-gradient {
+            background: linear-gradient(135deg, #65327c 0%, #7023c8 40%, #00A99D 100%);
+        }
+
+    </style>
 
     <body class="font-sans antialiased">
-        <div class="min-h-screen flex bg-gradient-to-br from-slate-800 via-violet-900 to-purple-900 text-gray-100">
+        <div class="min-h-screen flex bg-gradient-to-br bg-leadsya-gradient">
             {{-- Sidebar --}}
             <livewire:layout.navigation />
 
@@ -25,7 +33,7 @@
             <div class="flex-1 min-w-0 flex flex-col">
                 {{-- Page Heading --}}
                 @if (isset($header))
-                    <header class="sticky top-0 z-10 bg-white/5 backdrop-blur border-b border-white/10">
+                    <header class="sticky top-0 z-10 bg-white/ backdrop-blur border-b border-white/10">
                         <div class="px-6 py-4">
                             {{ $header }}
                         </div>

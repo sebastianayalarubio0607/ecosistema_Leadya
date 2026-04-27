@@ -39,7 +39,14 @@
         @error('url') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
     </div>
 
-    <input type="hidden" name="status" value="{{ old('status', $integration->status ?? 1) }}">
+    <div>
+        <label class="block mb-1 text-white/70">Status *</label>
+        <select name="status" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" required>
+            <option value="1" @selected((string) old('status', (int) ($integration->status ?? 1)) === '1')>Activo</option>
+            <option value="0" @selected((string) old('status', (int) ($integration->status ?? 1)) === '0')>Inactivo</option>
+        </select>
+        @error('status') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+    </div>
 
     <div class="grid grid-cols-1 gap-4 hidden" data-show-for="kommo freshworks hubspot">
         <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
@@ -70,7 +77,7 @@
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden" data-show-for="kommo">
-        <div><label class="block mb-1 text-white/70">token *</label><input name="tokent" value="{{ old('tokent', $integration->tokent ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="kommo">@error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
+        <div><label class="block mb-1 text-white/70">token</label><input name="tokent" value="{{ old('tokent', $integration->tokent ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">crm_Id_phone</label><input name="crm_Id_phone" value="{{ old('crm_Id_phone', $integration->crm_Id_phone ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('crm_Id_phone') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">crm_Id_email</label><input name="crm_Id_email" value="{{ old('crm_Id_email', $integration->crm_Id_email ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('crm_Id_email') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">crm_Id_service</label><input name="crm_Id_service" value="{{ old('crm_Id_service', $integration->crm_Id_service ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('crm_Id_service') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
@@ -221,8 +228,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     conditionalBlocks.forEach(block => {
       const showFor = (block.dataset.showFor || '').split(/\s+/).map(s => s.trim().toLowerCase()).filter(Boolean);
-      const hasError = !!block.querySelector('.text-rose-300');
-      const shouldShow = hasError || (key && showFor.includes(key));
+      const shouldShow = key && showFor.includes(key);
       setBlockVisible(block, shouldShow, key);
     });
 

@@ -14,15 +14,15 @@
     @else
         <div class="flex items-center">
             <div class="py-12 grid grid-cols-12 gap-4 items-center">
-                <div class="col-span-12 md:col-span-4">
-                    <div class="relative h-44">
+                <div class="col-span-12 md:col-span-6">
+                    <div class="relative h-60">
                         <canvas id="{{ $canvasId }}" data-labels='@json($donut['labels'])'
                             data-values='@json($donut['values'])' data-keys='@json($donut['keys'])'
                             data-base-url='@json($donut['base_url'])' data-group-type="{{ $donut['group_type'] }}"></canvas>
                     </div>
                 </div>
 
-                <div class="col-span-12 md:col-span-8">
+                <div class="col-span-12 md:col-span-6">
                     <div class="text-xs text-white/50 mb-2">Leyenda (clic)</div>
                     <div id="{{ $legendId }}" class="space-y-2"></div>
                 </div>

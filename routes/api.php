@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Jobs\SyncMetaLeadsJob;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\LeadController;
 use App\Http\Controllers\IntegrationController;
@@ -9,6 +10,8 @@ use App\Http\Controllers\LeadIntegrationController;
 use App\Http\Middleware\ApiAuthMiddleware;
 use App\Http\Controllers\Api\LeadCrmStateController;
 use App\Http\Controllers\Webhooks\MetaLeadAdsWebhookController;
+use App\Models\Customer;
+use Illuminate\Http\Request;
 
 
 
@@ -50,3 +53,36 @@ Route::post('/integrations/leads/crm-state/{public_key}', [LeadCrmStateControlle
 
 Route::get('/webhooks/meta/lead-ads', [MetaLeadAdsWebhookController::class, 'verify']);
 Route::post('/webhooks/meta/lead-ads', [MetaLeadAdsWebhookController::class, 'receive']);
+
+Route::match(['get', 'post'], '/meta/sync-leads', function (Request $request) {
+    $authValue = $request->bearerToken()
+        ?: $request->header('X-FB-Pixel-ID')
+        ?: $request->header('X-Auth-Token');
+
+    if (blank($authValue)) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Unauthorized: missing authentication value.',
+        ], 401);
+    }
+
+    $authorized = Customer::query()
+        ->whereNotNull('fb_pixel_id')
+        ->where('fb_pixel_id', '!=', '')
+        ->where('fb_pixel_id', $authValue)
+        ->exists();
+
+    if (! $authorized) {
+        return response()->json([
+            'success' => false,
+            'message' => 'Unauthorized: invalid authentication value.',
+        ], 401);
+    }
+
+    SyncMetaLeadsJob::dispatch();
+
+    return response()->json([
+        'success' => true,
+        'message' => 'SyncMetaLeadsJob dispatched successfully.',
+    ]);
+})->middleware('throttle:5,1');
