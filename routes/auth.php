@@ -8,6 +8,11 @@ use App\Http\Controllers\Funnel\FunnelWebController;
 use App\Http\Controllers\Integration\IntegrationWebController;
 use App\Http\Controllers\Integration\MondayBoardController;
 use App\Http\Controllers\IntegrationtypeWebController;
+use App\Http\Controllers\GoogleAds\GoogleAdsAdController;
+use App\Http\Controllers\GoogleAds\GoogleAdsAdGroupController;
+use App\Http\Controllers\GoogleAds\GoogleAdsCampaignController as GoogleAdsMetricsCampaignController;
+use App\Http\Controllers\GoogleAds\GoogleAdsCredentialController;
+use App\Http\Controllers\GoogleAds\GoogleAdsSyncController;
 use App\Http\Controllers\Meta\MetaAccessTokenController;
 use App\Http\Controllers\Meta\MetaAdAccountController;
 use App\Http\Controllers\Meta\MetaAdController;
@@ -57,6 +62,25 @@ Route::middleware('auth')->group(function () {
     Route::resource('customers', CustomerController::class);
     Route::resource('integrationtypes', IntegrationtypeWebController::class);
     Route::resource('integrations', IntegrationWebController::class);
+
+    
+    Route::prefix('google-ads')->name('google-ads.')->group(function () {
+        Route::resource('credentials', GoogleAdsCredentialController::class)
+            ->parameters(['credentials' => 'credential']);
+
+        Route::post('credentials/{credential}/reveal-secret', [GoogleAdsCredentialController::class, 'revealSecret'])
+            ->name('credentials.reveal-secret')
+            ->middleware('throttle:20,1');
+
+        Route::post('credentials/{credential}/refresh-token', [GoogleAdsCredentialController::class, 'refreshToken'])
+            ->name('credentials.refresh-token')
+            ->middleware('throttle:10,1');
+
+        Route::get('campaigns', [GoogleAdsMetricsCampaignController::class, 'index'])->name('campaigns.index');
+        Route::get('ad-groups', [GoogleAdsAdGroupController::class, 'index'])->name('ad-groups.index');
+        Route::get('ads', [GoogleAdsAdController::class, 'index'])->name('ads.index');
+        Route::post('sync/manual', [GoogleAdsSyncController::class, 'sync'])->name('sync.manual');
+    });
 
     /**
      * Routes for managing Monday.com board integrations. These routes allow users to synchronize boards, edit board details, and update board information. The routes are defined for specific actions related to Monday.com integrations and are named for easy reference in the application.

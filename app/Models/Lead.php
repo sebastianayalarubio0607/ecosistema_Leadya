@@ -47,6 +47,8 @@ class Lead extends Model
         'crm_id',
         'crm_state',
         'meta_id_ad',
+        'g_ad',
+        'g_clid',
         'meta_lead_id',
         'meta_page_id',
         'meta_form_id',
@@ -132,6 +134,11 @@ class Lead extends Model
     public function metaCampaign()
     {
         return $this->belongsTo(MetaCampaign::class, 'meta_id_ad', 'meta_campaign_id');
+    }
+
+    public function googleAd()
+    {
+        return $this->belongsTo(GoogleAdsAd::class, 'g_ad', 'google_ad_id');
     }
 
     public function funnelHistories()

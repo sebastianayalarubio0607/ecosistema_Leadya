@@ -67,6 +67,8 @@ class LeadService
             'geo'             => 'sometimes|nullable|string|max:255',
             'agent'           => 'sometimes|nullable|string|max:10000',
             'meta_id_ad'      => 'sometimes|nullable|string|max:255',
+            'g_ad'            => 'sometimes|nullable|string|max:255',
+            'g_clid'          => 'sometimes|nullable|string|max:255',
             'value'           => 'sometimes|nullable|numeric',
             'crm_state'       => 'sometimes|nullable|string|max:255',
             

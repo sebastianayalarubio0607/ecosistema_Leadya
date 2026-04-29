@@ -17,7 +17,8 @@ class CustomerController extends Controller
         $customers = Customer::query()
             ->when($q !== '', function ($query) use ($q) {
                 $query->where('name', 'like', "%{$q}%")
-                    ->orWhere('fb_pixel_id', 'like', "%{$q}%");
+                    ->orWhere('fb_pixel_id', 'like', "%{$q}%")
+                    ->orWhere('id_Gads', 'like', "%{$q}%");
             })
             ->latest()
             ->paginate(10)
@@ -42,6 +43,7 @@ class CustomerController extends Controller
             'status' => ['required', 'in:0,1'],
             'fb_pixel_id' => ['nullable', 'string', 'max:255'],
             'fb_access_token' => ['nullable', 'string', 'max:255'],
+            'id_Gads' => ['nullable', 'string', 'max:32', 'regex:/^[0-9]+$/'],
             'meta_page_ids' => ['sometimes', 'array'],
             'meta_page_ids.*' => ['integer', 'exists:meta_pages,id'],
         ]);
@@ -102,6 +104,7 @@ class CustomerController extends Controller
             'status' => ['required', 'in:0,1'],
             'fb_pixel_id' => ['nullable', 'string', 'max:255'],
             'fb_access_token' => ['nullable', 'string', 'max:255'],
+            'id_Gads' => ['nullable', 'string', 'max:32', 'regex:/^[0-9]+$/'],
             'regenerate_token' => ['nullable', 'boolean'],
             'meta_page_ids' => ['sometimes', 'array'],
             'meta_page_ids.*' => ['integer', 'exists:meta_pages,id'],

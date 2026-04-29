@@ -64,6 +64,30 @@ new class extends Component {
             'icon' => 'list',
         ],
         [
+            'label' => 'GAds Credentials',
+            'route' => 'google-ads.credentials.index',
+            'active' => ['google-ads.credentials.*'],
+            'icon' => 'list',
+        ],
+        [
+            'label' => 'GAds Campaigns',
+            'route' => 'google-ads.campaigns.index',
+            'active' => ['google-ads.campaigns.*'],
+            'icon' => 'chart',
+        ],
+        [
+            'label' => 'GAds Ad Groups',
+            'route' => 'google-ads.ad-groups.index',
+            'active' => ['google-ads.ad-groups.*'],
+            'icon' => 'list',
+        ],
+        [
+            'label' => 'GAds Ads',
+            'route' => 'google-ads.ads.index',
+            'active' => ['google-ads.ads.*'],
+            'icon' => 'list',
+        ],
+        [
             'label' => 'Integration Types',
             'route' => 'integrationtypes.index',
             'active' => ['integrationtypes.*'],

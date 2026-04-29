@@ -23,7 +23,7 @@
                 </h3>
 
                 <p class="mt-2 text-sm text-white/70">
-                    Este es el token REAL (solo se muestra una vez). Cópialo ahora.
+                    Este es el token real y solo se muestra una vez. Cópialo ahora.
                 </p>
 
                 <div class="mt-4">
@@ -52,7 +52,7 @@
                             Copiar
                         </button>
                     </div>
-                    <p id="copyMsg" class="mt-2 hidden text-xs text-emerald-300">Copiado âœ…</p>
+                    <p id="copyMsg" class="mt-2 hidden text-xs text-emerald-300">Copiado</p>
                 </div>
 
                 <div class="mt-6 flex justify-end gap-2">
@@ -96,8 +96,8 @@
             <div>
                 <div class="text-sm text-white/50">Status</div>
                 <div class="mt-1">
-                    <span class="px-2 py-1 rounded-lg text-xs border {{ (int)$customer->status === 1 ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
-                        {{ (int)$customer->status === 1 ? 'Activo' : 'Inactivo' }}
+                    <span class="px-2 py-1 rounded-lg text-xs border {{ (int) $customer->status === 1 ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
+                        {{ (int) $customer->status === 1 ? 'Activo' : 'Inactivo' }}
                     </span>
                 </div>
             </div>
@@ -117,6 +117,11 @@
                 <div class="mt-2 text-sm break-all rounded-xl border border-white/10 bg-slate-900/60 p-3">
                     {{ $customer->fb_access_token ?: '—' }}
                 </div>
+            </div>
+
+            <div>
+                <div class="text-sm text-white/50">ID Google Ads</div>
+                <div class="mt-1">{{ $customer->id_Gads ?: '—' }}</div>
             </div>
 
             <div>

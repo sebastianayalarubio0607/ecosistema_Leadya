@@ -174,10 +174,9 @@
             </div>
         </div>
 
-        @php($opportunitiesSalesChart = $ui['charts']['opportunities_sales_daily'] ?? ['labels' => [], 'datasets' => []])
         <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 w-full">
             <div class="flex items-center justify-between mb-3">
-                <h3 class="text-white font-semibold">Oportunidades vs Ventas por dia</h3>
+                <h3 class="text-white font-semibold">Historico Leads en el Funnel por dia</h3>
                 <div class="text-xs text-white/50">
                     Total:
                     <span class="text-white/80 font-semibold">{{ $ui['totals']['total_leads'] }}</span>
@@ -185,14 +184,14 @@
             </div>
             <div class="h-80 w-full">
                 <canvas id="opportunitiesSalesDailyChart"
-                        data-labels='@json($opportunitiesSalesChart['labels'])'
-                        data-datasets='@json($opportunitiesSalesChart['datasets'])'></canvas>
+                        data-labels='@json($historyDailyChart['labels'])'
+                        data-datasets='@json($historyDailyChart['datasets'])'></canvas>
             </div>
         </div>
 
         <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 w-full">
             <div class="flex items-center justify-between mb-3">
-                <h3 class="text-white font-semibold">Tendencia Oportunidades vs Ventas por dia</h3>
+                <h3 class="text-white font-semibold">Historico Leads en el Funnel por dia</h3>
                 <div class="text-xs text-white/50">
                     Total:
                     <span class="text-white/80 font-semibold">{{ $ui['totals']['total_leads'] }}</span>
@@ -200,14 +199,24 @@
             </div>
             <div class="h-80 w-full">
                 <canvas id="opportunitiesSalesDailyLineChart"
-                        data-labels='@json($opportunitiesSalesChart['labels'])'
-                        data-datasets='@json($opportunitiesSalesChart['datasets'])'></canvas>
+                        data-labels='@json($historyDailyChart['labels'])'
+                        data-datasets='@json($historyDailyChart['datasets'])'></canvas>
             </div>
         </div>
 
         <h2 class="text-2xl text-white font-bold">Datos de Meta - {{ $ui['header']['selected_customer_name'] }}</h2>
 
-        @foreach ($ui['meta_sections'] as $section)
+        @foreach ([$metaCampaignSummary, $metaAdGroupSummary, $metaAdSummary] as $section)
+            @include('dashboard.partials.meta-table-section', [
+                'section' => $section,
+                'customerName' => $ui['header']['selected_customer_name'],
+                'periodLabel' => $ui['summary']['period_label'],
+            ])
+        @endforeach
+
+        <h2 class="text-2xl text-white font-bold">Datos de Google - {{ $ui['header']['selected_customer_name'] }}</h2>
+
+        @foreach ([$googleCampaignSummary, $googleAdGroupSummary, $googleAdSummary] as $section)
             @include('dashboard.partials.meta-table-section', [
                 'section' => $section,
                 'customerName' => $ui['header']['selected_customer_name'],

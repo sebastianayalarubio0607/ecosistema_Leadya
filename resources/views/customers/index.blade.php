@@ -17,7 +17,7 @@
                 <label class="block mb-1 text-white/70">Buscar</label>
                 <input name="q" value="{{ $q }}"
                        class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
-                       placeholder="Buscar por nombre o pixel id..." />
+                       placeholder="Buscar por nombre, pixel id o Google Ads id..." />
             </div>
 
             <div class="md:col-span-2 flex gap-2">
@@ -38,6 +38,7 @@
                         <th class="text-left px-3 py-2">Nombre</th>
                         <th class="text-left px-3 py-2">Status</th>
                         <th class="text-left px-3 py-2">FB Pixel ID</th>
+                        <th class="text-left px-3 py-2">ID Google Ads</th>
                         <th class="text-left px-3 py-2 w-72">Acciones</th>
                     </tr>
                 </thead>
@@ -51,6 +52,7 @@
                                 </span>
                             </td>
                             <td class="px-3 py-2">{{ $customer->fb_pixel_id ?: '—' }}</td>
+                            <td class="px-3 py-2">{{ $customer->id_Gads ?: '—' }}</td>
                             <td class="px-3 py-2">
                                 <div class="flex items-center gap-2">
                                     <a class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs"
@@ -65,7 +67,7 @@
 
                                     <form method="POST"
                                           action="{{ route('customers.destroy', $customer) }}"
-                                          onsubmit="return confirm('Â¿Seguro que deseas eliminar este customer?');">
+                                          onsubmit="return confirm('¿Seguro que deseas eliminar este customer?');">
                                         @csrf
                                         @method('DELETE')
                                         <button class="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-300/20 text-xs" type="submit">
@@ -77,7 +79,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td class="px-3 py-8 text-center text-white/60" colspan="4">No hay customers.</td>
+                            <td class="px-3 py-8 text-center text-white/60" colspan="5">No hay customers.</td>
                         </tr>
                     @endforelse
                 </tbody>

@@ -4,6 +4,9 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use App\Models\FacebookConversionLog;
+use App\Models\GoogleAdsAd;
+use App\Models\GoogleAdsAdGroup;
+use App\Models\GoogleAdsCampaign;
 use \App\Models\MetaAdAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -12,7 +15,7 @@ class Customer extends Model
 {
    use HasFactory;
     protected $table = 'customers'; // Nombre de la tabla
-    protected $fillable = ['name', 'description', 'token', 'status','fb_pixel_id','fb_access_token']; // Campos que se pueden asignar masivamente
+    protected $fillable = ['name', 'description', 'token', 'status','fb_pixel_id','fb_access_token', 'id_Gads']; // Campos que se pueden asignar masivamente
 
     // Método para generar un token hasheado
     public static function generateToken()
@@ -38,5 +41,30 @@ public function metaPages(): HasMany
 public function metaAccessTokens(): HasMany
 {
     return $this->hasMany(MetaAccessToken::class, 'customer_id');
+}
+
+public function googleAdsCampaigns(): HasMany
+{
+    return $this->hasMany(GoogleAdsCampaign::class, 'customer_id');
+}
+
+public function googleAdsAdGroups(): HasMany
+{
+    return $this->hasMany(GoogleAdsAdGroup::class, 'customer_id');
+}
+
+public function googleAdsAds(): HasMany
+{
+    return $this->hasMany(GoogleAdsAd::class, 'customer_id');
+}
+
+public function getIdGadsAttribute(): ?string
+{
+    return $this->attributes['id_Gads'] ?? null;
+}
+
+public function setIdGadsAttribute(?string $value): void
+{
+    $this->attributes['id_Gads'] = $value;
 }
 }

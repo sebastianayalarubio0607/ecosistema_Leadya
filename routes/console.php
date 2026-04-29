@@ -1,6 +1,8 @@
 <?php
 
+use App\Jobs\RefreshGoogleAdsAccessTokenJob;
 use App\Jobs\RefreshMetaLongLivedTokenJob;
+use App\Jobs\SyncGoogleAdsDailyMetricsJob;
 use App\Jobs\SyncMetaFormsJob;
 use App\Jobs\SyncMetaLeadsJob;
 use App\Jobs\SyncMetaPagesJob;
@@ -35,6 +37,16 @@ Schedule::command('meta:sync-insights-yesterday --timezone=America/Bogota')
     // Refresca los tokens de larga duración de Meta diariamente a las 3:00 AM hora de Bogotá
 Schedule::job(new RefreshMetaLongLivedTokenJob())
     ->hourly()
+    ->timezone('America/Bogota')
+    ->withoutOverlapping();
+
+Schedule::job(new RefreshGoogleAdsAccessTokenJob())
+    ->hourly()
+    ->timezone('America/Bogota')
+    ->withoutOverlapping();
+
+Schedule::job(new SyncGoogleAdsDailyMetricsJob())
+    ->dailyAt('03:00')
     ->timezone('America/Bogota')
     ->withoutOverlapping();
 
