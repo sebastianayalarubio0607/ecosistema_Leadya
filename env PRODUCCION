@@ -5,6 +5,7 @@ APP_DEBUG=true
 APP_URL=https://app.leadsya.com
 
 LOG_CHANNEL=stack
+LOG_STACK=single
 LOG_LEVEL=info
 
 DB_CONNECTION=mysql
@@ -33,4 +34,3 @@ MAIL_HOST=sandbox.smtp.mailtrap.io
 MAIL_PORT=2525
 MAIL_USERNAME=3d2449aff7e4bd
 MAIL_PASSWORD=57288ff8d6ce2b
-

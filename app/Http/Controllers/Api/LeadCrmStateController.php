@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Services\Lead\LeadFunnelHistoryService;
 use App\Jobs\SendLeadToFacebook;
+use App\Jobs\SendLeadToGoogleAds;
 use App\Models\CrmState;
 use App\Models\Integration;
 use App\Models\Lead;
@@ -200,6 +201,19 @@ class LeadCrmStateController extends Controller
         // Incrementamos el contador de leads actualizados para llevar un registro del número total de leads que han sido actualizados durante el procesamiento del payload, lo que permite incluir esta información en la respuesta final y tener visibilidad sobre el resultado de la operación
         $updated++;
 
+        if ($this->isGoogleCampaignOrigin($lead->campaign_origin)) {
+            try {
+                SendLeadToGoogleAds::dispatch($lead->id, $newCrmState);
+            } catch (\Throwable $exception) {
+                Log::warning('No fue posible despachar SendLeadToGoogleAds desde cambio de crm_state', [
+                    'lead_id' => $lead->id,
+                    'campaign_origin' => $lead->campaign_origin,
+                    'crm_state' => $newCrmState,
+                    'message' => $exception->getMessage(),
+                ]);
+            }
+        }
+
         // Si el origen de la campaña del lead es una de las plataformas de Facebook (fb, meta, ig, wa) o de mensajería (mg, th), y el nuevo crm_state asignado tiene un meta_event_id asociado, enviamos el lead a Facebook para actualizar su estado en esa plataforma, lo que permite mantener sincronizados los estados de los leads entre nuestro sistema y las plataformas de Facebook y aprovechar las funcionalidades de seguimiento y análisis que ofrecen estas plataformas para optimizar las campañas publicitarias y la gestión de leads
         if (!in_array($lead->campaign_origin, ['fb', 'meta', 'ig', 'wa', 'mg', 'th'], true)) {
             return;
@@ -223,5 +237,12 @@ class LeadCrmStateController extends Controller
 
         // Enviamos el lead a Facebook utilizando un job en segundo plano para actualizar su estado en esa plataforma, lo que permite mantener sincronizados los estados de los leads entre nuestro sistema y las plataformas de Facebook sin afectar el rendimiento de la solicitud actual y manejar posibles reintentos en caso de fallos en la comunicación con las APIs de Facebook
         SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
+    }
+
+    private function isGoogleCampaignOrigin(?string $campaignOrigin): bool
+    {
+        $origin = mb_strtolower(trim((string) $campaignOrigin));
+
+        return in_array($origin, ['google', 'gads', 'google_ads', 'google ads'], true);
     }
 }

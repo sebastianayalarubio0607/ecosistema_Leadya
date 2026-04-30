@@ -8,8 +8,10 @@ use App\Http\Services\Lead\LeadFunnelHistoryService;
 use App\Http\Services\Lead\LeadService;
 use App\Jobs\ProcessLeadIntegrationsJob;
 use App\Jobs\SendLeadToFacebook;
+use App\Jobs\SendLeadToGoogleAds;
 use App\Models\Lead;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 
 class LeadController extends Controller
 {
@@ -86,6 +88,18 @@ class LeadController extends Controller
          * Registra el cambio en el funnel del lead, si es que aplica. Esto se hace después de crear el lead para asegurar que cualquier cambio relevante en el estado del lead se capture correctamente en el historial del funnel. El servicio LeadFunnelHistoryService se encarga de determinar si hubo un cambio significativo en el funnel y registra esa información para su posterior análisis o visualización.
          */
         $historyService->recordIfFunnelChanged($lead);
+
+        if ($this->isGoogleCampaignOrigin($lead->campaign_origin)) {
+            try {
+                SendLeadToGoogleAds::dispatch($lead->id);
+            } catch (\Throwable $exception) {
+                Log::warning('No fue posible despachar SendLeadToGoogleAds.', [
+                    'lead_id' => $lead->id,
+                    'campaign_origin' => $lead->campaign_origin,
+                    'message' => $exception->getMessage(),
+                ]);
+            }
+        }
 
         /*
         * Buscar integraciones activas del customer
@@ -195,5 +209,12 @@ class LeadController extends Controller
         return response()->json([
             'message' => 'Lead deleted successfully',
         ]);
+    }
+
+    private function isGoogleCampaignOrigin(?string $campaignOrigin): bool
+    {
+        $origin = mb_strtolower(trim((string) $campaignOrigin));
+
+        return in_array($origin, ['google', 'gads', 'google_ads', 'google ads'], true);
     }
 }

@@ -1,9 +1,13 @@
 @extends('meta.layout')
 
 @section('title', 'CRM States')
-@section('subtitle', 'Estados del CRM + asignación a Meta Event (conversión)')
+@section('subtitle', 'Estados del CRM y asignacion de conversiones')
 
 @section('header_actions')
+    <a href="{{ route('google-ads.conversion-jobs.index') }}"
+       class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">
+        Google Ads Jobs
+    </a>
     <a href="{{ route('crmstates.create') }}"
        class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10">
         + Nuevo
@@ -40,6 +44,7 @@
                         <th class="text-left px-3 py-2">Sin gestionar</th>
                         <th class="text-left px-3 py-2">Qualification</th>
                         <th class="text-left px-3 py-2">Meta Event</th>
+                        <th class="text-left px-3 py-2">Google Ads</th>
                         <th class="text-left px-3 py-2 w-56">Acciones</th>
                     </tr>
                 </thead>
@@ -50,13 +55,19 @@
                             <td class="px-3 py-2">
                                 {{ $it->id }}
                                 <div class="text-xs text-white/50">
-                                    Leads: {{ method_exists($it, 'leads') ? $it->leads()->count() : '—' }}
+                                    Leads: {{ method_exists($it, 'leads') ? $it->leads()->count() : '--' }}
                                 </div>
                             </td>
                             <td class="px-3 py-2">{{ $it->name }}</td>
-                            <td class="px-3 py-2">{{ $it->unmanaged ? 'Sí' : 'No' }}</td>
-                            <td class="px-3 py-2">{{ $it->qualificationModel?->name ?? '—' }}</td>
-                            <td class="px-3 py-2">{{ $it->metaEvent?->nombre ?? '—' }}</td>
+                            <td class="px-3 py-2">{{ $it->unmanaged ? 'Si' : 'No' }}</td>
+                            <td class="px-3 py-2">{{ $it->qualificationModel?->name ?? '--' }}</td>
+                            <td class="px-3 py-2">{{ $it->metaEvent?->nombre ?? '--' }}</td>
+                            <td class="px-3 py-2">
+                                <span class="px-2 py-1 rounded-lg text-xs border {{ $it->google_ads_conversion_enabled ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
+                                    {{ $it->google_ads_conversion_enabled ? 'Activa' : 'Inactiva' }}
+                                </span>
+                                <div class="text-xs text-white/50 mt-1">{{ $it->google_ads_conversion_action_name ?? '--' }}</div>
+                            </td>
                             <td class="px-3 py-2">
                                 <div class="flex items-center gap-2">
                                     <a class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs"
@@ -68,7 +79,7 @@
                                     <form action="{{ route('crmstates.destroy', $it) }}" method="POST">
                                         @csrf @method('DELETE')
                                         <button class="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-300/20 text-xs"
-                                                onclick="return confirm('¿Eliminar CRM State?')">
+                                                onclick="return confirm('Eliminar CRM State?')">
                                             Eliminar
                                         </button>
                                     </form>
@@ -77,7 +88,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="px-3 py-8 text-center text-white/60">No hay CRM States.</td>
+                            <td colspan="7" class="px-3 py-8 text-center text-white/60">No hay CRM States.</td>
                         </tr>
                     @endforelse
                 </tbody>

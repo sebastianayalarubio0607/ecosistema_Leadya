@@ -19,10 +19,18 @@ class CrmState extends Model
         'qualification',
         'meta_event_id',
         'unmanaged',
+        'google_ads_conversion_action_id',
+        'google_ads_conversion_action_name',
+        'google_ads_conversion_action_resource_name',
+        'google_ads_conversion_enabled',
+        'google_ads_conversion_value',
+        'google_ads_conversion_currency',
     ];
 
     protected $casts = [
         'unmanaged' => 'boolean',
+        'google_ads_conversion_enabled' => 'boolean',
+        'google_ads_conversion_value' => 'decimal:2',
     ];
 
     public function leads()

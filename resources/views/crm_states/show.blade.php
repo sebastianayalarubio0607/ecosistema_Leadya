@@ -1,13 +1,13 @@
 @extends('meta.layout')
 
 @section('title', 'Ver CRM State')
-@section('subtitle', 'Detalle del estado, qualification y conversión (Meta Event)')
+@section('subtitle', 'Detalle del estado, qualification y conversiones')
 
 @section('header_actions')
     <div class="flex gap-2">
         <a href="{{ route('crmstates.index') }}"
            class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">
-            ← Volver
+            Volver
         </a>
         <a href="{{ route('crmstates.edit', $crmstate) }}"
            class="px-4 py-2 rounded-xl bg-indigo-500/20 hover:bg-indigo-500/30 text-white border border-white/10">
@@ -31,11 +31,11 @@
 
             <div class="rounded-xl border border-white/10 bg-white/5 p-3">
                 <div class="text-xs text-white/50">Qualification</div>
-                <div class="text-white">{{ $crmstate->qualificationModel?->name ?? '—' }}</div>
+                <div class="text-white">{{ $crmstate->qualificationModel?->name ?? '--' }}</div>
             </div>
             <div class="rounded-xl border border-white/10 bg-white/5 p-3">
                 <div class="text-xs text-white/50">Sin gestionar</div>
-                <div class="text-white">{{ $crmstate->unmanaged ? 'Sí' : 'No' }}</div>
+                <div class="text-white">{{ $crmstate->unmanaged ? 'Si' : 'No' }}</div>
             </div>
         </div>
 
@@ -45,7 +45,7 @@
                 <div class="text-white">{{ $integrationId }}</div>
                 <div class="text-xs text-white/50 mt-2">Customer / Integration</div>
                 <div class="text-white">
-                    {{ $integration?->customer?->name ?? '—' }} — {{ $integration?->name ?? '—' }}
+                    {{ $integration?->customer?->name ?? '--' }} - {{ $integration?->name ?? '--' }}
                 </div>
             </div>
 
@@ -55,17 +55,38 @@
             </div>
 
             <div class="rounded-xl border border-white/10 bg-white/5 p-3">
-                <div class="text-xs text-white/50">Meta Event (Conversión)</div>
-                <div class="text-white">{{ $crmstate->metaEvent?->nombre ?? '—' }}</div>
+                <div class="text-xs text-white/50">Meta Event (Conversion)</div>
+                <div class="text-white">{{ $crmstate->metaEvent?->nombre ?? '--' }}</div>
                 <div class="text-xs text-white/50 mt-2">Estado Meta Event</div>
-                <div class="text-white">{{ $crmstate->metaEvent?->estados ?? '—' }}</div>
+                <div class="text-white">{{ $crmstate->metaEvent?->estados ?? '--' }}</div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                <div class="text-xs text-white/50">Google Ads</div>
+                <div class="text-white">{{ $crmstate->google_ads_conversion_enabled ? 'Activo' : 'Inactivo' }}</div>
+            </div>
+
+            <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                <div class="text-xs text-white/50">Conversion Action</div>
+                <div class="text-white">{{ $crmstate->google_ads_conversion_action_name ?? '--' }}</div>
+                <div class="text-xs text-white/50 mt-2">{{ $crmstate->google_ads_conversion_action_resource_name ?? '--' }}</div>
+            </div>
+
+            <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                <div class="text-xs text-white/50">Valor</div>
+                <div class="text-white">
+                    {{ $crmstate->google_ads_conversion_value ?? '0.50' }}
+                    {{ $crmstate->google_ads_conversion_currency ?? 'COP' }}
+                </div>
             </div>
         </div>
 
         <form action="{{ route('crmstates.destroy', $crmstate) }}" method="POST">
             @csrf @method('DELETE')
             <button class="px-4 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-300/20 text-white"
-                    onclick="return confirm('¿Eliminar CRM State?')">
+                    onclick="return confirm('Eliminar CRM State?')">
                 Eliminar
             </button>
         </form>

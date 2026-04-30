@@ -11,6 +11,7 @@ use App\Http\Controllers\IntegrationtypeWebController;
 use App\Http\Controllers\GoogleAds\GoogleAdsAdController;
 use App\Http\Controllers\GoogleAds\GoogleAdsAdGroupController;
 use App\Http\Controllers\GoogleAds\GoogleAdsCampaignController as GoogleAdsMetricsCampaignController;
+use App\Http\Controllers\GoogleAds\GoogleAdsConversionController;
 use App\Http\Controllers\GoogleAds\GoogleAdsCredentialController;
 use App\Http\Controllers\GoogleAds\GoogleAdsSyncController;
 use App\Http\Controllers\Meta\MetaAccessTokenController;
@@ -79,6 +80,9 @@ Route::middleware('auth')->group(function () {
         Route::get('campaigns', [GoogleAdsMetricsCampaignController::class, 'index'])->name('campaigns.index');
         Route::get('ad-groups', [GoogleAdsAdGroupController::class, 'index'])->name('ad-groups.index');
         Route::get('ads', [GoogleAdsAdController::class, 'index'])->name('ads.index');
+        Route::get('conversion-actions', [GoogleAdsConversionController::class, 'conversionActions'])->name('conversion-actions.index');
+        Route::get('conversion-jobs', [GoogleAdsConversionController::class, 'index'])->name('conversion-jobs.index');
+        Route::post('failed-jobs/{failedJob}/retry', [GoogleAdsConversionController::class, 'retry'])->name('failed-jobs.retry');
         Route::post('sync/manual', [GoogleAdsSyncController::class, 'sync'])->name('sync.manual');
     });
 
