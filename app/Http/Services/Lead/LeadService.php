@@ -69,6 +69,11 @@ class LeadService
             'meta_id_ad'      => 'sometimes|nullable|string|max:255',
             'g_ad'            => 'sometimes|nullable|string|max:255',
             'g_clid'          => 'sometimes|nullable|string|max:255',
+            'gclid'           => 'sometimes|nullable|string|max:255',
+            'gbraid'          => 'sometimes|nullable|string|max:255',
+            'wbraid'          => 'sometimes|nullable|string|max:255',
+            'gad_source'      => 'sometimes|nullable|string|max:255',
+            'gad_campaignid'  => 'sometimes|nullable|string|max:255',
             'value'           => 'sometimes|nullable|numeric',
             'crm_state'       => 'sometimes|nullable|string|max:255',
             

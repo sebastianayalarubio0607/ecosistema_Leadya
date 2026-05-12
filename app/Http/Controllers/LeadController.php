@@ -89,25 +89,54 @@ class LeadController extends Controller
          */
         $historyService->recordIfFunnelChanged($lead);
 
-        if ($this->isGoogleCampaignOrigin($lead->campaign_origin)) {
+        /*
+        * Buscar integraciones activas del customer
+        */
+        $integrations = $this->integrationService->getActiveIntegrations($lead->customer_id);
+
+        /**
+         * Carga la relación campaignOrigin -> source solo si aún no está cargada.
+         * Esto permite validar el Source relacionado sin romper si el Origin no tiene Source asignado.
+         */
+        $lead->loadMissing('campaignOrigin.source');
+
+        $sourceName = $lead->campaignOrigin?->source?->name;
+        $isMetaSource = strcasecmp($sourceName ?? '', 'Meta Ads') === 0;
+        $isGoogleSource = strcasecmp($sourceName ?? '', 'Google Ads') === 0;
+
+        /**
+         * Si el Source del origen de campaña es Meta Ads, se despacha un trabajo
+         * para enviar el lead a Facebook Conversions API.
+         *
+         * Se mantiene fallback con los valores legacy para no romper leads existentes
+         * que todavía dependan de campaign_origin como texto/código.
+         */
+        $isMetaAds = $isMetaSource
+            || (!$isGoogleSource && in_array($lead->campaign_origin, ['fb', 'meta', 'ig', 'wa', 'mg', 'th'], true));
+        $isGoogleAds = $isGoogleSource
+            || (!$isMetaSource && $this->isGoogleCampaignOrigin($lead->campaign_origin));
+
+        if ($isMetaAds) {
+            SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
+        } elseif ($isGoogleAds) {
+
+        /**
+         * Si el Source del origen de campaña es Google Ads, se despacha un trabajo
+         * para enviar el lead a Google Ads Conversions API.
+         *
+         * Se mantiene fallback con la validación actual isGoogleCampaignOrigin()
+         * para no romper la lógica existente.
+         */
             try {
                 SendLeadToGoogleAds::dispatch($lead->id);
             } catch (\Throwable $exception) {
                 Log::warning('No fue posible despachar SendLeadToGoogleAds.', [
                     'lead_id' => $lead->id,
                     'campaign_origin' => $lead->campaign_origin,
+                    'source_name' => $sourceName,
                     'message' => $exception->getMessage(),
                 ]);
             }
-        }
-
-        /*
-        * Buscar integraciones activas del customer
-        */
-        $integrations = $this->integrationService->getActiveIntegrations($lead->customer_id);
-
-        if (in_array($lead->campaign_origin, ['fb', 'meta', 'ig', 'wa', 'mg', 'th'], true)) {
-            SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
         }
 
         /**
@@ -168,6 +197,11 @@ class LeadController extends Controller
 
             // ✅ permitir crm_state (si este endpoint lo modifica)
             'crm_state' => 'sometimes|nullable|string|max:255',
+            'gclid' => 'sometimes|nullable|string|max:255',
+            'gbraid' => 'sometimes|nullable|string|max:255',
+            'wbraid' => 'sometimes|nullable|string|max:255',
+            'gad_source' => 'sometimes|nullable|string|max:255',
+            'gad_campaignid' => 'sometimes|nullable|string|max:255',
         ]);
 
         $lead->fill($validated);

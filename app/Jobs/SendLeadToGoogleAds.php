@@ -15,6 +15,11 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
+/**
+ * Trabajo para enviar un lead a Google Ads Conversions API de forma asíncrona.
+ * Esto permite que el proceso de creación/actualización del lead no se vea afectado por la latencia o posibles errores en la comunicación con Google Ads, mejorando la experiencia del usuario y la robustez del sistema.
+ * El trabajo recibe el ID del lead y opcionalmente el ID del CrmState, y utiliza el GoogleAdsConversionsService para enviar el evento a Google Ads.    
+ */
 class SendLeadToGoogleAds implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;

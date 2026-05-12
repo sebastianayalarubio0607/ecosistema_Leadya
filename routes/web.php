@@ -5,6 +5,7 @@ use App\Http\Controllers\GeoController;
 use App\Http\Controllers\LanguageController;
 use App\Http\Controllers\OriginController;
 use App\Http\Controllers\PlatformController;
+use App\Http\Controllers\SourceController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\UrlGeneratorController;
 
@@ -23,6 +24,7 @@ Route::view('profile', 'profile')
     ->name('profile');
 
 Route::middleware(['auth'])->group(function () {
+    Route::resource('sources', SourceController::class);
     Route::resource('origins', OriginController::class);
     Route::resource('platforms', PlatformController::class);
     Route::resource('geos', GeoController::class);

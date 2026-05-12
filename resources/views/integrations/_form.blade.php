@@ -48,7 +48,7 @@
         @error('status') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
     </div>
 
-    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="kommo freshworks hubspot">
+    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="kommo freshworks hubspot gohighlevel">
         <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
             <p class="text-sm text-white/70">
                 Si está desactivado, se usa el ID de integración como prefijo del <span class="font-mono">crm_id</span>.
@@ -101,10 +101,40 @@
         <div class="md:col-span-2"><label class="block mb-1 text-white/70">custom_field *</label><textarea name="custom_field" rows="8" class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-sm text-white" placeholder='json con los campos necesarios para crear el lead' data-required-for="freshworks">{{ old('custom_field', $integration->custom_field ?? '') }}</textarea>@error('custom_field') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
     </div>
 
+    @php
+        $gohighlevelBodyPlaceholder = <<<'JSON'
+{
+  "firstName": "{{$lead->firstName}}",
+  "lastName": "{{$lead->lastName}}",
+  "locationId": "fWWCKm54Zd8T0LLVW4kN",
+  "email": "{{$lead->email}}",
+  "phone": "{{$lead->phone}}",
+  "source": "Meta Lead Ads",
+  "tags": ["lead-web", "meta-lead"]
+}
+JSON;
+    @endphp
+
+    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="gohighlevel">
+        <div>
+            <label class="block mb-1 text-white/70">Token LeadConnector / GoHighLevel *</label>
+            <input name="tokent" type="password" value="{{ old('tokent', $integration->tokent ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="gohighlevel">
+            @error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+            <p class="mt-1 text-xs text-white/50">Se envia como Bearer token. El endpoint por defecto es contacts/upsert de LeadConnector si dejas la URL vacia.</p>
+        </div>
+
+        <div>
+            <label class="block mb-1 text-white/70">Body JSON template *</label>
+            <textarea name="body" rows="12" class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-sm text-white" placeholder="{{ $gohighlevelBodyPlaceholder }}" data-required-for="gohighlevel">{{ old('body', $integration->body ?? '') }}</textarea>
+            @error('body') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+            <p class="mt-1 text-xs text-white/50">Acepta variables simples del lead como <span class="font-mono">@{{ $lead->email }}</span>. Incluye <span class="font-mono">locationId</span> aqui si tu cuenta lo requiere.</p>
+        </div>
+    </div>
+
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden" data-show-for="salesforce">
         <div><label class="block mb-1 text-white/70">url_credenciales *</label><input name="url_credenciales" value="{{ old('url_credenciales', $integration->url_credenciales ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="https://..." data-required-for="salesforce">@error('url_credenciales') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
-        <div><label class="block mb-1 text-white/70">Username *</label><input name="username" value="{{ old('username', $integration->username ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="salesforce">@error('username') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
-        <div><label class="block mb-1 text-white/70">Password *</label><input name="password" type="password" value="{{ old('password', $integration->password ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="salesforce">@error('password') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
+        <div><label class="block mb-1 text-white/70">Client ID / Consumer Key *</label><input name="username" value="{{ old('username', $integration->username ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="salesforce">@error('username') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
+        <div><label class="block mb-1 text-white/70">Client Secret / Consumer Secret *</label><input name="password" type="password" value="{{ old('password', $integration->password ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="salesforce">@error('password') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">token</label><input name="tokent" value="{{ old('tokent', $integration->tokent ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" readonly>@error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div class="md:col-span-2"><label class="block mb-1 text-white/70">body *</label><textarea name="body" rows="10" class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-sm text-white" placeholder='json con el payload a enviar a Salesforce' data-required-for="salesforce">{{ old('body', $integration->body ?? '') }}</textarea>@error('body') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
     </div>
@@ -193,6 +223,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (key.includes('salesforce')) return 'salesforce';
     if (key.includes('monday')) return 'monday';
     if (key.includes('hubspot')) return 'hubspot';
+    if (key.includes('gohighlevel') || key.includes('go_high_level') || key.includes('leadconnector') || key.includes('lead_connector')) return 'gohighlevel';
     return key;
   }
 
@@ -216,7 +247,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function refreshCrmPrefixRequirement() {
     if (!crmPrefixInput || !crmPrefixToggle) return;
     const key = getSelectedKey();
-    const supportsCustomPrefix = key === 'kommo' || key === 'freshworks' || key === 'hubspot';
+    const supportsCustomPrefix = key === 'kommo' || key === 'freshworks' || key === 'hubspot' || key === 'gohighlevel';
     const isEnabled = supportsCustomPrefix && crmPrefixToggle.checked;
 
     crmPrefixInput.disabled = !isEnabled;
@@ -234,9 +265,13 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (baseUrlBlock && baseUrlInput) {
       const shouldHideBaseUrl = key === 'hubspot';
+      const shouldRequireBaseUrl = key !== 'hubspot' && key !== 'gohighlevel';
       baseUrlBlock.classList.toggle('hidden', shouldHideBaseUrl);
       baseUrlInput.disabled = shouldHideBaseUrl;
-      baseUrlInput.required = !shouldHideBaseUrl;
+      baseUrlInput.required = shouldRequireBaseUrl;
+      baseUrlInput.placeholder = key === 'gohighlevel'
+        ? 'https://services.leadconnectorhq.com/contacts/upsert'
+        : 'https://...';
     }
 
     refreshCrmPrefixRequirement();

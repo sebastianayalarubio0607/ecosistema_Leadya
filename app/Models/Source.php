@@ -3,13 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class Origin extends Model
+class Source extends Model
 {
     protected $fillable = [
-        'source_id',
-        'code',
         'name',
         'is_active',
     ];
@@ -18,8 +16,8 @@ class Origin extends Model
         'is_active' => 'boolean',
     ];
 
-    public function source(): BelongsTo
+    public function origins(): HasMany
     {
-        return $this->belongsTo(Source::class);
+        return $this->hasMany(Origin::class);
     }
 }

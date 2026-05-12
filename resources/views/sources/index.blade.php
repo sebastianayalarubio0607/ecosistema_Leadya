@@ -1,10 +1,10 @@
 @extends('meta.layout')
 
-@section('title', 'Origins')
-@section('subtitle', 'Catálogo de orígenes para el generador de URLs')
+@section('title', 'Sources')
+@section('subtitle', 'Catalogo de sources para origenes')
 
 @section('header_actions')
-    <a href="{{ route('origins.create') }}"
+    <a href="{{ route('sources.create') }}"
        class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10">
         + Nuevo
     </a>
@@ -17,14 +17,14 @@
                 <label class="block mb-1 text-white/70">Buscar</label>
                 <input name="q" value="{{ $q ?? request('q') }}"
                        class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
-                       placeholder="Buscar por código o nombre">
+                       placeholder="Buscar por nombre">
             </div>
 
             <div class="md:col-span-2 flex gap-2">
                 <button class="w-full px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">
                     Buscar
                 </button>
-                <a href="{{ route('origins.index') }}"
+                <a href="{{ route('sources.index') }}"
                    class="w-full text-center px-4 py-2 rounded-xl bg-zinc-950/25 hover:bg-white/10 text-white border border-white/10">
                     Limpiar
                 </a>
@@ -36,9 +36,7 @@
                 <thead class="bg-white/5 text-white/70">
                     <tr>
                         <th class="text-left px-3 py-2">ID</th>
-                        <th class="text-left px-3 py-2">Código</th>
                         <th class="text-left px-3 py-2">Nombre</th>
-                        <th class="text-left px-3 py-2">Source</th>
                         <th class="text-left px-3 py-2">Estado</th>
                         <th class="text-left px-3 py-2">Actualizado</th>
                         <th class="text-left px-3 py-2 w-56">Acciones</th>
@@ -46,31 +44,27 @@
                 </thead>
 
                 <tbody class="divide-y divide-white/10 text-white/80">
-                    @forelse($origins as $origin)
+                    @forelse($sources as $source)
                         <tr class="hover:bg-white/5">
-                            <td class="px-3 py-2">{{ $origin->id }}</td>
+                            <td class="px-3 py-2">{{ $source->id }}</td>
+                            <td class="px-3 py-2">{{ $source->name }}</td>
                             <td class="px-3 py-2">
-                                <span class="px-2 py-1 rounded-lg bg-white/10 border border-white/10 text-xs">{{ $origin->code }}</span>
-                            </td>
-                            <td class="px-3 py-2">{{ $origin->name }}</td>
-                            <td class="px-3 py-2">{{ optional($origin->source)->name ?? 'Sin source' }}</td>
-                            <td class="px-3 py-2">
-                                <span class="px-2 py-1 rounded-lg text-xs border {{ $origin->is_active ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
-                                    {{ $origin->is_active ? 'Activo' : 'Inactivo' }}
+                                <span class="px-2 py-1 rounded-lg text-xs border {{ $source->is_active ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
+                                    {{ $source->is_active ? 'Activo' : 'Inactivo' }}
                                 </span>
                             </td>
-                            <td class="px-3 py-2">{{ optional($origin->updated_at)->format('Y-m-d H:i') }}</td>
+                            <td class="px-3 py-2">{{ optional($source->updated_at)->format('Y-m-d H:i') }}</td>
                             <td class="px-3 py-2">
                                 <div class="flex items-center gap-2">
                                     <a class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs"
-                                       href="{{ route('origins.show', $origin) }}">Ver</a>
+                                       href="{{ route('sources.show', $source) }}">Ver</a>
                                     <a class="px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-white/10 text-xs"
-                                       href="{{ route('origins.edit', $origin) }}">Editar</a>
-                                    <form action="{{ route('origins.destroy', $origin) }}" method="POST">
+                                       href="{{ route('sources.edit', $source) }}">Editar</a>
+                                    <form action="{{ route('sources.destroy', $source) }}" method="POST">
                                         @csrf
                                         @method('DELETE')
                                         <button class="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-300/20 text-xs"
-                                                onclick="return confirm('¿Eliminar origen?')">
+                                                onclick="return confirm('Eliminar source?')">
                                             Eliminar
                                         </button>
                                     </form>
@@ -79,13 +73,13 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="px-3 py-8 text-center text-white/60">No hay orígenes registrados.</td>
+                            <td colspan="5" class="px-3 py-8 text-center text-white/60">No hay sources registrados.</td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
 
-        <div>{{ $origins->links() }}</div>
+        <div>{{ $sources->links() }}</div>
     </div>
 @endsection

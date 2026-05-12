@@ -23,6 +23,22 @@
     </div>
 
     <div>
+        <label class="block mb-1 text-white/70">Source</label>
+        @php($sourceId = (string) old('source_id', $origin->source_id ?? ''))
+        <select
+            name="source_id"
+            class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white"
+        >
+            <option value="" @selected($sourceId === '')>Sin source</option>
+            @foreach($sources as $source)
+                <option value="{{ $source->id }}" @selected($sourceId === (string) $source->id)>
+                    {{ $source->name }}
+                </option>
+            @endforeach
+        </select>
+    </div>
+
+    <div>
         <label class="block mb-1 text-white/70">Estado *</label>
         @php($isActive = (string) old('is_active', isset($origin) ? (int) $origin->is_active : 1))
         <select

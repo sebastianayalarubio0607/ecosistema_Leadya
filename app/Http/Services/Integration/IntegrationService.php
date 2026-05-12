@@ -3,6 +3,7 @@
 namespace App\Http\Services\Integration;
 
 use App\Http\Services\Integration\FreshworksIntegrationService;
+use App\Http\Services\Integration\GohighlevelService;
 use App\Http\Services\Integration\GoogleSheetsIntegrationService;
 use App\Http\Services\Integration\KommoIntegrationService;
 use App\Http\Services\Integration\LetyIntegrationService;
@@ -27,6 +28,7 @@ class IntegrationService
     private $SalesforceIntegrationService;
     private $MondayIntegrationService;
     private $HubspotIntegrationService;
+    private $GohighlevelService;
 
     public function __construct(
         GoogleSheetsIntegrationService $GooglesheetsIntegrationService,
@@ -36,7 +38,8 @@ class IntegrationService
         FreshworksIntegrationService $FreshworksIntegrationService,
         SalesforceIntegrationService $SalesforceIntegrationService,
         MondayIntegrationService $MondayIntegrationService,
-        HubspotIntegrationService $HubspotIntegrationService
+        HubspotIntegrationService $HubspotIntegrationService,
+        GohighlevelService $GohighlevelService
     ) {
         $this->GooglesheetsIntegrationService = $GooglesheetsIntegrationService;
         $this->KommoIntegrationService = $KommoIntegrationService;
@@ -46,6 +49,7 @@ class IntegrationService
         $this->SalesforceIntegrationService = $SalesforceIntegrationService;
         $this->MondayIntegrationService = $MondayIntegrationService;
         $this->HubspotIntegrationService = $HubspotIntegrationService;
+        $this->GohighlevelService = $GohighlevelService;
     }
 
     public function getActiveIntegrations($customer_id)
@@ -89,6 +93,7 @@ class IntegrationService
                 'salesforce' => fn() => $this->SalesforceIntegrationService->sendToSalesforce($lead, $integration),
                 'monday' => fn() => $this->MondayIntegrationService->sendToMonday($lead, $integration),
                 'hubspot' => fn() => $this->HubspotIntegrationService->sendToHubspot($lead, $integration),
+                'gohighlevel' => fn() => $this->GohighlevelService->sendToGohighlevel($lead, $integration),
             ];
 
             $serviceMap = [
@@ -100,6 +105,7 @@ class IntegrationService
                 'salesforce' => $this->SalesforceIntegrationService::class,
                 'monday' => $this->MondayIntegrationService::class,
                 'hubspot' => $this->HubspotIntegrationService::class,
+                'gohighlevel' => $this->GohighlevelService::class,
             ];
 
             $handler = $handlers[$type] ?? null;
@@ -175,6 +181,7 @@ class IntegrationService
 
         return match ($normalized) {
             'googlesheets' => 'google_sheets',
+            'go_high_level', 'leadconnector', 'lead_connector' => 'gohighlevel',
             default => $normalized !== '' ? $normalized : 'webhook',
         };
     }
@@ -216,6 +223,12 @@ class IntegrationService
                 'token_present' => filled($integration->tokent),
                 'dealname_present' => filled($integration->dealname),
                 'dealstage_present' => filled($integration->dealstage),
+                'body_present' => filled($integration->body),
+            ],
+            'gohighlevel' => [
+                'integration_url' => $integration->url,
+                'url_present' => filled($integration->url),
+                'token_present' => filled($integration->tokent),
                 'body_present' => filled($integration->body),
             ],
             default => [

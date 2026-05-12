@@ -13,6 +13,8 @@ use Illuminate\Validation\ValidationException;
 
 class IntegrationWebController extends Controller
 {
+    private const DEFAULT_GOHIGHLEVEL_URL = 'https://services.leadconnectorhq.com/contacts/upsert';
+
     public function index(Request $request)
     {
         $q = $request->get('q');
@@ -116,7 +118,7 @@ class IntegrationWebController extends Controller
             'description' => 'nullable|string',
             'integrationtype_id' => 'required|exists:integrationtypes,id',
             'customer_id' => 'required|exists:customers,id',
-            'url' => ($typeName === 'hubspot' ? 'nullable' : 'required').'|url',
+            'url' => (in_array($typeName, ['hubspot', 'gohighlevel'], true) ? 'nullable' : 'required').'|url',
             'status' => 'required|boolean',
             'crm_Id_phone' => ['nullable', 'string', 'max:255'],
             'crm_Id_service' => ['nullable', 'string', 'max:255'],
@@ -181,6 +183,11 @@ class IntegrationWebController extends Controller
             $rules['body'] = ['required', 'string'];
         }
 
+        if ($typeName === 'gohighlevel') {
+            $rules['tokent'] = ['required', 'string'];
+            $rules['body'] = ['required', 'string'];
+        }
+
         if ($updating) {
             $rules['regenerate_public_key'] = 'nullable|boolean';
         }
@@ -201,7 +208,7 @@ class IntegrationWebController extends Controller
             Integrationtype::whereKey($validated['integrationtype_id'])->value('name')
         );
 
-        if ($typeName !== 'hubspot' && empty($validated['url'])) {
+        if (!in_array($typeName, ['hubspot', 'gohighlevel'], true) && empty($validated['url'])) {
             throw ValidationException::withMessages([
                 'url' => 'El campo URL es obligatorio.',
             ]);
@@ -270,7 +277,17 @@ class IntegrationWebController extends Controller
             $validated = $this->validateCrmIdPrefixPayload($validated, 'HubSpot');
         }
 
-        if (!in_array($typeName, ['google_sheets', 'kommo', 'zoho', 'freshworks', 'salesforce', 'monday', 'hubspot'], true)) {
+        if ($typeName === 'gohighlevel') {
+            $validated = $this->clearKommoFields($validated);
+            $validated = $this->clearZohoFieldsPreservingToken($validated);
+            $validated = $this->clearFreshworksFields($validated);
+            $validated = $this->clearSalesforceCredentialFields($validated);
+            $validated = $this->clearHubspotFields($validated);
+            $validated = $this->validateGohighlevelPayload($validated);
+            $validated = $this->validateCrmIdPrefixPayload($validated, 'GoHighLevel');
+        }
+
+        if (!in_array($typeName, ['google_sheets', 'kommo', 'zoho', 'freshworks', 'salesforce', 'monday', 'hubspot', 'gohighlevel'], true)) {
             $validated = $this->clearHubspotFields($validated);
             $validated = $this->clearCrmIdPrefixFields($validated);
         }
@@ -280,13 +297,18 @@ class IntegrationWebController extends Controller
 
     private function normalizeIntegrationTypeName(?string $typeName): string
     {
-        return Str::of((string) $typeName)
+        $normalized = Str::of((string) $typeName)
             ->ascii()
             ->lower()
             ->replace([' ', '-'], '_')
             ->replaceMatches('/_+/', '_')
             ->trim('_')
             ->toString();
+
+        return match ($normalized) {
+            'go_high_level', 'leadconnector', 'lead_connector' => 'gohighlevel',
+            default => $normalized,
+        };
     }
 
     private function validateFreshworksPayload(array $payload): array
@@ -327,8 +349,8 @@ class IntegrationWebController extends Controller
     {
         $required = [
             'url_credenciales' => 'url_credenciales',
-            'username' => 'Username',
-            'password' => 'Password',
+            'username' => 'Client ID / Consumer Key',
+            'password' => 'Client Secret / Consumer Secret',
             'body' => 'body',
         ];
 
@@ -395,6 +417,35 @@ class IntegrationWebController extends Controller
         return $payload;
     }
 
+    private function validateGohighlevelPayload(array $payload): array
+    {
+        $required = [
+            'tokent' => 'token de LeadConnector / GoHighLevel',
+            'body' => 'body JSON template',
+        ];
+
+        $messages = [];
+        foreach ($required as $field => $label) {
+            if (empty($payload[$field])) {
+                $messages[$field] = "Para GoHighLevel el campo {$label} es obligatorio.";
+            }
+        }
+
+        if (empty($payload['url'])) {
+            $payload['url'] = self::DEFAULT_GOHIGHLEVEL_URL;
+        }
+
+        if (!empty($payload['body']) && !$this->isValidGohighlevelJsonTemplate($payload['body'])) {
+            $messages['body'] = 'body debe ser un JSON valido y solo acepta variables {{$lead->campo}} simples.';
+        }
+
+        if ($messages !== []) {
+            throw ValidationException::withMessages($messages);
+        }
+
+        return $payload;
+    }
+
     private function hydrateZohoTokensFromAuthorizationCode(array $payload): array
     {
         $typeName = strtolower((string) Integrationtype::whereKey($payload['integrationtype_id'])->value('name'));
@@ -450,8 +501,11 @@ class IntegrationWebController extends Controller
         }
 
         $response = Http::acceptJson()
+            ->asForm()
             ->withBasicAuth((string) $payload['username'], (string) $payload['password'])
-            ->post(rtrim((string) $payload['url_credenciales'], '/') . '?grant_type=client_credentials');
+            ->post(rtrim((string) $payload['url_credenciales'], '/'), [
+                'grant_type' => 'client_credentials',
+            ]);
 
         $json = $response->json();
 
@@ -598,6 +652,48 @@ class IntegrationWebController extends Controller
         }, $normalized);
 
         return is_array(json_decode($normalized, true));
+    }
+
+    private function isValidGohighlevelJsonTemplate(?string $value): bool
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return true;
+        }
+
+        $quotedPattern = '/"(\s*\{\{\s*([^}]+?)\s*\}\}\s*)"/';
+        $inlinePattern = '/\{\{\s*([^}]+?)\s*\}\}/';
+
+        $normalized = preg_replace_callback($quotedPattern, function ($matches) {
+            $field = $this->normalizeGohighlevelPlaceholderField($matches[2]);
+
+            return $field === null
+                ? $matches[0]
+                : json_encode('__gohighlevel_lead_field__:' . $field, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }, $value);
+
+        $normalized = preg_replace_callback($inlinePattern, function ($matches) {
+            $field = $this->normalizeGohighlevelPlaceholderField($matches[1]);
+
+            return $field === null
+                ? $matches[0]
+                : json_encode('__gohighlevel_lead_field__:' . $field, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        }, $normalized);
+
+        return !preg_match('/\{\{.*?\}\}/s', $normalized)
+            && is_array(json_decode($normalized, true));
+    }
+
+    private function normalizeGohighlevelPlaceholderField(string $expression): ?string
+    {
+        $expression = trim($expression);
+
+        if (!preg_match('/^\$?lead\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/', $expression, $matches)) {
+            return null;
+        }
+
+        return $matches[1] !== '' ? $matches[1] : null;
     }
 
     private function normalizeFreshworksPlaceholderPath(string $expression): ?string

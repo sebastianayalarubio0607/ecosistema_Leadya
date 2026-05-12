@@ -6,9 +6,12 @@ use App\Models\Integration;
 use App\Models\Integrationtype;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Str;
 
 class IntegrationController extends Controller
 {
+    private const DEFAULT_GOHIGHLEVEL_URL = 'https://services.leadconnectorhq.com/contacts/upsert';
+
     public function index(Request $request)
     {
         $customerId = $request->header('X-Customer-ID');
@@ -30,7 +33,7 @@ class IntegrationController extends Controller
 
     public function store(Request $request)
     {
-        $validated = $request->validate($this->rules());
+        $validated = $request->validate($this->rules($request));
 
         $customerId = $request->header('X-Customer-ID');
         if (! $customerId) {
@@ -39,7 +42,9 @@ class IntegrationController extends Controller
 
         $validated['customer_id'] = $customerId;
 
-        $typeName = strtolower((string) Integrationtype::whereKey($validated['integrationtype_id'])->value('name'));
+        $typeName = $this->normalizeIntegrationTypeName(
+            Integrationtype::whereKey($validated['integrationtype_id'])->value('name')
+        );
 
         if (
             $typeName === 'zoho' &&
@@ -65,6 +70,10 @@ class IntegrationController extends Controller
             $validated['token_expires_at'] = isset($zohoResult['expires_in'])
                 ? now()->addSeconds((int) $zohoResult['expires_in'])
                 : null;
+        }
+
+        if ($typeName === 'gohighlevel' && empty($validated['url'])) {
+            $validated['url'] = self::DEFAULT_GOHIGHLEVEL_URL;
         }
 
         $integration = Integration::create($validated);
@@ -102,7 +111,7 @@ class IntegrationController extends Controller
             return response()->json(['message' => 'Integration not found'], 404);
         }
 
-        $validated = $request->validate($this->rules());
+        $validated = $request->validate($this->rules($request));
 
         $integration->update($validated);
 
@@ -129,15 +138,20 @@ class IntegrationController extends Controller
         return response()->json(['message' => 'Integration deleted successfully']);
     }
 
-    private function rules(): array
+    private function rules(?Request $request = null): array
     {
-        return [
+        $typeName = $this->normalizeIntegrationTypeName(
+            Integrationtype::whereKey($request?->input('integrationtype_id'))->value('name')
+        );
+
+        $rules = [
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'integrationtype_id' => 'required|exists:integrationtypes,id',
-            'url' => 'required|url',
+            'url' => ($typeName === 'gohighlevel' ? 'nullable' : 'required').'|url',
             'status' => 'required|boolean',
             'tokent' => 'nullable|string',
+            'body' => ['nullable', 'string'],
             'crm_Id_phone' => ['nullable', 'string', 'max:255'],
             'crm_Id_service' => ['nullable', 'string', 'max:255'],
             'crm_Id_fuente' => ['nullable', 'string', 'max:255'],
@@ -152,6 +166,29 @@ class IntegrationController extends Controller
             'expires_in' => ['nullable', 'integer', 'min:1'],
             'token_expires_at' => ['nullable', 'date'],
         ];
+
+        if ($typeName === 'gohighlevel') {
+            $rules['tokent'] = ['required', 'string'];
+            $rules['body'] = ['required', 'string'];
+        }
+
+        return $rules;
+    }
+
+    private function normalizeIntegrationTypeName(?string $typeName): string
+    {
+        $normalized = Str::of((string) $typeName)
+            ->ascii()
+            ->lower()
+            ->replace([' ', '-'], '_')
+            ->replaceMatches('/_+/', '_')
+            ->trim('_')
+            ->toString();
+
+        return match ($normalized) {
+            'go_high_level', 'leadconnector', 'lead_connector' => 'gohighlevel',
+            default => $normalized,
+        };
     }
 
     private function requestZohoTokens(array $validated): array

@@ -10,6 +10,8 @@ use RuntimeException;
 
 class SalesforceIntegrationService
 {
+    private const FECHA_INSCRIPCION_FORMAT = 'n/d/Y h:i:s A';
+
     public function sendToSalesforce(Lead $lead, Integration $integration)
     {
         $url = rtrim((string) $integration->url, '/');
@@ -94,8 +96,11 @@ class SalesforceIntegrationService
         }
 
         $refreshResponse = Http::acceptJson()
+            ->asForm()
             ->withBasicAuth((string) $integration->username, (string) $integration->password)
-            ->post($credentialsUrl . '?grant_type=client_credentials');
+            ->post($credentialsUrl, [
+                'grant_type' => 'client_credentials',
+            ]);
 
         Log::info('SALESFORCE TOKEN RESPONSE', [
             'integration_id' => $integration->id,
@@ -164,13 +169,50 @@ class SalesforceIntegrationService
             '{{service}}' => $this->firstNonEmpty($lead->service, 'Test Drive'),
         ];
 
+        $template = $this->replaceFechaIsncrpcionPlaceholder($template, $lead);
         $template = strtr($template, $replacements);
         $decoded = $this->decodeBodyTemplate($template);
         if (!is_array($decoded)) {
             throw new RuntimeException('El campo body de Salesforce debe ser un JSON valido.');
         }
 
-        return $this->resolveBodyPlaceholders($decoded, $lead);
+        return $this->applyFechaInscripcionField(
+            $this->resolveBodyPlaceholders($decoded, $lead),
+            $lead
+        );
+    }
+
+    private function replaceFechaIsncrpcionPlaceholder(string $template, Lead $lead): string
+    {
+        return preg_replace(
+            '/\{\{\s*fechaI(?:nscripcion|sncrpcion)\s*\}\}/',
+            $this->formatLeadCreatedAt($lead),
+            $template
+        );
+    }
+
+    private function formatLeadCreatedAt(Lead $lead): string
+    {
+        return $lead->created_at
+            ? $lead->created_at->copy()->format(self::FECHA_INSCRIPCION_FORMAT)
+            : '';
+    }
+
+    private function applyFechaInscripcionField(array $payload, Lead $lead): array
+    {
+        foreach ($payload as $key => $value) {
+            if (strcasecmp((string) $key, 'fechaInscripcion') === 0) {
+                $payload[$key] = $this->formatLeadCreatedAt($lead);
+
+                continue;
+            }
+
+            if (is_array($value)) {
+                $payload[$key] = $this->applyFechaInscripcionField($value, $lead);
+            }
+        }
+
+        return $payload;
     }
 
     private function decodeBodyTemplate(string $template): ?array
@@ -222,6 +264,14 @@ class SalesforceIntegrationService
 
         if (is_string($value)) {
             if ($lead && preg_match('/^__salesforce_lead_field__:(.+)$/', $value, $matches)) {
+                if ($matches[1] === 'created_at') {
+                    return $this->formatLeadCreatedAt($lead);
+                }
+
+                if ($matches[1] === '__tipo_servicio') {
+                    return $this->firstNonEmpty($lead->service, 'Test Drive');
+                }
+
                 return data_get($lead, $matches[1]);
             }
 
@@ -239,6 +289,10 @@ class SalesforceIntegrationService
     private function normalizePlaceholderPath(string $expression): ?string
     {
         $expression = trim($expression);
+
+        if (preg_match('/^\$?tipo\s*(?:->|\.)\s*servicio$/', $expression)) {
+            return '__tipo_servicio';
+        }
 
         if (!preg_match('/^\$?lead(?:(?:->|\.)[A-Za-z_][A-Za-z0-9_]*)+$/', $expression)) {
             return null;

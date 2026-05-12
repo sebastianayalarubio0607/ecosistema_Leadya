@@ -46,8 +46,8 @@ class MetaLeadAdsSyncService
      */
     public function exchangeLongLivedToken(string $shortLivedToken, ?string $metaAppId = null, ?string $metaAppSecret = null): array
     {
-        $appId = $metaAppId ?: config('services.meta.app_id');
-        $appSecret = $metaAppSecret ?: config('services.meta.app_secret');
+        $appId = $metaAppId;
+        $appSecret = $metaAppSecret;
 
         $this->ensureMetaCredentialsConfigured($appId, $appSecret);
 
@@ -150,6 +150,7 @@ class MetaLeadAdsSyncService
     public function refreshDueTokens(?MetaAccessToken $onlyToken = null): array
     {
         $query = MetaAccessToken::query()
+            ->select(MetaAccessToken::SYNC_COLUMNS)
             ->where('is_active', true)
             ->whereNotNull('long_lived_token')
             ->whereNotNull('expires_at')
@@ -178,7 +179,7 @@ class MetaLeadAdsSyncService
     public function syncPages(?MetaAccessToken $onlyToken = null): array
     {
         $tokens = $onlyToken
-            ? MetaAccessToken::query()->whereKey($onlyToken->id)->get()
+            ? MetaAccessToken::query()->select(MetaAccessToken::SYNC_COLUMNS)->whereKey($onlyToken->id)->get()
             : collect(array_filter([MetaAccessToken::activeByType(MetaAccessToken::TYPE_USER_ACCESS_TOKEN)]));
 
         $created = 0;
@@ -262,7 +263,7 @@ class MetaLeadAdsSyncService
                 $forms = $this->graphService->paginatedGet($page->meta_page_id.'/leadgen_forms', [
                     'fields' => 'id,name,status,locale,questions',
                     'access_token' => $page->page_access_token,
-                    'limit' => 100,
+                    'limit' => 9999,
                 ]);
 
                 foreach ($forms as $formData) {
@@ -598,7 +599,7 @@ class MetaLeadAdsSyncService
     private function ensureMetaCredentialsConfigured(?string $appId, ?string $appSecret): void
     {
         if (blank($appId) || blank($appSecret)) {
-            throw new \RuntimeException('Faltan META_APP_ID o META_APP_SECRET en la configuración.');
+            throw new \RuntimeException('Faltan meta_app_id o meta_app_secret en meta_access_tokens.');
         }
     }
 }

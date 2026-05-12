@@ -288,25 +288,79 @@ class GoogleAdsConversionsService
     {
         $items = [];
 
-        $email = trim(Str::lower((string) ($lead->email ?? '')));
+        $email = $this->normalizeEmailForGoogle(
+            $lead->email ?: $this->leadValue($lead, 'email')
+        );
 
-        if ($email !== '' && filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        if ($emailHash = $this->hashSha256($email)) {
             $items[] = [
-                'hashedEmail' => hash('sha256', $email),
+                'hashedEmail' => $emailHash,
                 'userIdentifierSource' => 'FIRST_PARTY',
             ];
         }
 
-        $phone = $this->normalizeInternationalPhone($lead->phone ?? null);
+        $phone = $this->normalizePhoneForGoogle($lead);
 
-        if ($phone) {
+        if ($phoneHash = $this->hashSha256($phone)) {
             $items[] = [
-                'hashedPhoneNumber' => hash('sha256', $phone),
+                'hashedPhoneNumber' => $phoneHash,
                 'userIdentifierSource' => 'FIRST_PARTY',
             ];
         }
 
         return $items;
+    }
+
+    protected function normalizeEmailForGoogle(?string $email): ?string
+    {
+        $email = trim(Str::lower((string) $email));
+
+        if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
+            return null;
+        }
+
+        [$local, $domain] = explode('@', $email, 2);
+
+        if (in_array($domain, ['gmail.com', 'googlemail.com'], true)) {
+            $local = explode('+', $local, 2)[0];
+            $local = str_replace('.', '', $local);
+
+            $email = $local.'@'.$domain;
+        }
+
+        return filter_var($email, FILTER_VALIDATE_EMAIL) ? $email : null;
+    }
+
+    protected function normalizePhoneForGoogle(Lead $lead): ?string
+    {
+        $phone = trim((string) ($lead->phone ?: $this->leadValue($lead, 'phone')));
+
+        if ($phone === '') {
+            return null;
+        }
+
+        if (str_starts_with($phone, '+')) {
+            return $this->normalizeInternationalPhone($phone);
+        }
+
+        $digits = preg_replace('/\D+/', '', $phone);
+
+        if ($digits === '') {
+            return null;
+        }
+
+        $countryCode = $this->resolvePhoneCountryCode($lead);
+
+        if (! $countryCode) {
+            return null;
+        }
+
+        $countryDigits = ltrim($countryCode, '+');
+        $normalized = str_starts_with($digits, $countryDigits)
+            ? '+'.$digits
+            : $countryCode.$digits;
+
+        return $this->normalizeInternationalPhone($normalized);
     }
 
     protected function normalizeInternationalPhone(?string $phone): ?string
@@ -319,7 +373,39 @@ class GoogleAdsConversionsService
 
         $normalized = '+'.preg_replace('/\D+/', '', $phone);
 
-        return strlen($normalized) >= 9 ? $normalized : null;
+        return preg_match('/^\+[1-9]\d{7,14}$/', $normalized) ? $normalized : null;
+    }
+
+    protected function hashSha256(?string $value): ?string
+    {
+        $value = trim((string) $value);
+
+        return $value !== '' ? hash('sha256', $value) : null;
+    }
+
+    protected function resolvePhoneCountryCode(Lead $lead): ?string
+    {
+        foreach (['phone_country_code', 'country_code'] as $key) {
+            $value = trim((string) $this->leadValue($lead, $key));
+
+            if ($value === '') {
+                continue;
+            }
+
+            $digits = preg_replace('/\D+/', '', $value);
+
+            if ($digits !== '' && preg_match('/^[1-9]\d{0,3}$/', $digits)) {
+                return '+'.$digits;
+            }
+        }
+
+        $country = trim(Str::lower((string) $this->leadValue($lead, 'country')));
+
+        if (in_array($country, ['co', 'col', 'colombia', '+57', '57'], true)) {
+            return '+57';
+        }
+
+        return null;
     }
 
     protected function resolveConversionAction(CrmState $crmState, string $googleAdsCustomerId): ?string

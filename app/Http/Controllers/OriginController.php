@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Origin;
+use App\Models\Source;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -15,6 +16,7 @@ class OriginController extends Controller
         $q = $request->get('q');
 
         $origins = Origin::query()
+            ->with('source')
             ->when($q, fn ($query) => $query->where(function ($innerQuery) use ($q) {
                 $innerQuery->where('name', 'like', "%{$q}%")
                     ->orWhere('code', 'like', "%{$q}%");
@@ -30,6 +32,7 @@ class OriginController extends Controller
     {
         return view('origins.create', [
             'origin' => new Origin(),
+            'sources' => $this->sourceOptions(),
         ]);
     }
 
@@ -44,12 +47,17 @@ class OriginController extends Controller
 
     public function show(Origin $origin): View
     {
+        $origin->load('source');
+
         return view('origins.show', compact('origin'));
     }
 
     public function edit(Origin $origin): View
     {
-        return view('origins.edit', compact('origin'));
+        return view('origins.edit', [
+            'origin' => $origin,
+            'sources' => $this->sourceOptions(),
+        ]);
     }
 
     public function update(Request $request, Origin $origin): RedirectResponse
@@ -72,7 +80,8 @@ class OriginController extends Controller
 
     private function validateRequest(Request $request, ?Origin $origin = null): array
     {
-        return $request->validate([
+        $validated = $request->validate([
+            'source_id' => ['nullable', 'exists:sources,id'],
             'code' => [
                 'required',
                 'string',
@@ -88,5 +97,16 @@ class OriginController extends Controller
             ],
             'is_active' => ['required', 'boolean'],
         ]);
+
+        $validated['source_id'] = ($validated['source_id'] ?? null) ?: null;
+
+        return $validated;
+    }
+
+    private function sourceOptions()
+    {
+        return Source::query()
+            ->orderBy('name')
+            ->get();
     }
 }

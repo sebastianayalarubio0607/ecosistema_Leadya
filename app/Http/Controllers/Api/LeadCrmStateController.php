@@ -201,42 +201,50 @@ class LeadCrmStateController extends Controller
         // Incrementamos el contador de leads actualizados para llevar un registro del número total de leads que han sido actualizados durante el procesamiento del payload, lo que permite incluir esta información en la respuesta final y tener visibilidad sobre el resultado de la operación
         $updated++;
 
-        if ($this->isGoogleCampaignOrigin($lead->campaign_origin)) {
+        $lead->loadMissing('campaignOrigin.source');
+
+        $sourceName = $lead->campaignOrigin?->source?->name;
+        $isMetaSource = strcasecmp($sourceName ?? '', 'Meta Ads') === 0;
+        $isGoogleSource = strcasecmp($sourceName ?? '', 'Google Ads') === 0;
+        $isMetaAds = $isMetaSource
+            || (!$isGoogleSource && in_array($lead->campaign_origin, ['fb', 'meta', 'ig', 'wa', 'mg', 'th'], true));
+        $isGoogleAds = $isGoogleSource
+            || (!$isMetaSource && $this->isGoogleCampaignOrigin($lead->campaign_origin));
+
+        // Si el origen de la campaña del lead es una de las plataformas de Facebook (fb, meta, ig, wa) o de mensajería (mg, th), y el nuevo crm_state asignado tiene un meta_event_id asociado, enviamos el lead a Facebook para actualizar su estado en esa plataforma, lo que permite mantener sincronizados los estados de los leads entre nuestro sistema y las plataformas de Facebook y aprovechar las funcionalidades de seguimiento y análisis que ofrecen estas plataformas para optimizar las campañas publicitarias y la gestión de leads
+        if ($isMetaAds) {
+
+        // Si el lead no tiene un crm_state asignado después de la actualización, no es necesario enviar el lead a Facebook, ya que esto indica que el lead no tiene un estado válido para ser sincronizado con las plataformas de Facebook, lo que evita envíos innecesarios y posibles errores en la integración
+            if (empty($lead->crm_state)) {
+                return;
+            }
+
+        // Para asegurarnos de tener la información más actualizada del crm_state del lead, eliminamos la relación cargada previamente y la recargamos desde la base de datos, lo que garantiza que cualquier cambio en el crm_state se refleje correctamente en el lead antes de enviarlo a Facebook para su sincronización
+            $lead->unsetRelation('crmState');
+
+        // Cargamos la relación del crmState del lead para tener acceso a su información, incluyendo el meta_event_id asociado, lo que nos permite determinar si el estado del lead está configurado para ser sincronizado con las plataformas de Facebook y obtener el ID del evento de Facebook correspondiente para realizar la actualización en esa plataforma
+            $lead->load('crmState');
+
+        // Si el crm_state del lead no tiene un meta_event_id asociado, no es necesario enviar el lead a Facebook, ya que esto indica que el estado del lead no está configurado para ser sincronizado con las plataformas de Facebook, lo que evita envíos innecesarios y posibles errores en la integración debido a estados no compatibles
+            if (empty($lead->crmState?->meta_event_id)) {
+                return;
+            }
+
+        // Enviamos el lead a Facebook utilizando un job en segundo plano para actualizar su estado en esa plataforma, lo que permite mantener sincronizados los estados de los leads entre nuestro sistema y las plataformas de Facebook sin afectar el rendimiento de la solicitud actual y manejar posibles reintentos en caso de fallos en la comunicación con las APIs de Facebook
+            SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
+        } elseif ($isGoogleAds) {
             try {
                 SendLeadToGoogleAds::dispatch($lead->id, $newCrmState);
             } catch (\Throwable $exception) {
                 Log::warning('No fue posible despachar SendLeadToGoogleAds desde cambio de crm_state', [
                     'lead_id' => $lead->id,
                     'campaign_origin' => $lead->campaign_origin,
+                    'source_name' => $sourceName,
                     'crm_state' => $newCrmState,
                     'message' => $exception->getMessage(),
                 ]);
             }
         }
-
-        // Si el origen de la campaña del lead es una de las plataformas de Facebook (fb, meta, ig, wa) o de mensajería (mg, th), y el nuevo crm_state asignado tiene un meta_event_id asociado, enviamos el lead a Facebook para actualizar su estado en esa plataforma, lo que permite mantener sincronizados los estados de los leads entre nuestro sistema y las plataformas de Facebook y aprovechar las funcionalidades de seguimiento y análisis que ofrecen estas plataformas para optimizar las campañas publicitarias y la gestión de leads
-        if (!in_array($lead->campaign_origin, ['fb', 'meta', 'ig', 'wa', 'mg', 'th'], true)) {
-            return;
-        }
-
-        // Si el lead no tiene un crm_state asignado después de la actualización, no es necesario enviar el lead a Facebook, ya que esto indica que el lead no tiene un estado válido para ser sincronizado con las plataformas de Facebook, lo que evita envíos innecesarios y posibles errores en la integración
-        if (empty($lead->crm_state)) {
-            return;
-        }
-
-        // Para asegurarnos de tener la información más actualizada del crm_state del lead, eliminamos la relación cargada previamente y la recargamos desde la base de datos, lo que garantiza que cualquier cambio en el crm_state se refleje correctamente en el lead antes de enviarlo a Facebook para su sincronización
-        $lead->unsetRelation('crmState');
-
-        // Cargamos la relación del crmState del lead para tener acceso a su información, incluyendo el meta_event_id asociado, lo que nos permite determinar si el estado del lead está configurado para ser sincronizado con las plataformas de Facebook y obtener el ID del evento de Facebook correspondiente para realizar la actualización en esa plataforma
-        $lead->load('crmState');
-
-        // Si el crm_state del lead no tiene un meta_event_id asociado, no es necesario enviar el lead a Facebook, ya que esto indica que el estado del lead no está configurado para ser sincronizado con las plataformas de Facebook, lo que evita envíos innecesarios y posibles errores en la integración debido a estados no compatibles
-        if (empty($lead->crmState?->meta_event_id)) {
-            return;
-        }
-
-        // Enviamos el lead a Facebook utilizando un job en segundo plano para actualizar su estado en esa plataforma, lo que permite mantener sincronizados los estados de los leads entre nuestro sistema y las plataformas de Facebook sin afectar el rendimiento de la solicitud actual y manejar posibles reintentos en caso de fallos en la comunicación con las APIs de Facebook
-        SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
     }
 
     private function isGoogleCampaignOrigin(?string $campaignOrigin): bool

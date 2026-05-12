@@ -6,6 +6,7 @@ use App\Models\MetaAd;
 use App\Models\MetaAdAccount;
 use App\Models\MetaAdInsight;
 use App\Models\MetaAdSet;
+use App\Models\MetaAccessToken;
 use App\Models\MetaCampaign;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Client\Response;
@@ -19,7 +20,7 @@ use Illuminate\Support\Str;
  *
  * Importante:
  * - NO modifica el CRUD: este servicio es consumido por MetaAdInsightController@consult y MetaSyncController.
- * - El token SIEMPRE se toma de services.meta.access_token (config/services.php) -> .env
+ * - El token SIEMPRE se toma de meta_access_tokens como configuracion global.
  * - El id de cuenta publicitaria SIEMPRE se toma de MetaAdAccount->meta_account_id
  * - Se consultan TODOS los MetaAdAccount con meta_account_id (sin filtrar status)
  */
@@ -64,11 +65,10 @@ class MetaInsightsSyncService
             'errors' => [],
         ];
 
-        // ✅ Token SIEMPRE desde .env
-        $token = config('services.meta.access_token');
+        $token = $this->resolveGlobalAccessToken();
 
         if (! $token) {
-            $msg = 'No hay token en services.meta.access_token (revisa .env y config/services.php).';
+            $msg = 'No hay token global activo en meta_access_tokens.';
             $stats['errors'][] = [
                 'message' => $msg,
             ];
@@ -159,6 +159,13 @@ class MetaInsightsSyncService
         }
 
         return $stats;
+    }
+
+    private function resolveGlobalAccessToken(): ?string
+    {
+        return MetaAccessToken::activeByType(MetaAccessToken::TYPE_SYSTEM_ACCESS_TOKEN)?->working_token
+            ?: MetaAccessToken::activeByType(MetaAccessToken::TYPE_USER_ACCESS_TOKEN)?->working_token
+            ?: MetaAccessToken::activeByType(MetaAccessToken::TYPE_APP_ACCESS_TOKEN)?->working_token;
     }
 
     private function syncAccount(MetaAdAccount $account, string $date, string $token): array

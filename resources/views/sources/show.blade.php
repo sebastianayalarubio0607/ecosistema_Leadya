@@ -1,14 +1,14 @@
 @extends('meta.layout')
 
-@section('title', $origin->name)
-@section('subtitle', 'Detalle del origen')
+@section('title', $source->name)
+@section('subtitle', 'Detalle del source')
 
 @section('header_actions')
-    <a href="{{ route('origins.edit', $origin) }}"
+    <a href="{{ route('sources.edit', $source) }}"
        class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10">
         Editar
     </a>
-    <a href="{{ route('origins.index') }}"
+    <a href="{{ route('sources.index') }}"
        class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">
         Volver
     </a>
@@ -19,36 +19,28 @@
         <div class="grid gap-4">
             <div>
                 <div class="text-sm text-white/50">ID</div>
-                <div class="mt-1">{{ $origin->id }}</div>
-            </div>
-            <div>
-                <div class="text-sm text-white/50">Código</div>
-                <div class="mt-1">{{ $origin->code }}</div>
+                <div class="mt-1">{{ $source->id }}</div>
             </div>
             <div>
                 <div class="text-sm text-white/50">Nombre</div>
-                <div class="mt-1">{{ $origin->name }}</div>
-            </div>
-            <div>
-                <div class="text-sm text-white/50">Source</div>
-                <div class="mt-1">{{ optional($origin->source)->name ?? 'Sin source' }}</div>
+                <div class="mt-1">{{ $source->name }}</div>
             </div>
             <div>
                 <div class="text-sm text-white/50">Estado</div>
-                <div class="mt-1">{{ $origin->is_active ? 'Activo' : 'Inactivo' }}</div>
+                <div class="mt-1">{{ $source->is_active ? 'Activo' : 'Inactivo' }}</div>
             </div>
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                     <div class="text-sm text-white/50">Creado</div>
-                    <div class="mt-1">{{ optional($origin->created_at)->format('Y-m-d H:i') }}</div>
+                    <div class="mt-1">{{ optional($source->created_at)->format('Y-m-d H:i') }}</div>
                 </div>
                 <div>
                     <div class="text-sm text-white/50">Actualizado</div>
-                    <div class="mt-1">{{ optional($origin->updated_at)->format('Y-m-d H:i') }}</div>
+                    <div class="mt-1">{{ optional($source->updated_at)->format('Y-m-d H:i') }}</div>
                 </div>
             </div>
             <div class="pt-3">
-                <form method="POST" action="{{ route('origins.destroy', $origin) }}" onsubmit="return confirm('¿Seguro que deseas eliminar este origen?');">
+                <form method="POST" action="{{ route('sources.destroy', $source) }}" onsubmit="return confirm('Seguro que deseas eliminar este source?');">
                     @csrf
                     @method('DELETE')
                     <button class="px-4 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 border border-rose-300/20 text-white" type="submit">
