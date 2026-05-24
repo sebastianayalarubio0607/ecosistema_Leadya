@@ -190,6 +190,10 @@ class GoogleAdsSyncService
                     'conversions' => $this->toDecimal(data_get($row, 'metrics.conversions')),
                     'cost_micros' => $this->toInteger(data_get($row, 'metrics.costMicros')),
                     'cost' => $this->normalizeCost(data_get($row, 'metrics.costMicros')),
+                    'roas' => $this->calculateRoas(
+                        data_get($row, 'metrics.conversionsValue') ?? data_get($row, 'metrics.conversions_value'),
+                        data_get($row, 'metrics.costMicros') ?? data_get($row, 'metrics.cost_micros')
+                    ),
                     'raw_payload' => $row,
                 ]
             );
@@ -245,6 +249,10 @@ class GoogleAdsSyncService
                     'conversions' => $this->toDecimal(data_get($row, 'metrics.conversions')),
                     'cost_micros' => $this->toInteger(data_get($row, 'metrics.costMicros')),
                     'cost' => $this->normalizeCost(data_get($row, 'metrics.costMicros')),
+                    'roas' => $this->calculateRoas(
+                        data_get($row, 'metrics.conversionsValue') ?? data_get($row, 'metrics.conversions_value'),
+                        data_get($row, 'metrics.costMicros') ?? data_get($row, 'metrics.cost_micros')
+                    ),
                     'raw_payload' => $row,
                 ]
             );
@@ -301,6 +309,10 @@ class GoogleAdsSyncService
                     'conversions' => $this->toDecimal(data_get($row, 'metrics.conversions')),
                     'cost_micros' => $this->toInteger(data_get($row, 'metrics.costMicros')),
                     'cost' => $this->normalizeCost(data_get($row, 'metrics.costMicros')),
+                    'roas' => $this->calculateRoas(
+                        data_get($row, 'metrics.conversionsValue') ?? data_get($row, 'metrics.conversions_value'),
+                        data_get($row, 'metrics.costMicros') ?? data_get($row, 'metrics.cost_micros')
+                    ),
                     'raw_payload' => $row,
                 ]
             );
@@ -322,17 +334,17 @@ class GoogleAdsSyncService
 
     protected function buildCampaignQuery(Carbon $date): string
     {
-        return "SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, segments.date, metrics.impressions, metrics.clicks, metrics.conversions, metrics.cost_micros FROM campaign WHERE ".$this->buildDateWhereClause($date)." AND campaign.status != 'REMOVED' ORDER BY campaign.name";
+        return "SELECT campaign.id, campaign.name, campaign.status, campaign.advertising_channel_type, segments.date, metrics.impressions, metrics.clicks, metrics.conversions, metrics.conversions_value, metrics.cost_micros FROM campaign WHERE ".$this->buildDateWhereClause($date)." AND campaign.status != 'REMOVED' ORDER BY campaign.name";
     }
 
     protected function buildAdGroupQuery(Carbon $date): string
     {
-        return "SELECT campaign.id, campaign.name, ad_group.id, ad_group.name, ad_group.status, segments.date, metrics.impressions, metrics.clicks, metrics.conversions, metrics.cost_micros FROM ad_group WHERE ".$this->buildDateWhereClause($date)." AND campaign.status != 'REMOVED' AND ad_group.status != 'REMOVED' ORDER BY campaign.name, ad_group.name";
+        return "SELECT campaign.id, campaign.name, ad_group.id, ad_group.name, ad_group.status, segments.date, metrics.impressions, metrics.clicks, metrics.conversions, metrics.conversions_value, metrics.cost_micros FROM ad_group WHERE ".$this->buildDateWhereClause($date)." AND campaign.status != 'REMOVED' AND ad_group.status != 'REMOVED' ORDER BY campaign.name, ad_group.name";
     }
 
     protected function buildAdQuery(Carbon $date): string
     {
-        return "SELECT campaign.id, campaign.name, ad_group.id, ad_group.name, ad_group_ad.ad.id, ad_group_ad.status, segments.date, metrics.impressions, metrics.clicks, metrics.conversions, metrics.cost_micros FROM ad_group_ad WHERE ".$this->buildDateWhereClause($date)." AND campaign.status != 'REMOVED' AND ad_group.status != 'REMOVED' AND ad_group_ad.status != 'REMOVED' ORDER BY campaign.name, ad_group.name";
+        return "SELECT campaign.id, campaign.name, ad_group.id, ad_group.name, ad_group_ad.ad.id, ad_group_ad.status, segments.date, metrics.impressions, metrics.clicks, metrics.conversions, metrics.conversions_value, metrics.cost_micros FROM ad_group_ad WHERE ".$this->buildDateWhereClause($date)." AND campaign.status != 'REMOVED' AND ad_group.status != 'REMOVED' AND ad_group_ad.status != 'REMOVED' ORDER BY campaign.name, ad_group.name";
     }
 
     protected function buildDateWhereClause(Carbon $date): string
@@ -353,5 +365,17 @@ class GoogleAdsSyncService
     protected function toDecimal(mixed $value): float
     {
         return round((float) $value, 2);
+    }
+
+    protected function calculateRoas(mixed $conversionsValue, mixed $costMicros): ?float
+    {
+        $conversionsValue = is_numeric($conversionsValue) ? (float) $conversionsValue : 0.0;
+        $costMicros = is_numeric($costMicros) ? (int) $costMicros : 0;
+
+        if ($costMicros <= 0) {
+            return null;
+        }
+
+        return round($conversionsValue / ($costMicros / 1000000), 4);
     }
 }

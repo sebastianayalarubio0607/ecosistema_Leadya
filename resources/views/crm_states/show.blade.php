@@ -18,7 +18,7 @@
 
 @section('content')
     <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 space-y-4">
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div class="rounded-xl border border-white/10 bg-white/5 p-3">
                 <div class="text-xs text-white/50">CRM State ID</div>
                 <div class="text-white">{{ $crmstate->id }}</div>
@@ -68,10 +68,20 @@
                 <div class="text-white">{{ $crmstate->google_ads_conversion_enabled ? 'Activo' : 'Inactivo' }}</div>
             </div>
 
-            <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+            <div class="rounded-xl border border-white/10 bg-white/5 p-3 md:col-span-2">
                 <div class="text-xs text-white/50">Conversion Action</div>
-                <div class="text-white">{{ $crmstate->google_ads_conversion_action_name ?? '--' }}</div>
-                <div class="text-xs text-white/50 mt-2">{{ $crmstate->google_ads_conversion_action_resource_name ?? '--' }}</div>
+                @forelse($crmstate->googleAdsConversions as $conversion)
+                    <div class="mt-2">
+                        <div class="text-white">{{ $conversion->customer?->name ?? '--' }}</div>
+                        <div class="text-xs text-white/50">
+                            {{ $conversion->conversion_action_name ?: $conversion->conversion_action_id }}
+                        </div>
+                        <div class="text-xs text-white/40">{{ $conversion->conversion_action_resource_name }}</div>
+                    </div>
+                @empty
+                    <div class="text-white">{{ $crmstate->google_ads_conversion_action_name ?? '--' }}</div>
+                    <div class="text-xs text-white/50 mt-2">{{ $crmstate->google_ads_conversion_action_resource_name ?? '--' }}</div>
+                @endforelse
             </div>
 
             <div class="rounded-xl border border-white/10 bg-white/5 p-3">

@@ -49,7 +49,7 @@ class SendLeadToGoogleAds implements ShouldQueue
     public function handle(GoogleAdsConversionsService $service): void
     {
         $lead = Lead::query()
-            ->with(['customer', 'crmState'])
+            ->with(['customer', 'crmState', 'integration'])
             ->find($this->leadId);
 
         if (! $lead) {
@@ -105,6 +105,17 @@ class SendLeadToGoogleAds implements ShouldQueue
         }
 
         $result = $service->sendLeadConversion($lead, $customer, $crmState);
+
+        if ($result['skip_job_record'] ?? false) {
+            Log::info('Google Ads conversion skipped because the lead customer has no configured conversion action.', [
+                'lead_id' => $lead->id,
+                'customer_id' => $customer->id,
+                'crm_state_id' => $crmState->id,
+                'order_id' => $result['order_id'] ?? null,
+            ]);
+            return;
+        }
+
         $this->recordConversionJob($lead, $customer, $crmState, $result);
 
         if (! ($result['success'] ?? false) && ! ($result['skipped'] ?? false)) {
@@ -115,7 +126,7 @@ class SendLeadToGoogleAds implements ShouldQueue
     public function failed(Throwable $e): void
     {
         $lead = Lead::query()
-            ->with(['customer', 'crmState'])
+            ->with(['customer', 'crmState', 'integration'])
             ->find($this->leadId);
 
         $crmState = $lead ? $this->resolveCrmState($lead) : null;
@@ -149,8 +160,9 @@ class SendLeadToGoogleAds implements ShouldQueue
             ->whereRaw('LOWER(TRIM(name)) = ?', ['leads']);
 
         if ($lead->integration_id) {
+            $prefix = $lead->integration?->crmIdPrefix() ?: (string) $lead->integration_id;
             $sameIntegration = (clone $query)
-                ->where('id', 'like', $lead->integration_id.'-%')
+                ->where('id', 'like', $prefix.'-%')
                 ->first();
 
             if ($sameIntegration) {

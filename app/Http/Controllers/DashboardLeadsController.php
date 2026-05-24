@@ -87,19 +87,22 @@ class DashboardLeadsController extends Controller
         $metaCampaignSummary = $this->normalizeAdvertisingSection(
             'Campañas Meta',
             $ui['tables']['meta_campaigns'] ?? [],
-            $defaultCustomerName
+            $defaultCustomerName,
+            true
         );
 
         $metaAdGroupSummary = $this->normalizeAdvertisingSection(
             'Grupos de anuncios Meta',
             $ui['tables']['meta_ad_sets'] ?? [],
-            $defaultCustomerName
+            $defaultCustomerName,
+            true
         );
 
         $metaAdSummary = $this->normalizeAdvertisingSection(
             'Anuncios Meta',
             $ui['tables']['meta_ads'] ?? [],
-            $defaultCustomerName
+            $defaultCustomerName,
+            true
         );
 
         $googleCampaignSummary = $this->buildGoogleCampaignLeadSummary(
@@ -1891,7 +1894,7 @@ class DashboardLeadsController extends Controller
             }
 
             $userKey = (string) (auth()->id() ?? 'guest');
-            $key = 'dash_meta_campaigns:'.sha1(json_encode([
+            $key = 'dash_meta_campaigns_v2:'.sha1(json_encode([
                 'customer_id' => $customerId,
                 'integration_id' => $integrationId,
                 'user' => $userKey,
@@ -1942,6 +1945,25 @@ class DashboardLeadsController extends Controller
                 // 2) LEADS ENTRANTES y LEADS CALIFICADOS (por CampaÃ±a)
                 // RelaciÃƒÂ³n: Lead.meta_id_ad -> MetaAd.meta_ad_id -> MetaAdSet -> MetaCampaign
                 // -------------------------
+                $roasByCampaignId = [];
+                if (Schema::hasColumn((new MetaAdInsight)->getTable(), 'purchase_roas') && $rows->isNotEmpty()) {
+                    $campaignIds = $rows
+                        ->pluck('campaign_id')
+                        ->filter(fn ($campaignId) => $campaignId !== null && $campaignId !== '')
+                        ->map(fn ($campaignId) => (string) $campaignId)
+                        ->unique()
+                        ->values()
+                        ->all();
+
+                    if (! empty($campaignIds)) {
+                        $roasRows = (clone $q)
+                            ->whereIn('campaign_id', $campaignIds)
+                            ->get(['campaign_id', 'purchase_roas']);
+
+                        $roasByCampaignId = $this->averagePurchaseRoasByKey($roasRows, 'campaign_id');
+                    }
+                }
+
                 $leadTable = (new Lead)->getTable();
 
                 $leadCountsIncoming = [];
@@ -2050,6 +2072,7 @@ class DashboardLeadsController extends Controller
 
                 $fmtInt = fn ($n) => number_format((int) $n, 0, ',', '.');
                 $fmtMoney = fn ($n) => '$ '.number_format((float) $n, 2, ',', '.');
+                $fmtDecimal = fn ($n) => number_format((float) $n, 2, ',', '.');
                 $resolvedCustomerName = $customerId
                     ? (Customer::query()->find($customerId)?->name ?? ('Cliente #'.$customerId))
                     : 'Todos los clientes';
@@ -2061,6 +2084,7 @@ class DashboardLeadsController extends Controller
                     ['key' => 'leads',               'label' => 'Leads CampaÃ±a'],
                     ['key' => 'leads_calificados',   'label' => 'Leads calificados CampaÃ±a'],
                     ['key' => 'leads_no_calificados', 'label' => 'Leads no calificados CampaÃ±a'],
+                    ['key' => 'roas',                'label' => 'ROAS'],
                     ['key' => 'CPL',                'label' => 'CPL CampaÃ±a'],
                 ];
 
@@ -2077,6 +2101,7 @@ class DashboardLeadsController extends Controller
                     $outRows[] = [
                         'nombre' => (string) ($r->campaign_name ?? '-'),
                         'costo' => $fmtMoney($spend),
+                        'roas' => array_key_exists($campaignId, $roasByCampaignId) ? $fmtDecimal($roasByCampaignId[$campaignId]) : '-',
                         'leads' => $fmtInt($incoming),
                         'leads_calificados' => $fmtInt($qualified),
                         'leads_no_calificados' => $fmtInt($noCal),
@@ -2137,7 +2162,7 @@ class DashboardLeadsController extends Controller
             $hasName = Schema::hasColumn($metaAdSetsTable, 'name');
 
             $userKey = (string) (auth()->id() ?? 'guest');
-            $cacheKey = 'dash_meta_ad_sets_v3:'.sha1(json_encode([
+            $cacheKey = 'dash_meta_ad_sets_v4:'.sha1(json_encode([
                 'customer_id' => $customerId,
                 'integration_id' => $integrationId,
                 'user' => $userKey,
@@ -2196,7 +2221,7 @@ class DashboardLeadsController extends Controller
                     }
                 }
 
-                $spendRows = $spendQ
+                $spendRows = (clone $spendQ)
                     ->selectRaw("
                     mas.id as pk,
                     {$idExpr} as meta_id,
@@ -2207,6 +2232,26 @@ class DashboardLeadsController extends Controller
                     ->orderByDesc('costo_anuncio')
                     ->limit(200)
                     ->get();
+
+                $roasByPk = [];
+                if (Schema::hasColumn($insightsTable, 'purchase_roas') && $spendRows->isNotEmpty()) {
+                    $spendPks = $spendRows
+                        ->pluck('pk')
+                        ->map(fn ($pk) => (int) $pk)
+                        ->filter()
+                        ->unique()
+                        ->values()
+                        ->all();
+
+                    if (! empty($spendPks)) {
+                        $roasRows = (clone $spendQ)
+                            ->whereIn('mas.id', $spendPks)
+                            ->select('mas.id as pk', 'i.purchase_roas')
+                            ->get();
+
+                        $roasByPk = $this->averagePurchaseRoasByKey($roasRows, 'pk');
+                    }
+                }
 
                 $byPk = [];
                 foreach ($spendRows as $r) {
@@ -2298,6 +2343,7 @@ class DashboardLeadsController extends Controller
 
                 $fmtInt = fn ($n) => number_format((int) $n, 0, ',', '.');
                 $fmtMoney = fn ($n) => '$ '.number_format((float) $n, 2, ',', '.');
+                $fmtDecimal = fn ($n) => number_format((float) $n, 2, ',', '.');
                 $resolvedCustomerName = $customerId
                     ? (Customer::query()->find($customerId)?->name ?? ('Cliente #'.$customerId))
                     : 'Todos los clientes';
@@ -2309,6 +2355,7 @@ class DashboardLeadsController extends Controller
                     ['key' => 'leads_anuncio',        'label' => 'Leads'],
                     ['key' => 'leads_calificados',    'label' => 'Leads calificados'],
                     ['key' => 'leads_no_calificados', 'label' => 'Leads no calificados'],
+                    ['key' => 'roas',                 'label' => 'ROAS'],
                     ['key' => 'CPL',                  'label' => 'CPL'],
                 ];
 
@@ -2329,6 +2376,7 @@ class DashboardLeadsController extends Controller
                         'customer_name' => $resolvedCustomerName,
                         'nombre' => $d['nombre'] ?: '-',
                         'costo_anuncio' => $fmtMoney($spend),
+                        'roas' => array_key_exists($pk, $roasByPk) ? $fmtDecimal($roasByPk[$pk]) : '-',
                         'leads_anuncio' => $fmtInt($total),
                         'leads_calificados' => $fmtInt($cal),
                         'leads_no_calificados' => $fmtInt($noCal),
@@ -2380,7 +2428,7 @@ class DashboardLeadsController extends Controller
             $hasName = Schema::hasColumn($metaAdsTable, 'name');
 
             $userKey = (string) (auth()->id() ?? 'guest');
-            $cacheKey = 'dash_meta_ads_v3:'.sha1(json_encode([
+            $cacheKey = 'dash_meta_ads_v4:'.sha1(json_encode([
                 'customer_id' => $customerId,
                 'integration_id' => $integrationId,
                 'user' => $userKey,
@@ -2433,7 +2481,7 @@ class DashboardLeadsController extends Controller
                     }
                 }
 
-                $spendRows = $spendQ
+                $spendRows = (clone $spendQ)
                     ->selectRaw("
                     ma.id as pk,
                     {$idExpr} as meta_id,
@@ -2444,6 +2492,40 @@ class DashboardLeadsController extends Controller
                     ->orderByDesc('costo_anuncio')
                     ->limit(200)
                     ->get();
+
+                $roasByPk = [];
+                if (Schema::hasColumn($insightsTable, 'purchase_roas') && $spendRows->isNotEmpty()) {
+                    $spendPks = $spendRows
+                        ->pluck('pk')
+                        ->map(fn ($pk) => (int) $pk)
+                        ->filter()
+                        ->unique()
+                        ->values()
+                        ->all();
+
+                    if (! empty($spendPks)) {
+                        $roasValues = [];
+                        $roasRows = (clone $spendQ)
+                            ->whereIn('ma.id', $spendPks)
+                            ->select('ma.id as pk', 'i.purchase_roas')
+                            ->get();
+
+                        foreach ($roasRows as $roasRow) {
+                            $roas = $this->extractPurchaseRoasValue($roasRow->purchase_roas ?? null);
+                            if ($roas === null) {
+                                continue;
+                            }
+
+                            $roasValues[(int) $roasRow->pk][] = $roas;
+                        }
+
+                        foreach ($roasValues as $pk => $values) {
+                            if (! empty($values)) {
+                                $roasByPk[$pk] = array_sum($values) / count($values);
+                            }
+                        }
+                    }
+                }
 
                 $byPk = [];
                 foreach ($spendRows as $r) {
@@ -2529,6 +2611,7 @@ class DashboardLeadsController extends Controller
 
                 $fmtInt = fn ($n) => number_format((int) $n, 0, ',', '.');
                 $fmtMoney = fn ($n) => '$ '.number_format((float) $n, 2, ',', '.');
+                $fmtDecimal = fn ($n) => number_format((float) $n, 2, ',', '.');
 
                 $columns = [
                     ['key' => 'nombre',               'label' => 'Nombre Anuncio'],
@@ -2536,6 +2619,7 @@ class DashboardLeadsController extends Controller
                     ['key' => 'leads_anuncio',        'label' => 'Leads anuncio'],
                     ['key' => 'leads_calificados',    'label' => 'Leads calificados Anuncio'],
                     ['key' => 'leads_no_calificados', 'label' => 'Leads no calificados Anuncio'],
+                     ['key' => 'roas',                 'label' => 'ROAS'],
                     ['key' => 'CPL',                 'label' => 'CPL Anuncio'],
                 ];
 
@@ -2555,6 +2639,7 @@ class DashboardLeadsController extends Controller
                     $rows[] = [
                         'nombre' => $d['nombre'] ?: '-',
                         'costo_anuncio' => $fmtMoney($spend),
+                        'roas' => array_key_exists($pk, $roasByPk) ? $fmtDecimal($roasByPk[$pk]) : '-',
                         'leads_anuncio' => $fmtInt($total),
                         'leads_calificados' => $fmtInt($cal),
                         'leads_no_calificados' => $fmtInt($noCal),
@@ -2615,7 +2700,7 @@ class DashboardLeadsController extends Controller
         return $paginator;
     }
 
-    private function normalizeAdvertisingSection(string $title, array $table, string $defaultCustomerName): array
+    private function normalizeAdvertisingSection(string $title, array $table, string $defaultCustomerName, bool $includeRoas = false): array
     {
         $columns = [
             ['key' => 'name', 'label' => 'Nombre'],
@@ -2626,8 +2711,14 @@ class DashboardLeadsController extends Controller
             ['key' => 'cpl', 'label' => 'CPL'],
         ];
 
-        $rows = collect($table['rows'] ?? [])->map(function ($row) use ($defaultCustomerName) {
-            return [
+        if ($includeRoas) {
+            array_splice($columns, 2, 0, [
+                ['key' => 'roas', 'label' => 'ROAS'],
+            ]);
+        }
+
+        $rows = collect($table['rows'] ?? [])->map(function ($row) use ($defaultCustomerName, $includeRoas) {
+            $normalized = [
                 'customer_name' => $row['customer_name'] ?? $defaultCustomerName,
                 'name' => $row['name']
                     ?? $row['nombre']
@@ -2641,6 +2732,12 @@ class DashboardLeadsController extends Controller
                 'unqualified_leads' => $row['unqualified_leads'] ?? $row['non_qualified_leads'] ?? $row['leads_no_calificados'] ?? '0',
                 'cpl' => $row['cpl'] ?? $row['CPL'] ?? '$ 0,00',
             ];
+
+            if ($includeRoas) {
+                $normalized['roas'] = $row['roas'] ?? '-';
+            }
+
+            return $normalized;
         })->all();
 
         return [
@@ -2653,6 +2750,112 @@ class DashboardLeadsController extends Controller
             ],
             'empty_note' => 'No hay datos disponibles para los filtros seleccionados.',
         ];
+    }
+
+    private function extractPurchaseRoasValue($purchaseRoas): ?float
+    {
+        if ($purchaseRoas === null || $purchaseRoas === '') {
+            return null;
+        }
+
+        if ($purchaseRoas instanceof \Illuminate\Support\Collection) {
+            $purchaseRoas = $purchaseRoas->all();
+        }
+
+        if (is_string($purchaseRoas)) {
+            $decoded = json_decode($purchaseRoas, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                return null;
+            }
+
+            $purchaseRoas = $decoded;
+        }
+
+        if (is_object($purchaseRoas)) {
+            $purchaseRoas = (array) $purchaseRoas;
+        }
+
+        if (! is_array($purchaseRoas)) {
+            return null;
+        }
+
+        $items = array_key_exists('value', $purchaseRoas) || array_key_exists('action_type', $purchaseRoas)
+            ? [$purchaseRoas]
+            : $purchaseRoas;
+
+        $fallback = null;
+        foreach ($items as $item) {
+            if (is_object($item)) {
+                $item = (array) $item;
+            }
+
+            if (! is_array($item)) {
+                continue;
+            }
+
+            $rawValue = $item['value'] ?? null;
+            if (! is_numeric($rawValue)) {
+                continue;
+            }
+
+            $value = (float) $rawValue;
+            if (! is_finite($value)) {
+                continue;
+            }
+
+            $fallback ??= $value;
+            $actionType = strtolower(trim((string) ($item['action_type'] ?? '')));
+            if ($actionType === 'omni_purchase') {
+                return $value;
+            }
+        }
+
+        return $fallback;
+    }
+
+    private function averagePurchaseRoasByKey($rows, string $keyField): array
+    {
+        $valuesByKey = [];
+        foreach ($rows as $row) {
+            $key = data_get($row, $keyField);
+            if ($key === null || $key === '') {
+                continue;
+            }
+
+            $roas = $this->extractPurchaseRoasValue(data_get($row, 'purchase_roas'));
+            if ($roas === null) {
+                continue;
+            }
+
+            $valuesByKey[(string) $key][] = $roas;
+        }
+
+        $averages = [];
+        foreach ($valuesByKey as $key => $values) {
+            if (! empty($values)) {
+                $averages[$key] = array_sum($values) / count($values);
+            }
+        }
+
+        return $averages;
+    }
+
+    private function parseNullableNumber($value): ?float
+    {
+        if ($value === null || $value === '' || ! is_numeric($value)) {
+            return null;
+        }
+
+        $number = (float) $value;
+
+        return is_finite($number) ? $number : null;
+    }
+
+    private function formatNullableRoas($value): string
+    {
+        $number = $this->parseNullableNumber($value);
+
+        return $number === null ? '-' : number_format($number, 2, ',', '.');
     }
 
     private function buildGoogleCampaignLeadSummary(?int $customerId, ?int $integrationId, array $filters, Carbon $from, Carbon $to): array
@@ -2722,6 +2925,7 @@ class DashboardLeadsController extends Controller
         $customerTable = (new Customer)->getTable();
         $excluded = ['lead no efectivo', 'sin gestionar', 'n/a'];
         $excludedSql = "'".implode("','", array_map(fn ($s) => str_replace("'", "''", $s), $excluded))."'";
+        $roasSelect = Schema::hasColumn($table, 'roas') ? "AVG({$table}.roas) as roas" : 'NULL as roas';
 
         $costRows = $modelClass::query()
             ->join($customerTable, "{$customerTable}.id", '=', "{$table}.customer_id")
@@ -2732,7 +2936,8 @@ class DashboardLeadsController extends Controller
                 {$customerTable}.name as customer_name,
                 {$table}.{$entityIdColumn} as entity_id,
                 COALESCE(NULLIF({$table}.{$entityNameColumn}, ''), '{$missingLabel}') as entity_name,
-                SUM({$table}.cost) as cost
+                SUM({$table}.cost) as cost,
+                {$roasSelect}
             ")
             ->groupBy(
                 "{$table}.customer_id",
@@ -2782,6 +2987,7 @@ class DashboardLeadsController extends Controller
                 'customer_name' => $row->customer_name ?: 'Sin cliente',
                 'name' => $row->entity_name ?: $missingLabel,
                 'cost_value' => (float) ($row->cost ?? 0),
+                'roas_value' => $this->parseNullableNumber($row->roas ?? null),
                 'leads_value' => 0,
                 'qualified_value' => 0,
             ];
@@ -2794,6 +3000,7 @@ class DashboardLeadsController extends Controller
                     'customer_name' => $row->customer_name ?: 'Sin cliente',
                     'name' => $row->entity_name ?: $missingLabel,
                     'cost_value' => 0.0,
+                    'roas_value' => null,
                     'leads_value' => 0,
                     'qualified_value' => 0,
                 ];
@@ -2827,6 +3034,7 @@ class DashboardLeadsController extends Controller
                 'customer_name' => $row['customer_name'],
                 'name' => $row['name'],
                 'cost' => $fmtMoney($row['cost_value']),
+                'roas' => $this->formatNullableRoas($row['roas_value']),
                 'leads' => $fmtInt($row['leads_value']),
                 'qualified_leads' => $fmtInt($row['qualified_value']),
                 'unqualified_leads' => $fmtInt($unqualified),
@@ -2844,6 +3052,7 @@ class DashboardLeadsController extends Controller
                 'columns' => [
                     ['key' => 'name', 'label' => 'Nombre'],
                     ['key' => 'cost', 'label' => 'Costo'],
+                    ['key' => 'roas', 'label' => 'ROAS'],
                     ['key' => 'leads', 'label' => 'Leads'],
                     ['key' => 'qualified_leads', 'label' => 'Leads calificados'],
                     ['key' => 'unqualified_leads', 'label' => 'Leads no calificados'],
@@ -2868,6 +3077,7 @@ class DashboardLeadsController extends Controller
     {
         $table = (new GoogleAdsCampaign)->getTable();
         $customerTable = (new Customer)->getTable();
+        $roasSelect = Schema::hasColumn($table, 'roas') ? "AVG({$table}.roas) as roas" : 'NULL as roas';
 
         $rows = GoogleAdsCampaign::query()
             ->join($customerTable, "{$customerTable}.id", '=', "{$table}.customer_id")
@@ -2882,6 +3092,7 @@ class DashboardLeadsController extends Controller
                 SUM({$table}.clicks) as clicks,
                 SUM({$table}.conversions) as conversions,
                 SUM({$table}.cost) as cost,
+                {$roasSelect},
                 CASE WHEN SUM({$table}.impressions) > 0 THEN (SUM({$table}.clicks) / SUM({$table}.impressions)) * 100 ELSE 0 END as ctr,
                 CASE WHEN SUM({$table}.clicks) > 0 THEN SUM({$table}.cost) / SUM({$table}.clicks) ELSE 0 END as cpc,
                 CASE WHEN SUM({$table}.impressions) > 0 THEN (SUM({$table}.cost) / SUM({$table}.impressions)) * 1000 ELSE 0 END as cpm
@@ -2897,6 +3108,7 @@ class DashboardLeadsController extends Controller
             ['key' => 'impressions', 'label' => 'Impresiones'],
             ['key' => 'clicks', 'label' => 'Clics'],
             ['key' => 'cost', 'label' => 'Costo'],
+            ['key' => 'roas', 'label' => 'ROAS'],
             ['key' => 'conversions', 'label' => 'Conversiones'],
             ['key' => 'ctr', 'label' => 'CTR'],
             ['key' => 'cpc', 'label' => 'CPC'],
@@ -2912,6 +3124,7 @@ class DashboardLeadsController extends Controller
         $googleAdsTable = (new GoogleAdsAd)->getTable();
         $excluded = ['lead no efectivo', 'sin gestionar', 'n/a'];
         $excludedSql = "'".implode("','", array_map(fn ($s) => str_replace("'", "''", $s), $excluded))."'";
+        $roasSelect = Schema::hasColumn($table, 'roas') ? "AVG({$table}.roas) as roas" : 'NULL as roas';
 
         $costRows = GoogleAdsAdGroup::query()
             ->join($customerTable, "{$customerTable}.id", '=', "{$table}.customer_id")
@@ -2922,7 +3135,8 @@ class DashboardLeadsController extends Controller
                 {$customerTable}.name as customer_name,
                 {$table}.google_ad_group_id,
                 COALESCE(NULLIF({$table}.ad_group_name, ''), 'Sin grupo de anuncio') as ad_group_name,
-                SUM({$table}.cost) as cost
+                SUM({$table}.cost) as cost,
+                {$roasSelect}
             ")
             ->groupBy(
                 "{$table}.customer_id",
@@ -2970,6 +3184,7 @@ class DashboardLeadsController extends Controller
                 'customer_name' => $row->customer_name ?: 'Sin cliente',
                 'ad_group_name' => $row->ad_group_name ?: 'Sin grupo de anuncio',
                 'cost_value' => (float) ($row->cost ?? 0),
+                'roas_value' => $this->parseNullableNumber($row->roas ?? null),
                 'leads_value' => 0,
                 'qualified_value' => 0,
             ];
@@ -2982,6 +3197,7 @@ class DashboardLeadsController extends Controller
                     'customer_name' => $row->customer_name ?: 'Sin cliente',
                     'ad_group_name' => $row->ad_group_name ?: 'Sin grupo de anuncio',
                     'cost_value' => 0.0,
+                    'roas_value' => null,
                     'leads_value' => 0,
                     'qualified_value' => 0,
                 ];
@@ -3015,6 +3231,7 @@ class DashboardLeadsController extends Controller
                 'customer_name' => $row['customer_name'],
                 'ad_group_name' => $row['ad_group_name'],
                 'cost' => $fmtMoney($row['cost_value']),
+                'roas' => $this->formatNullableRoas($row['roas_value']),
                 'leads' => $fmtInt($row['leads_value']),
                 'qualified_leads' => $fmtInt($row['qualified_value']),
                 'non_qualified_leads' => $fmtInt($nonQualified),
@@ -3033,6 +3250,7 @@ class DashboardLeadsController extends Controller
                     ['key' => 'customer_name', 'label' => 'Cliente'],
                     ['key' => 'ad_group_name', 'label' => 'Grupo de anuncio'],
                     ['key' => 'cost', 'label' => 'Costo'],
+                    ['key' => 'roas', 'label' => 'ROAS'],
                     ['key' => 'leads', 'label' => 'Leads'],
                     ['key' => 'qualified_leads', 'label' => 'Leads calificados'],
                     ['key' => 'non_qualified_leads', 'label' => 'Leads no calificados'],
@@ -3048,6 +3266,7 @@ class DashboardLeadsController extends Controller
     {
         $table = (new GoogleAdsAd)->getTable();
         $customerTable = (new Customer)->getTable();
+        $roasSelect = Schema::hasColumn($table, 'roas') ? "AVG({$table}.roas) as roas" : 'NULL as roas';
 
         $rows = GoogleAdsAd::query()
             ->join($customerTable, "{$customerTable}.id", '=', "{$table}.customer_id")
@@ -3066,6 +3285,7 @@ class DashboardLeadsController extends Controller
                 SUM({$table}.clicks) as clicks,
                 SUM({$table}.conversions) as conversions,
                 SUM({$table}.cost) as cost,
+                {$roasSelect},
                 CASE WHEN SUM({$table}.impressions) > 0 THEN (SUM({$table}.clicks) / SUM({$table}.impressions)) * 100 ELSE 0 END as ctr,
                 CASE WHEN SUM({$table}.clicks) > 0 THEN SUM({$table}.cost) / SUM({$table}.clicks) ELSE 0 END as cpc,
                 CASE WHEN SUM({$table}.impressions) > 0 THEN (SUM({$table}.cost) / SUM({$table}.impressions)) * 1000 ELSE 0 END as cpm
@@ -3091,6 +3311,7 @@ class DashboardLeadsController extends Controller
             ['key' => 'impressions', 'label' => 'Impresiones'],
             ['key' => 'clicks', 'label' => 'Clics'],
             ['key' => 'cost', 'label' => 'Costo'],
+            ['key' => 'roas', 'label' => 'ROAS'],
             ['key' => 'conversions', 'label' => 'Conversiones'],
             ['key' => 'ctr', 'label' => 'CTR'],
             ['key' => 'cpc', 'label' => 'CPC'],
@@ -3109,6 +3330,7 @@ class DashboardLeadsController extends Controller
                 'impressions' => number_format((int) ($row->impressions ?? 0), 0, ',', '.'),
                 'clicks' => number_format((int) ($row->clicks ?? 0), 0, ',', '.'),
                 'cost' => '$ '.number_format((float) ($row->cost ?? 0), 2, ',', '.'),
+                'roas' => $this->formatNullableRoas($row->roas ?? null),
                 'conversions' => number_format((float) ($row->conversions ?? 0), 2, ',', '.'),
                 'ctr' => number_format((float) ($row->ctr ?? 0), 2, ',', '.').'%',
                 'cpc' => '$ '.number_format((float) ($row->cpc ?? 0), 2, ',', '.'),
@@ -3140,4 +3362,3 @@ class DashboardLeadsController extends Controller
         return null;
     }
 }
-

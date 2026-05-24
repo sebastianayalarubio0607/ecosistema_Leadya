@@ -66,7 +66,13 @@
                                 <span class="px-2 py-1 rounded-lg text-xs border {{ $it->google_ads_conversion_enabled ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
                                     {{ $it->google_ads_conversion_enabled ? 'Activa' : 'Inactiva' }}
                                 </span>
-                                <div class="text-xs text-white/50 mt-1">{{ $it->google_ads_conversion_action_name ?? '--' }}</div>
+                                <div class="text-xs text-white/50 mt-1">
+                                    @if($it->googleAdsConversions->isNotEmpty())
+                                        {{ $it->googleAdsConversions->count() }} conversion(es)
+                                    @else
+                                        {{ $it->google_ads_conversion_action_name ?? '--' }}
+                                    @endif
+                                </div>
                             </td>
                             <td class="px-3 py-2">
                                 <div class="flex items-center gap-2">

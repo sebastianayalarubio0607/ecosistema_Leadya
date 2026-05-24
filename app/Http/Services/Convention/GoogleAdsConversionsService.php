@@ -127,12 +127,13 @@ class GoogleAdsConversionsService
             return $this->skipped('El lead no tiene gclid, gbraid o wbraid.', $orderId);
         }
 
-        $conversionAction = $this->resolveConversionAction($crmState, $googleAdsCustomerId);
+        $conversionAction = $this->resolveConversionActionForLeadCustomer($crmState, $customer, $googleAdsCustomerId);
 
         if (! $conversionAction) {
-            return $this->skipped('El CrmState no tiene conversion action configurada.', $orderId, [
+            return $this->skipped('El CrmState no tiene conversion action configurada para el customer del lead.', $orderId, [
                 'click_identifier_type' => $identifierType,
                 'click_identifier_value' => $identifierValue,
+                'skip_job_record' => true,
             ]);
         }
 
@@ -408,10 +409,25 @@ class GoogleAdsConversionsService
         return null;
     }
 
-    protected function resolveConversionAction(CrmState $crmState, string $googleAdsCustomerId): ?string
+    protected function resolveConversionActionForLeadCustomer(CrmState $crmState, Customer $customer, string $googleAdsCustomerId): ?string
     {
-        $resource = trim((string) $crmState->google_ads_conversion_action_resource_name);
-        $id = trim((string) $crmState->google_ads_conversion_action_id);
+        $hasConfiguredConversions = $crmState->googleAdsConversions()->exists();
+        $configuredConversion = $crmState->googleAdsConversions()
+            ->where('customer_id', $customer->id)
+            ->first();
+
+        if ($hasConfiguredConversions && ! $configuredConversion) {
+            return null;
+        }
+
+        $resource = trim((string) (
+            $configuredConversion?->conversion_action_resource_name
+            ?? $crmState->google_ads_conversion_action_resource_name
+        ));
+        $id = trim((string) (
+            $configuredConversion?->conversion_action_id
+            ?? $crmState->google_ads_conversion_action_id
+        ));
 
         if ($id === '' && $resource !== '') {
             $id = Str::afterLast($resource, '/');

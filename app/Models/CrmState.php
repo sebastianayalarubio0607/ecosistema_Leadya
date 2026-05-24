@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class CrmState extends Model
 {
@@ -48,5 +49,8 @@ class CrmState extends Model
         return $this->belongsTo(MetaEvent::class, 'meta_event_id');
     }
 
-    
+    public function googleAdsConversions(): HasMany
+    {
+        return $this->hasMany(CrmStateGoogleAdsConversion::class, 'crm_state_id', 'id');
+    }
 }

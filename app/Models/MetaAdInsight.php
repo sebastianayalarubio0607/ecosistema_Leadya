@@ -46,6 +46,7 @@ class MetaAdInsight extends Model
         'date_start',
         'date_stop',
         'status',
+        'purchase_roas',
     ];
 
     protected $casts = [

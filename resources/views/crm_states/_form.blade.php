@@ -6,9 +6,26 @@
     $selectedIntegration = $isCreate && isset($integrations)
         ? $integrations->firstWhere('id', (int) $selectedIntegrationId)
         : null;
-    $googleAdsCustomerId = ($integration ?? null)?->customer?->id
-        ?? $selectedIntegration?->customer?->id
-        ?? null;
+
+    $storedGoogleAdsRows = $crmstate?->googleAdsConversions
+        ? $crmstate->googleAdsConversions->map(fn ($item) => [
+            'customer_id' => $item->customer_id,
+            'conversion_action_id' => $item->conversion_action_id,
+            'conversion_action_name' => $item->conversion_action_name,
+            'conversion_action_resource_name' => $item->conversion_action_resource_name,
+        ])->values()->all()
+        : [];
+
+    if (!$isCreate && empty($storedGoogleAdsRows) && $crmstate?->google_ads_conversion_action_id) {
+        $storedGoogleAdsRows[] = [
+            'customer_id' => $integration?->customer_id,
+            'conversion_action_id' => $crmstate->google_ads_conversion_action_id,
+            'conversion_action_name' => $crmstate->google_ads_conversion_action_name,
+            'conversion_action_resource_name' => $crmstate->google_ads_conversion_action_resource_name,
+        ];
+    }
+
+    $googleAdsRows = old('google_ads_conversions', $storedGoogleAdsRows);
 @endphp
 
 <div class="space-y-4" data-google-ads-crm-form>
@@ -17,13 +34,10 @@
             <div class="md:col-span-7">
                 <label class="block mb-1 text-white/70">Integracion</label>
                 <select name="integration_id"
-                        data-google-ads-integration
                         class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
                     <option value="">-- Selecciona --</option>
                     @foreach($integrations as $in)
                         <option value="{{ $in->id }}"
-                                data-customer-id="{{ $in->customer?->id }}"
-                                data-google-ads-customer-id="{{ $in->customer?->id_Gads }}"
                                 @selected(old('integration_id') == $in->id)>
                             {{ $in->customer?->name ?? '--' }} - {{ $in->name }} ({{ $in->id }})
                         </option>
@@ -44,7 +58,7 @@
         <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
             <div class="md:col-span-6">
                 <div class="rounded-xl border border-white/10 bg-white/5 p-3">
-                    <div class="text-xs text-white/50">Integration ID</div>
+                    <div class="text-xs text-white/50">Integration ID / Prefijo</div>
                     <div class="text-white">{{ $integrationId ?? '--' }}</div>
                     <div class="text-xs text-white/50 mt-2">Customer / Integration</div>
                     <div class="text-white">
@@ -120,34 +134,69 @@
             </a>
         </div>
         @error('google_ads_conversion_enabled') <div class="text-rose-300 text-xs mt-1">{{ $message }}</div> @enderror
+        @error('google_ads_conversions') <div class="text-rose-300 text-xs mt-1">{{ $message }}</div> @enderror
 
-        <div>
-            <label class="block mb-1 text-white/70">Conversion de Google Ads</label>
-            <select data-google-ads-actions
-                    data-current-id="{{ old('google_ads_conversion_action_id', $crmstate?->google_ads_conversion_action_id) }}"
-                    data-current-name="{{ old('google_ads_conversion_action_name', $crmstate?->google_ads_conversion_action_name) }}"
-                    data-current-resource="{{ old('google_ads_conversion_action_resource_name', $crmstate?->google_ads_conversion_action_resource_name) }}"
-                    data-customer-id="{{ $googleAdsCustomerId }}"
-                    class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
-                <option value="">-- Sin asignar --</option>
-                @if(old('google_ads_conversion_action_id', $crmstate?->google_ads_conversion_action_id))
-                    <option value="{{ old('google_ads_conversion_action_id', $crmstate?->google_ads_conversion_action_id) }}"
-                            data-name="{{ old('google_ads_conversion_action_name', $crmstate?->google_ads_conversion_action_name) }}"
-                            data-resource="{{ old('google_ads_conversion_action_resource_name', $crmstate?->google_ads_conversion_action_resource_name) }}"
-                            selected>
-                        {{ old('google_ads_conversion_action_name', $crmstate?->google_ads_conversion_action_name) ?: old('google_ads_conversion_action_id', $crmstate?->google_ads_conversion_action_id) }}
-                    </option>
-                @endif
-            </select>
-            <input type="hidden" name="google_ads_conversion_action_id" value="{{ old('google_ads_conversion_action_id', $crmstate?->google_ads_conversion_action_id) }}" data-google-ads-action-id>
-            <input type="hidden" name="google_ads_conversion_action_name" value="{{ old('google_ads_conversion_action_name', $crmstate?->google_ads_conversion_action_name) }}" data-google-ads-action-name>
-            <input type="hidden" name="google_ads_conversion_action_resource_name" value="{{ old('google_ads_conversion_action_resource_name', $crmstate?->google_ads_conversion_action_resource_name) }}" data-google-ads-action-resource>
-            <div class="text-xs text-white/50 mt-1" data-google-ads-actions-status>
-                Solo se listan conversiones UPLOAD_CLICKS habilitadas.
-            </div>
-            @error('google_ads_conversion_action_id') <div class="text-rose-300 text-xs mt-1">{{ $message }}</div> @enderror
-            @error('google_ads_conversion_action_resource_name') <div class="text-rose-300 text-xs mt-1">{{ $message }}</div> @enderror
+        <div class="space-y-3" data-google-ads-matrix>
+            @forelse($googleAdsRows as $index => $row)
+                <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-start rounded-xl border border-white/10 bg-slate-950/40 p-3"
+                     data-google-ads-row>
+                    <div class="md:col-span-4">
+                        <label class="block mb-1 text-white/70">Customer</label>
+                        <select name="google_ads_conversions[{{ $index }}][customer_id]"
+                                data-google-ads-customer
+                                class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+                            <option value="">-- Selecciona --</option>
+                            @foreach($customers as $customer)
+                                <option value="{{ $customer->id }}" @selected((string) data_get($row, 'customer_id') === (string) $customer->id)>
+                                    {{ $customer->name }} ({{ $customer->id_Gads }})
+                                </option>
+                            @endforeach
+                        </select>
+                        @error("google_ads_conversions.{$index}.customer_id") <div class="text-rose-300 text-xs mt-1">{{ $message }}</div> @enderror
+                    </div>
+
+                    <div class="md:col-span-7">
+                        <label class="block mb-1 text-white/70">Conversion de Google Ads</label>
+                        <select data-google-ads-actions
+                                data-current-id="{{ data_get($row, 'conversion_action_id') }}"
+                                data-current-name="{{ data_get($row, 'conversion_action_name') }}"
+                                data-current-resource="{{ data_get($row, 'conversion_action_resource_name') }}"
+                                class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+                            <option value="">-- Sin asignar --</option>
+                            @if(data_get($row, 'conversion_action_id'))
+                                <option value="{{ data_get($row, 'conversion_action_id') }}"
+                                        data-name="{{ data_get($row, 'conversion_action_name') }}"
+                                        data-resource="{{ data_get($row, 'conversion_action_resource_name') }}"
+                                        selected>
+                                    {{ data_get($row, 'conversion_action_name') ?: data_get($row, 'conversion_action_id') }}
+                                </option>
+                            @endif
+                        </select>
+                        <input type="hidden" name="google_ads_conversions[{{ $index }}][conversion_action_id]" value="{{ data_get($row, 'conversion_action_id') }}" data-google-ads-action-id>
+                        <input type="hidden" name="google_ads_conversions[{{ $index }}][conversion_action_name]" value="{{ data_get($row, 'conversion_action_name') }}" data-google-ads-action-name>
+                        <input type="hidden" name="google_ads_conversions[{{ $index }}][conversion_action_resource_name]" value="{{ data_get($row, 'conversion_action_resource_name') }}" data-google-ads-action-resource>
+                        <div class="text-xs text-white/50 mt-1" data-google-ads-actions-status>
+                            Selecciona un customer para cargar conversiones UPLOAD_CLICKS habilitadas.
+                        </div>
+                    </div>
+
+                    <div class="md:col-span-1 pt-6">
+                        <button type="button"
+                                class="w-full px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-white border border-rose-300/20"
+                                data-google-ads-remove>
+                            X
+                        </button>
+                    </div>
+                </div>
+            @empty
+            @endforelse
         </div>
+
+        <button type="button"
+                class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10"
+                data-google-ads-add>
+            + Agregar customer
+        </button>
 
         <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
             <div class="md:col-span-6">
@@ -192,39 +241,86 @@
             Cancelar
         </a>
     </div>
+
+    <template data-google-ads-row-template>
+        <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-start rounded-xl border border-white/10 bg-slate-950/40 p-3"
+             data-google-ads-row>
+            <div class="md:col-span-4">
+                <label class="block mb-1 text-white/70">Customer</label>
+                <select name="google_ads_conversions[__INDEX__][customer_id]"
+                        data-google-ads-customer
+                        class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+                    <option value="">-- Selecciona --</option>
+                    @foreach($customers as $customer)
+                        <option value="{{ $customer->id }}">{{ $customer->name }} ({{ $customer->id_Gads }})</option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="md:col-span-7">
+                <label class="block mb-1 text-white/70">Conversion de Google Ads</label>
+                <select data-google-ads-actions
+                        class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+                    <option value="">-- Sin asignar --</option>
+                </select>
+                <input type="hidden" name="google_ads_conversions[__INDEX__][conversion_action_id]" data-google-ads-action-id>
+                <input type="hidden" name="google_ads_conversions[__INDEX__][conversion_action_name]" data-google-ads-action-name>
+                <input type="hidden" name="google_ads_conversions[__INDEX__][conversion_action_resource_name]" data-google-ads-action-resource>
+                <div class="text-xs text-white/50 mt-1" data-google-ads-actions-status>
+                    Selecciona un customer para cargar conversiones UPLOAD_CLICKS habilitadas.
+                </div>
+            </div>
+
+            <div class="md:col-span-1 pt-6">
+                <button type="button"
+                        class="w-full px-3 py-2 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-white border border-rose-300/20"
+                        data-google-ads-remove>
+                    X
+                </button>
+            </div>
+        </div>
+    </template>
 </div>
 
 @once
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             document.querySelectorAll('[data-google-ads-crm-form]').forEach((form) => {
-                const integration = form.querySelector('[data-google-ads-integration]');
-                const select = form.querySelector('[data-google-ads-actions]');
-                const status = form.querySelector('[data-google-ads-actions-status]');
-                const idInput = form.querySelector('[data-google-ads-action-id]');
-                const nameInput = form.querySelector('[data-google-ads-action-name]');
-                const resourceInput = form.querySelector('[data-google-ads-action-resource]');
+                const matrix = form.querySelector('[data-google-ads-matrix]');
+                const template = form.querySelector('[data-google-ads-row-template]');
+                const addButton = form.querySelector('[data-google-ads-add]');
 
-                if (!select) {
+                if (!matrix || !template || !addButton) {
                     return;
                 }
 
-                const setSelectedFields = () => {
+                const setSelectedFields = (row) => {
+                    const select = row.querySelector('[data-google-ads-actions]');
+                    const idInput = row.querySelector('[data-google-ads-action-id]');
+                    const nameInput = row.querySelector('[data-google-ads-action-name]');
+                    const resourceInput = row.querySelector('[data-google-ads-action-resource]');
                     const option = select.selectedOptions[0];
+
                     idInput.value = option?.value || '';
                     nameInput.value = option?.dataset.name || '';
                     resourceInput.value = option?.dataset.resource || '';
                 };
 
-                const loadActions = async (customerId, keepId = null) => {
+                const loadActions = async (row, customerId, keepId = null) => {
+                    const select = row.querySelector('[data-google-ads-actions]');
+                    const status = row.querySelector('[data-google-ads-actions-status]');
+                    const idInput = row.querySelector('[data-google-ads-action-id]');
+                    const nameInput = row.querySelector('[data-google-ads-action-name]');
+                    const resourceInput = row.querySelector('[data-google-ads-action-resource]');
+
                     select.innerHTML = '<option value="">Cargando...</option>';
                     idInput.value = '';
                     nameInput.value = '';
                     resourceInput.value = '';
 
                     if (!customerId) {
-                        select.innerHTML = '<option value="">Sin customer id_Gads</option>';
-                        status.textContent = 'Selecciona una integracion con customer y id_Gads configurado.';
+                        select.innerHTML = '<option value="">-- Sin asignar --</option>';
+                        status.textContent = 'Selecciona un customer para cargar conversiones.';
                         return;
                     }
 
@@ -250,27 +346,40 @@
                             ? `${(data.actions || []).length} conversiones disponibles.`
                             : (data.error_message || 'No fue posible cargar conversiones.');
 
-                        setSelectedFields();
+                        setSelectedFields(row);
                     } catch (error) {
                         select.innerHTML = '<option value="">No disponible</option>';
                         status.textContent = 'No fue posible consultar Google Ads.';
                     }
                 };
 
-                select.addEventListener('change', setSelectedFields);
+                const bindRow = (row) => {
+                    const customer = row.querySelector('[data-google-ads-customer]');
+                    const select = row.querySelector('[data-google-ads-actions]');
+                    const remove = row.querySelector('[data-google-ads-remove]');
 
-                if (integration) {
-                    integration.addEventListener('change', () => {
-                        const option = integration.selectedOptions[0];
-                        loadActions(option?.dataset.customerId || null);
-                    });
-                }
+                    customer.addEventListener('change', () => loadActions(row, customer.value));
+                    select.addEventListener('change', () => setSelectedFields(row));
+                    remove.addEventListener('click', () => row.remove());
 
-                const initialCustomerId = select.dataset.customerId;
-                const currentId = select.dataset.currentId;
+                    if (customer.value) {
+                        loadActions(row, customer.value, select.dataset.currentId || null);
+                    }
+                };
 
-                if (initialCustomerId) {
-                    loadActions(initialCustomerId, currentId);
+                addButton.addEventListener('click', () => {
+                    const index = Date.now().toString();
+                    const wrapper = document.createElement('div');
+                    wrapper.innerHTML = template.innerHTML.replaceAll('__INDEX__', index).trim();
+                    const row = wrapper.firstElementChild;
+                    matrix.appendChild(row);
+                    bindRow(row);
+                });
+
+                matrix.querySelectorAll('[data-google-ads-row]').forEach(bindRow);
+
+                if (!matrix.querySelector('[data-google-ads-row]')) {
+                    addButton.click();
                 }
             });
         });

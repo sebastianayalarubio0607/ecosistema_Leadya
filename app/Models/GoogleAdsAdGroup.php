@@ -22,6 +22,7 @@ class GoogleAdsAdGroup extends Model
         'conversions',
         'cost_micros',
         'cost',
+        'roas',
         'raw_payload',
     ];
 
@@ -32,6 +33,7 @@ class GoogleAdsAdGroup extends Model
         'conversions' => 'decimal:2',
         'cost_micros' => 'integer',
         'cost' => 'decimal:6',
+        'roas' => 'float',
         'raw_payload' => 'array',
     ];
 

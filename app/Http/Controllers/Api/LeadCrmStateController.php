@@ -78,7 +78,7 @@ class LeadCrmStateController extends Controller
                 // Construimos el crm_id a buscar en la base de datos combinando el ID de la integración con el lead_id de Kommo, y el nuevo crm_state combinando el ID de la integración con el status_id
                 $crmIdToFind = $crmIdPrefix . '-' . $kommoLeadId;
                 // El nuevo crm_state se construye combinando el ID de la integración con el status_id recibido, lo que permite identificar el nuevo estado del lead en nuestro sistema
-                $newCrmState = $integration->id . '-' . $statusId;
+                $newCrmState = $crmIdPrefix . '-' . $statusId;
 
                 // Procesamos el cambio de estado del lead utilizando una función dedicada que maneja la lógica de actualización y registro en el historial, y actualizamos los contadores de leads actualizados y no encontrados
                 $this->processLeadStateChange(
@@ -104,7 +104,7 @@ class LeadCrmStateController extends Controller
             $crmIdToFind = $crmIdPrefix . '-' . $contactId;
 
             // Resolvemos el nuevo crm_state a asignar utilizando una función dedicada que busca en la base de datos un estado que coincida con el nombre recibido, lo que permite manejar cambios de estado en Freshworks sin depender de IDs específicos
-            $newCrmState = $this->resolveFreshworksCrmStateId($integration->id, $statusName);
+            $newCrmState = $this->resolveFreshworksCrmStateId($crmIdPrefix, $statusName);
 
             // Si no se pudo resolver un nuevo crm_state a partir del nombre recibido, registramos una advertencia para investigar posibles problemas de configuración o datos inconsistentes, ya que esto indica que el estado recibido no coincide con ningún estado configurado en nuestro sistema para esta integración
             if ($newCrmState === null) {
