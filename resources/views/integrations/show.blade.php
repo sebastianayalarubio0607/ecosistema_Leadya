@@ -138,5 +138,66 @@
                 </div>
             </div>
         @endif
+
+        @if (in_array(\Illuminate\Support\Str::of((string) optional($integration->integrationtype)->name)->ascii()->lower()->replace([' ', '-'], '_')->replaceMatches('/_+/', '_')->trim('_')->toString(), ['kommopipeline', 'kommo_pipeline'], true))
+            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-6 text-white/80">
+                <div class="mb-4">
+                    <h3 class="text-lg font-semibold text-white">KommoPipeline</h3>
+                    <p class="text-sm text-white/50">Payload dinamico, fallback y condicionalidades configuradas.</p>
+                </div>
+
+                <div class="grid gap-4">
+                    <div>
+                        <div class="text-sm text-white/50">Token</div>
+                        <div class="mt-1 font-mono text-sm">{{ \App\Support\SensitiveValue::mask($integration->tokent) }}</div>
+                    </div>
+
+                    <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                        <div>
+                            <div class="text-sm text-white/50">Pipeline por defecto</div>
+                            <div class="mt-1">{{ $integration->kommo_pipeline_default_pipeline_name ?: $integration->kommo_pipeline_default_pipeline_id ?: '—' }}</div>
+                        </div>
+                        <div>
+                            <div class="text-sm text-white/50">Status por defecto</div>
+                            <div class="mt-1">{{ $integration->kommo_pipeline_default_status_name ?: $integration->kommo_pipeline_default_status_id ?: '—' }}</div>
+                        </div>
+                    </div>
+
+                    <div>
+                        <div class="text-sm text-white/50">Payload JSON</div>
+                        <pre class="mt-1 overflow-x-auto rounded-xl border border-white/10 bg-slate-900/60 p-3 text-xs text-white/80">{{ $integration->body ?: '—' }}</pre>
+                    </div>
+
+                    <div class="overflow-x-auto rounded-xl border border-white/10">
+                        <table class="min-w-full text-sm">
+                            <thead class="bg-white/5 text-white/70">
+                                <tr>
+                                    <th class="text-left px-3 py-2">Campo Lead</th>
+                                    <th class="text-left px-3 py-2">Valor esperado</th>
+                                    <th class="text-left px-3 py-2">Pipeline</th>
+                                    <th class="text-left px-3 py-2">Status</th>
+                                    <th class="text-left px-3 py-2">Activa</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-white/10">
+                                @forelse($integration->kommoPipelineConditions ?? [] as $condition)
+                                    <tr class="hover:bg-white/5">
+                                        <td class="px-3 py-2 font-mono text-xs">{{ $condition->lead_field }}</td>
+                                        <td class="px-3 py-2">{{ $condition->expected_value }}</td>
+                                        <td class="px-3 py-2">{{ $condition->pipeline_name ?: $condition->pipeline_id }}</td>
+                                        <td class="px-3 py-2">{{ $condition->status_name ?: $condition->status_id }}</td>
+                                        <td class="px-3 py-2">{{ $condition->active ? 'Si' : 'No' }}</td>
+                                    </tr>
+                                @empty
+                                    <tr>
+                                        <td class="px-3 py-8 text-center text-white/60" colspan="5">Aun no hay condicionalidades configuradas.</td>
+                                    </tr>
+                                @endforelse
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        @endif
     </div>
 @endsection

@@ -74,6 +74,11 @@ class LeadService
             'wbraid'          => 'sometimes|nullable|string|max:255',
             'gad_source'      => 'sometimes|nullable|string|max:255',
             'gad_campaignid'  => 'sometimes|nullable|string|max:255',
+            'google_ad_id'    => 'sometimes|nullable|string|max:255',
+            'google_adgroup_id' => 'sometimes|nullable|string|max:255',
+            'google_campaign_id' => 'sometimes|nullable|string|max:255',
+            'matchtype'       => 'sometimes|nullable|string|max:255',
+            'device'          => 'sometimes|nullable|string|max:255',
             'value'           => 'sometimes|nullable|numeric',
             'crm_state'       => 'sometimes|nullable|string|max:255',
             

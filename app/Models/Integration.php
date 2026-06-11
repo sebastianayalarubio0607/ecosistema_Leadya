@@ -55,6 +55,10 @@ class Integration extends Model
         'url_creacionlead',
         'dealname',
         'dealstage',
+        'kommo_pipeline_default_pipeline_id',
+        'kommo_pipeline_default_pipeline_name',
+        'kommo_pipeline_default_status_id',
+        'kommo_pipeline_default_status_name',
     ];
 
     public function crmIdPrefix(): string
@@ -86,5 +90,10 @@ class Integration extends Model
     public function mondayBoards(): HasMany
     {
         return $this->hasMany(MondayBoard::class);
+    }
+
+    public function kommoPipelineConditions(): HasMany
+    {
+        return $this->hasMany(KommoPipelineCondition::class);
     }
 }

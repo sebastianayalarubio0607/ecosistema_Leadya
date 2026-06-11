@@ -48,7 +48,7 @@
         @error('status') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
     </div>
 
-    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="kommo freshworks hubspot gohighlevel">
+    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="kommo kommopipeline freshworks hubspot gohighlevel">
         <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
             <p class="text-sm text-white/70">
                 Si está desactivado, se usa el ID de integración como prefijo del <span class="font-mono">crm_id</span>.
@@ -82,6 +82,160 @@
         <div><label class="block mb-1 text-white/70">crm_Id_email</label><input name="crm_Id_email" value="{{ old('crm_Id_email', $integration->crm_Id_email ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('crm_Id_email') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">crm_Id_service</label><input name="crm_Id_service" value="{{ old('crm_Id_service', $integration->crm_Id_service ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('crm_Id_service') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">crm_Id_fuente</label><input name="crm_Id_fuente" value="{{ old('crm_Id_fuente', $integration->crm_Id_fuente ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('crm_Id_fuente') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
+    </div>
+
+    @php
+        $kommoPipelineBodyPlaceholder = <<<'JSON'
+[
+  {
+    "name": "{{$lead->name}} {{$lead->last_name}}",
+    "pipeline_id": "{{pipeline_id}}",
+    "status_id": "{{status_id}}",
+    "_embedded": {
+      "contacts": [
+        {
+          "name": "{{$lead->name}} {{$lead->last_name}}",
+          "custom_fields_values": [
+            {
+              "field_id": 123456,
+              "values": [
+                {
+                  "value": "{{$lead->phone}}"
+                }
+              ]
+            },
+            {
+              "field_id": 789101,
+              "values": [
+                {
+                  "value": "{{$lead->email}}",
+                  "enum_code": "WORK"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  }
+]
+JSON;
+
+        $kommoPipelineStoredConditions = isset($kommoPipelineConditions)
+            ? $kommoPipelineConditions->map(fn ($condition) => [
+                'lead_field' => $condition->lead_field,
+                'expected_value' => $condition->expected_value,
+                'pipeline_id' => $condition->pipeline_id,
+                'pipeline_name' => $condition->pipeline_name,
+                'status_id' => $condition->status_id,
+                'status_name' => $condition->status_name,
+                'order' => $condition->order,
+                'active' => $condition->active ? 1 : 0,
+            ])->values()->all()
+            : [];
+
+        $kommoPipelineInitialConditions = collect(old('kommo_pipeline_conditions', $kommoPipelineStoredConditions))->values();
+        $kommoPipelineTokenMask = \App\Support\SensitiveValue::mask($integration->tokent ?? null);
+        $kommoPipelineCanFetch = $integration->exists && filled($integration->url ?? null) && filled($integration->tokent ?? null);
+    @endphp
+
+    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="kommopipeline" data-kommo-pipeline-block>
+        <div>
+            <label class="block mb-1 text-white/70">Token de acceso *</label>
+            <input name="tokent"
+                   type="password"
+                   value="{{ old('tokent') }}"
+                   class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white"
+                   placeholder="{{ ($integration->exists && filled($integration->tokent ?? null)) ? $kommoPipelineTokenMask : 'Bearer token de Kommo' }}"
+                   data-required-for="kommopipeline">
+            @error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+            @if($integration->exists && filled($integration->tokent ?? null))
+                <p class="mt-1 text-xs text-white/50">Deja este campo vacio para conservar el token guardado.</p>
+            @endif
+        </div>
+
+        <div>
+            <label class="block mb-1 text-white/70">Payload JSON configurable *</label>
+            <textarea name="body"
+                      rows="16"
+                      class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-sm text-white"
+                      placeholder="{{ $kommoPipelineBodyPlaceholder }}"
+                      data-required-for="kommopipeline">{{ old('body', $integration->body ?? '') }}</textarea>
+            @error('body') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+        </div>
+
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h3 class="text-base font-semibold text-white">Pipeline por defecto</h3>
+                    <p class="text-sm text-white/50">Se usa cuando ninguna condicionalidad coincide.</p>
+                </div>
+                @unless($kommoPipelineCanFetch)
+                    <span class="rounded-lg border border-amber-300/20 bg-amber-500/10 px-2 py-1 text-xs text-amber-100">Guarda URL y token para consultar Kommo</span>
+                @endunless
+            </div>
+
+            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                <div>
+                    <label class="block mb-1 text-white/70">Pipeline de Kommo</label>
+                    <input type="hidden" name="kommo_pipeline_default_pipeline_name" value="{{ old('kommo_pipeline_default_pipeline_name', $integration->kommo_pipeline_default_pipeline_name ?? '') }}" data-kommo-default-pipeline-name>
+                    <select name="kommo_pipeline_default_pipeline_id"
+                            class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white"
+                            data-kommo-default-pipeline
+                            data-selected-id="{{ old('kommo_pipeline_default_pipeline_id', $integration->kommo_pipeline_default_pipeline_id ?? '') }}"
+                            data-selected-name="{{ old('kommo_pipeline_default_pipeline_name', $integration->kommo_pipeline_default_pipeline_name ?? '') }}">
+                        <option value="">Seleccione...</option>
+                    </select>
+                    @error('kommo_pipeline_default_pipeline_id') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+                </div>
+
+                <div>
+                    <label class="block mb-1 text-white/70">Status / columna de Kommo</label>
+                    <input type="hidden" name="kommo_pipeline_default_status_name" value="{{ old('kommo_pipeline_default_status_name', $integration->kommo_pipeline_default_status_name ?? '') }}" data-kommo-default-status-name>
+                    <select name="kommo_pipeline_default_status_id"
+                            class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white"
+                            data-kommo-default-status
+                            data-selected-id="{{ old('kommo_pipeline_default_status_id', $integration->kommo_pipeline_default_status_id ?? '') }}"
+                            data-selected-name="{{ old('kommo_pipeline_default_status_name', $integration->kommo_pipeline_default_status_name ?? '') }}">
+                        <option value="">Seleccione un pipeline...</option>
+                    </select>
+                    @error('kommo_pipeline_default_status_id') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+                </div>
+            </div>
+        </div>
+
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h3 class="text-base font-semibold text-white">Condicionalidades</h3>
+                    <p class="text-sm text-white/50">Evalua reglas en orden y usa el primer pipeline/status que coincida.</p>
+                </div>
+                <button type="button"
+                        class="px-3 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10"
+                        data-kommo-add-condition>
+                    Agregar condicion
+                </button>
+            </div>
+
+            @error('kommo_pipeline_conditions') <div class="mb-2 text-sm text-rose-300">{{ $message }}</div> @enderror
+
+            <div class="overflow-x-auto rounded-xl border border-white/10">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-white/5 text-white/70">
+                        <tr>
+                            <th class="text-left px-3 py-2">Campo Lead</th>
+                            <th class="text-left px-3 py-2">Valor esperado</th>
+                            <th class="text-left px-3 py-2">Pipeline</th>
+                            <th class="text-left px-3 py-2">Status</th>
+                            <th class="text-left px-3 py-2">Activa</th>
+                            <th class="text-left px-3 py-2 w-24">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/10 text-white/80" data-kommo-conditions-body>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden" data-show-for="zoho">
@@ -213,10 +367,20 @@ document.addEventListener('DOMContentLoaded', () => {
   const crmPrefixInput = document.querySelector('[data-crm-prefix-input]');
   const baseUrlBlock = document.querySelector('[data-base-url-block]');
   const baseUrlInput = document.querySelector('[data-base-url-input]');
+  const kommoPipelineBlock = document.querySelector('[data-kommo-pipeline-block]');
+  const kommoConditionsBody = document.querySelector('[data-kommo-conditions-body]');
+  const kommoAddConditionButton = document.querySelector('[data-kommo-add-condition]');
+  const leadFields = @json(array_values($leadFields ?? []));
+  const initialKommoConditions = @json($kommoPipelineInitialConditions ?? []);
+  const kommoPipelinesUrl = @json(($integration->exists ?? false) ? route('integrations.kommo-pipeline.pipelines', $integration) : null);
+  const kommoStatusesUrlTemplate = @json(($integration->exists ?? false) ? route('integrations.kommo-pipeline.statuses', [$integration, '__PIPELINE_ID__']) : null);
+  let kommoPipelinesCache = null;
+  let kommoConditionIndex = 0;
 
   function normalizeTypeKey(raw) {
     const key = (raw || '').trim().toLowerCase();
     if (key.includes('google')) return 'google_sheets';
+    if (key.includes('kommopipeline') || key.includes('kommo_pipeline') || key.includes('kommo pipeline')) return 'kommopipeline';
     if (key.includes('kommo')) return 'kommo';
     if (key.includes('zoho')) return 'zoho';
     if (key.includes('freshworks')) return 'freshworks';
@@ -247,7 +411,7 @@ document.addEventListener('DOMContentLoaded', () => {
   function refreshCrmPrefixRequirement() {
     if (!crmPrefixInput || !crmPrefixToggle) return;
     const key = getSelectedKey();
-    const supportsCustomPrefix = key === 'kommo' || key === 'freshworks' || key === 'hubspot' || key === 'gohighlevel';
+    const supportsCustomPrefix = key === 'kommo' || key === 'kommopipeline' || key === 'freshworks' || key === 'hubspot' || key === 'gohighlevel';
     const isEnabled = supportsCustomPrefix && crmPrefixToggle.checked;
 
     crmPrefixInput.disabled = !isEnabled;
@@ -271,14 +435,225 @@ document.addEventListener('DOMContentLoaded', () => {
       baseUrlInput.required = shouldRequireBaseUrl;
       baseUrlInput.placeholder = key === 'gohighlevel'
         ? 'https://services.leadconnectorhq.com/contacts/upsert'
-        : 'https://...';
+        : (key === 'kommopipeline' ? 'https://tudominio.kommo.com' : 'https://...');
     }
 
     refreshCrmPrefixRequirement();
   }
 
+  function option(value, label, selected = false) {
+    const node = document.createElement('option');
+    node.value = value || '';
+    node.textContent = label || value || 'Seleccione...';
+    node.selected = selected;
+    return node;
+  }
+
+  async function fetchKommoPipelines() {
+    if (kommoPipelinesCache) return kommoPipelinesCache;
+    if (!kommoPipelinesUrl) return [];
+
+    const response = await fetch(kommoPipelinesUrl, { headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error(await response.text());
+    kommoPipelinesCache = await response.json();
+    return kommoPipelinesCache;
+  }
+
+  async function fetchKommoStatuses(pipelineId) {
+    if (!kommoStatusesUrlTemplate || !pipelineId) return [];
+    const url = kommoStatusesUrlTemplate.replace('__PIPELINE_ID__', encodeURIComponent(pipelineId));
+    const response = await fetch(url, { headers: { Accept: 'application/json' } });
+    if (!response.ok) throw new Error(await response.text());
+    return await response.json();
+  }
+
+  function selectedOptionText(select) {
+    return select.options[select.selectedIndex]?.textContent || '';
+  }
+
+  async function populatePipelineSelect(select, selectedId = '', selectedName = '') {
+    select.innerHTML = '';
+    select.appendChild(option('', kommoPipelinesUrl ? 'Seleccione...' : 'Guarda URL y token primero'));
+
+    if (!kommoPipelinesUrl) {
+      if (selectedId) select.appendChild(option(selectedId, selectedName || selectedId, true));
+      return;
+    }
+
+    try {
+      const pipelines = await fetchKommoPipelines();
+      pipelines.forEach(pipeline => select.appendChild(option(pipeline.id, pipeline.name, String(pipeline.id) === String(selectedId))));
+
+      if (selectedId && !pipelines.some(pipeline => String(pipeline.id) === String(selectedId))) {
+        select.appendChild(option(selectedId, selectedName || selectedId, true));
+      }
+    } catch (error) {
+      select.appendChild(option(selectedId, selectedName || 'No fue posible consultar Kommo', true));
+    }
+  }
+
+  async function populateStatusSelect(select, pipelineId, selectedId = '', selectedName = '') {
+    select.innerHTML = '';
+    select.appendChild(option('', pipelineId ? 'Seleccione...' : 'Seleccione un pipeline...'));
+
+    if (!pipelineId || !kommoStatusesUrlTemplate) {
+      if (selectedId) select.appendChild(option(selectedId, selectedName || selectedId, true));
+      return;
+    }
+
+    try {
+      const statuses = await fetchKommoStatuses(pipelineId);
+      statuses.forEach(status => select.appendChild(option(status.id, status.name, String(status.id) === String(selectedId))));
+
+      if (selectedId && !statuses.some(status => String(status.id) === String(selectedId))) {
+        select.appendChild(option(selectedId, selectedName || selectedId, true));
+      }
+    } catch (error) {
+      select.appendChild(option(selectedId, selectedName || 'No fue posible consultar statuses', true));
+    }
+  }
+
+  function leadFieldSelect(name, selected) {
+    const select = document.createElement('select');
+    select.name = name;
+    select.className = 'w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white';
+    select.appendChild(option('', 'Seleccione...'));
+    leadFields.forEach(field => select.appendChild(option(field, field, field === selected)));
+    return select;
+  }
+
+  function textInput(name, value, placeholder = '') {
+    const input = document.createElement('input');
+    input.name = name;
+    input.value = value || '';
+    input.placeholder = placeholder;
+    input.className = 'w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white';
+    return input;
+  }
+
+  function hiddenInput(name, value = '') {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = name;
+    input.value = value || '';
+    return input;
+  }
+
+  function cell(child) {
+    const td = document.createElement('td');
+    td.className = 'px-3 py-2 align-top';
+    td.appendChild(child);
+    return td;
+  }
+
+  function addKommoCondition(condition = {}) {
+    if (!kommoConditionsBody) return;
+
+    const index = kommoConditionIndex++;
+    const row = document.createElement('tr');
+    row.className = 'hover:bg-white/5';
+
+    row.appendChild(cell(leadFieldSelect(`kommo_pipeline_conditions[${index}][lead_field]`, condition.lead_field || '')));
+    row.appendChild(cell(textInput(`kommo_pipeline_conditions[${index}][expected_value]`, condition.expected_value || '', 'Ej: Bogota')));
+
+    const pipelineWrap = document.createElement('div');
+    const pipelineName = hiddenInput(`kommo_pipeline_conditions[${index}][pipeline_name]`, condition.pipeline_name || '');
+    const pipelineSelect = document.createElement('select');
+    pipelineSelect.name = `kommo_pipeline_conditions[${index}][pipeline_id]`;
+    pipelineSelect.className = 'w-full min-w-48 rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white';
+    pipelineWrap.appendChild(pipelineName);
+    pipelineWrap.appendChild(pipelineSelect);
+    row.appendChild(cell(pipelineWrap));
+
+    const statusWrap = document.createElement('div');
+    const statusName = hiddenInput(`kommo_pipeline_conditions[${index}][status_name]`, condition.status_name || '');
+    const statusSelect = document.createElement('select');
+    statusSelect.name = `kommo_pipeline_conditions[${index}][status_id]`;
+    statusSelect.className = 'w-full min-w-48 rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white';
+    statusWrap.appendChild(statusName);
+    statusWrap.appendChild(statusSelect);
+    row.appendChild(cell(statusWrap));
+
+    const activeWrap = document.createElement('label');
+    activeWrap.className = 'inline-flex items-center gap-2';
+    activeWrap.appendChild(hiddenInput(`kommo_pipeline_conditions[${index}][active]`, '0'));
+    const active = document.createElement('input');
+    active.type = 'checkbox';
+    active.name = `kommo_pipeline_conditions[${index}][active]`;
+    active.value = '1';
+    active.checked = String(condition.active ?? '1') !== '0';
+    active.className = 'rounded border-white/10 bg-slate-900/60';
+    activeWrap.appendChild(active);
+    activeWrap.appendChild(document.createTextNode('Si'));
+    row.appendChild(cell(activeWrap));
+
+    const actions = document.createElement('td');
+    actions.className = 'px-3 py-2 align-top';
+    actions.appendChild(hiddenInput(`kommo_pipeline_conditions[${index}][order]`, condition.order ?? index));
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-300/20 text-white';
+    remove.textContent = 'Quitar';
+    remove.addEventListener('click', () => row.remove());
+    actions.appendChild(remove);
+    row.appendChild(actions);
+
+    kommoConditionsBody.appendChild(row);
+
+    populatePipelineSelect(pipelineSelect, condition.pipeline_id || '', condition.pipeline_name || '').then(() => {
+      pipelineName.value = selectedOptionText(pipelineSelect);
+    });
+    populateStatusSelect(statusSelect, condition.pipeline_id || '', condition.status_id || '', condition.status_name || '').then(() => {
+      statusName.value = selectedOptionText(statusSelect);
+    });
+
+    pipelineSelect.addEventListener('change', async () => {
+      pipelineName.value = selectedOptionText(pipelineSelect);
+      statusName.value = '';
+      await populateStatusSelect(statusSelect, pipelineSelect.value);
+    });
+
+    statusSelect.addEventListener('change', () => {
+      statusName.value = selectedOptionText(statusSelect);
+    });
+  }
+
+  function bootKommoPipeline() {
+    if (!kommoPipelineBlock) return;
+
+    const defaultPipeline = kommoPipelineBlock.querySelector('[data-kommo-default-pipeline]');
+    const defaultStatus = kommoPipelineBlock.querySelector('[data-kommo-default-status]');
+    const defaultPipelineName = kommoPipelineBlock.querySelector('[data-kommo-default-pipeline-name]');
+    const defaultStatusName = kommoPipelineBlock.querySelector('[data-kommo-default-status-name]');
+
+    if (defaultPipeline && defaultStatus) {
+      populatePipelineSelect(defaultPipeline, defaultPipeline.dataset.selectedId || '', defaultPipeline.dataset.selectedName || '').then(() => {
+        defaultPipelineName.value = selectedOptionText(defaultPipeline);
+      });
+      populateStatusSelect(defaultStatus, defaultPipeline.dataset.selectedId || '', defaultStatus.dataset.selectedId || '', defaultStatus.dataset.selectedName || '').then(() => {
+        defaultStatusName.value = selectedOptionText(defaultStatus);
+      });
+
+      defaultPipeline.addEventListener('change', async () => {
+        defaultPipelineName.value = selectedOptionText(defaultPipeline);
+        defaultStatusName.value = '';
+        await populateStatusSelect(defaultStatus, defaultPipeline.value);
+      });
+
+      defaultStatus.addEventListener('change', () => {
+        defaultStatusName.value = selectedOptionText(defaultStatus);
+      });
+    }
+
+    if (initialKommoConditions.length > 0) {
+      initialKommoConditions.forEach(condition => addKommoCondition(condition));
+    }
+  }
+
   if (typeSelect) typeSelect.addEventListener('change', refresh);
   if (crmPrefixToggle) crmPrefixToggle.addEventListener('change', refreshCrmPrefixRequirement);
+  if (kommoAddConditionButton) kommoAddConditionButton.addEventListener('click', () => addKommoCondition());
+  bootKommoPipeline();
   refresh();
 });
 </script>

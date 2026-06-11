@@ -16,14 +16,16 @@
             </div>
 
             <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 col-span-9">
-                <form method="GET" action="{{ $ui['filters']['action'] }}" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+                <form method="GET" action="{{ $ui['filters']['action'] }}"
+                    class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
                     @if (!empty($ui['filters']['integration_id']))
                         <input type="hidden" name="integration_id" value="{{ $ui['filters']['integration_id'] }}">
                     @endif
 
                     <div class="md:col-span-4">
                         <label class="block mb-1 text-white/70">Cliente</label>
-                        <select name="customer_id" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+                        <select name="customer_id"
+                            class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
                             <option value="">-- Todos los clientes --</option>
                             @foreach ($ui['filters']['customer_options'] as $option)
                                 <option value="{{ $option['value'] }}" @selected($option['selected'])>
@@ -49,7 +51,8 @@
 
                     <div class="md:col-span-3">
                         <label class="block mb-1 text-white/70">Fuente</label>
-                        <select name="campaign_origin" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+                        <select name="campaign_origin"
+                            class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
                             <option value="">Todos</option>
                             @foreach ($ui['filters']['channel_options'] as $option)
                                 <option value="{{ $option['value'] }}" @selected($option['selected'])>
@@ -61,7 +64,8 @@
 
                     <div class="md:col-span-3">
                         <label class="block mb-1 text-white/70">Medio</label>
-                        <select name="plataforma" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+                        <select name="plataforma"
+                            class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
                             <option value="">Todos</option>
                             @foreach ($ui['filters']['platform_options'] as $option)
                                 <option value="{{ $option['value'] }}" @selected($option['selected'])>
@@ -72,7 +76,8 @@
                     </div>
 
                     <div class="md:col-span-3 flex gap-2">
-                        <button class="w-full px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">
+                        <button
+                            class="w-full px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">
                             Aplicar
                         </button>
 
@@ -87,7 +92,7 @@
 
         <h2 class="text-2xl text-white font-bold">Resumen - {{ $ui['header']['selected_customer_name'] }}</h2>
 
-        <div class="grid grid-cols-1 md:grid-cols-7 gap-4">
+        <div class="grid grid-cols-1 md:grid-cols-7 gap-2">
             <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 col-span-1">
                 <div class="text-sm text-white/60">Leads en el periodo seleccionado</div>
                 <div class="text-3xl font-bold text-white">{{ $ui['summary']['count'] }}</div>
@@ -122,12 +127,13 @@
 
         <h2 class="text-2xl text-white font-bold">Desglose - {{ $ui['header']['selected_customer_name'] }}</h2>
 
-        <div class="grid grid-cols-1 lg:grid-cols-12 gap-4">
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             @include('dashboard.partials.donut-card', [
-                'title' => 'Por Fuente',
-                'donut' => $ui['donuts']['channels'],
-                'canvasId' => 'donutChannels',
-                'legendId' => 'legendChannels',
+                'title' => 'Por Source',
+                'donut' => $ui['donuts']['sources'],
+                'canvasId' => 'donutSources',
+                'legendId' => 'legendSources',
+                'cardClass' => 'col-span-1',
             ])
 
             @include('dashboard.partials.donut-card', [
@@ -135,8 +141,12 @@
                 'donut' => $ui['donuts']['platforms'],
                 'canvasId' => 'donutPlatforms',
                 'legendId' => 'legendPlatforms',
+                'cardClass' => 'col-span-1',
             ])
+        </div>
+        <h2 class="text-2xl text-white font-bold">Funnel - {{ $ui['header']['selected_customer_name'] }}</h2>
 
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             @include('dashboard.partials.funnel-stack', [
                 'title' => 'Estado actual de Leads por Funnel',
                 'cards' => $ui['cards']['funnels'],
@@ -145,6 +155,7 @@
                 'stackGap' => 'space-y-2',
                 'cardPadding' => 'p-4',
                 'variant' => 'default',
+                'cardClass' => 'col-span-1',
             ])
 
             @include('dashboard.partials.funnel-stack', [
@@ -155,6 +166,7 @@
                 'stackGap' => 'space-y-4',
                 'cardPadding' => 'p-2',
                 'variant' => 'history',
+                'cardClass' => 'col-span-1',
             ])
         </div>
 
@@ -168,41 +180,11 @@
                 </div>
             </div>
             <div class="h-80 w-full">
-                <canvas id="funnelHistoryDailyChart"
-                        data-labels='@json($historyDailyChart['labels'])'
-                        data-datasets='@json($historyDailyChart['datasets'])'></canvas>
+                <canvas id="funnelHistoryDailyChart" data-labels='@json($historyDailyChart['labels'])'
+                    data-datasets='@json($historyDailyChart['datasets'])'></canvas>
             </div>
         </div>
 
-        <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 w-full">
-            <div class="flex items-center justify-between mb-3">
-                <h3 class="text-white font-semibold">Historico Leads en el Funnel por dia</h3>
-                <div class="text-xs text-white/50">
-                    Total:
-                    <span class="text-white/80 font-semibold">{{ $ui['totals']['total_leads'] }}</span>
-                </div>
-            </div>
-            <div class="h-80 w-full">
-                <canvas id="opportunitiesSalesDailyChart"
-                        data-labels='@json($historyDailyChart['labels'])'
-                        data-datasets='@json($historyDailyChart['datasets'])'></canvas>
-            </div>
-        </div>
-
-        <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 w-full">
-            <div class="flex items-center justify-between mb-3">
-                <h3 class="text-white font-semibold">Historico Leads en el Funnel por dia</h3>
-                <div class="text-xs text-white/50">
-                    Total:
-                    <span class="text-white/80 font-semibold">{{ $ui['totals']['total_leads'] }}</span>
-                </div>
-            </div>
-            <div class="h-80 w-full">
-                <canvas id="opportunitiesSalesDailyLineChart"
-                        data-labels='@json($historyDailyChart['labels'])'
-                        data-datasets='@json($historyDailyChart['datasets'])'></canvas>
-            </div>
-        </div>
 
         <h2 class="text-2xl text-white font-bold">Datos de Meta - {{ $ui['header']['selected_customer_name'] }}</h2>
 
@@ -253,11 +235,81 @@
                 window.location.href = url.toString();
             }
 
-            function renderLegend(containerId, labels, values, keys, baseUrl, groupType) {
+            function renderLegend(containerId, labels, values, keys, baseUrl, groupType, breakdownRows = []) {
                 const container = document.getElementById(containerId);
                 if (!container) return;
 
                 container.innerHTML = "";
+
+                const numberFormatter = new Intl.NumberFormat("es-CO");
+
+                if (container.dataset.legendVariant === "breakdown-table" && breakdownRows.length) {
+                    const table = document.createElement("table");
+                    table.className = "min-w-full text-xs text-left";
+
+                    const thead = document.createElement("thead");
+                    thead.className = "text-white/50";
+                    const headerRow = document.createElement("tr");
+                    const dimensionTitle = groupType === "source" ?
+                        "Source" :
+                        (groupType === "plataforma" ? "Medio" : "Fuente");
+                    [dimensionTitle, "Total", "No calif.", "Calif."].forEach((title, index) => {
+                        const th = document.createElement("th");
+                        th.className = index === 0 ? "px-2 py-1 font-medium" :
+                            "px-2 py-1 font-medium text-right";
+                        th.textContent = title;
+                        headerRow.appendChild(th);
+                    });
+                    thead.appendChild(headerRow);
+                    table.appendChild(thead);
+
+                    const tbody = document.createElement("tbody");
+                    tbody.className = "divide-y divide-white/10";
+
+                    breakdownRows.forEach((item, index) => {
+                        const key = item.key ?? keys[index];
+                        const row = document.createElement("tr");
+                        row.className = "rounded-lg";
+
+                        if (key !== "__OTHER__") {
+                            row.classList.add("cursor-pointer", "hover:bg-white/5");
+                            row.addEventListener("click", () => goToGroup(baseUrl, groupType, key));
+                        }
+
+                        const source = document.createElement("td");
+                        source.className = "px-2 py-2 text-white/85";
+
+                        const sourceWrap = document.createElement("div");
+                        sourceWrap.className = "flex items-center gap-2 min-w-0";
+
+                        const dot = document.createElement("span");
+                        dot.className = "h-3 w-3 rounded-sm shrink-0";
+                        dot.style.background = COLORS[index % COLORS.length];
+
+                        const name = document.createElement("span");
+                        name.className = "truncate";
+                        name.textContent = item.label ?? labels[index] ?? "";
+
+                        sourceWrap.appendChild(dot);
+                        sourceWrap.appendChild(name);
+                        source.appendChild(sourceWrap);
+                        row.appendChild(source);
+
+                        ["total", "qualified", "unqualified"].forEach((field) => {
+                            const td = document.createElement("td");
+                            td.className =
+                                "px-2 py-2 text-right text-white/75 font-semibold tabular-nums";
+                            td.textContent = numberFormatter.format(Number(item[field] ?? 0));
+                            row.appendChild(td);
+                        });
+
+                        tbody.appendChild(row);
+                    });
+
+                    table.appendChild(tbody);
+                    container.appendChild(table);
+                    return;
+                }
 
                 labels.forEach((label, index) => {
                     const key = keys[index];
@@ -329,6 +381,7 @@
                 const labels = JSON.parse(canvas.dataset.labels || "[]");
                 const values = JSON.parse(canvas.dataset.values || "[]");
                 const keys = JSON.parse(canvas.dataset.keys || "[]");
+                const breakdownRows = JSON.parse(canvas.dataset.breakdownRows || "[]");
                 const baseUrl = JSON.parse(canvas.dataset.baseUrl || '""');
                 const groupType = canvas.dataset.groupType;
 
@@ -336,29 +389,37 @@
 
                 disposeChart(canvasId);
 
-                renderLegend(legendId, labels, values, keys, baseUrl, groupType);
+                renderLegend(legendId, labels, values, keys, baseUrl, groupType, breakdownRows);
 
-                charts[canvasId] = echarts.init(canvas, null, { renderer: "canvas" });
+                charts[canvasId] = echarts.init(canvas, null, {
+                    renderer: "canvas"
+                });
                 charts[canvasId].setOption({
                     color: COLORS,
                     tooltip: {
                         trigger: "item",
                         backgroundColor: "rgba(15,23,42,.96)",
                         borderColor: "rgba(255,255,255,.12)",
-                        textStyle: { color: "#fff" },
+                        textStyle: {
+                            color: "#fff"
+                        },
                         formatter: "{b}<br/><strong>{c}</strong> ({d}%)"
                     },
-                    legend: { show: false },
+                    legend: {
+                        show: false
+                    },
                     series: [{
-                        
-                       type: 'pie',
-      radius: ['40%', '70%'],
-      avoidLabelOverlap: false,
-      padAngle: 0,
-      itemStyle: {
-        borderRadius: 0
-      },
-                        label: { show: false },
+
+                        type: 'pie',
+                        radius: ['40%', '70%'],
+                        avoidLabelOverlap: false,
+                        padAngle: 0,
+                        itemStyle: {
+                            borderRadius: 0
+                        },
+                        label: {
+                            show: false
+                        },
                         emphasis: {
                             scale: true,
                             scaleSize: 2
@@ -408,9 +469,14 @@
                         },
                         areaStyle: type === "line" ? {
                             opacity: 0.18,
-                            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-                                { offset: 0, color },
-                                { offset: 1, color: "rgba(255,255,255,0)" }
+                            color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [{
+                                    offset: 0,
+                                    color
+                                },
+                                {
+                                    offset: 1,
+                                    color: "rgba(255,255,255,0)"
+                                }
                             ])
                         } : undefined,
                         emphasis: {
@@ -419,25 +485,35 @@
                     };
                 });
 
-                charts[chartId] = echarts.init(canvas, null, { renderer: "canvas" });
+                charts[chartId] = echarts.init(canvas, null, {
+                    renderer: "canvas"
+                });
                 charts[chartId].setOption({
                     color: COLORS,
                     tooltip: {
                         trigger: "axis",
                         backgroundColor: "rgba(15,23,42,.96)",
                         borderColor: "rgba(255,255,255,.12)",
-                        textStyle: { color: "#fff" },
+                        textStyle: {
+                            color: "#fff"
+                        },
                         axisPointer: {
                             type: type === "line" ? "line" : "shadow",
-                            lineStyle: { color: "rgba(255,255,255,.25)" },
-                            shadowStyle: { color: "rgba(255,255,255,.06)" }
+                            lineStyle: {
+                                color: "rgba(255,255,255,.25)"
+                            },
+                            shadowStyle: {
+                                color: "rgba(255,255,255,.06)"
+                            }
                         }
                     },
                     legend: {
                         top: 0,
                         right: 0,
                         icon: "roundRect",
-                        textStyle: { color: chartTextColor(".78") }
+                        textStyle: {
+                            color: chartTextColor(".78")
+                        }
                     },
                     grid: {
                         left: 36,
@@ -450,18 +526,38 @@
                         type: "category",
                         boundaryGap: type !== "line",
                         data: labels,
-                        axisLabel: { color: chartTextColor(".68") },
-                        axisLine: { lineStyle: { color: "rgba(255,255,255,.12)" } },
-                        axisTick: { show: false },
-                        splitLine: { show: false }
+                        axisLabel: {
+                            color: chartTextColor(".68")
+                        },
+                        axisLine: {
+                            lineStyle: {
+                                color: "rgba(255,255,255,.12)"
+                            }
+                        },
+                        axisTick: {
+                            show: false
+                        },
+                        splitLine: {
+                            show: false
+                        }
                     },
                     yAxis: {
                         type: "value",
                         minInterval: 1,
-                        axisLabel: { color: chartTextColor(".68") },
-                        axisLine: { show: false },
-                        axisTick: { show: false },
-                        splitLine: { lineStyle: { color: "rgba(255,255,255,.08)" } }
+                        axisLabel: {
+                            color: chartTextColor(".68")
+                        },
+                        axisLine: {
+                            show: false
+                        },
+                        axisTick: {
+                            show: false
+                        },
+                        splitLine: {
+                            lineStyle: {
+                                color: "rgba(255,255,255,.08)"
+                            }
+                        }
                     },
                     series: datasets
                 });
@@ -483,7 +579,8 @@
 
             function setupDatetimeMax() {
                 const max = nowLocalValue();
-                const inputs = document.querySelectorAll('input[type="datetime-local"][name="from"], input[type="datetime-local"][name="to"]');
+                const inputs = document.querySelectorAll(
+                    'input[type="datetime-local"][name="from"], input[type="datetime-local"][name="to"]');
                 inputs.forEach((input) => {
                     input.max = max;
                 });
@@ -492,7 +589,10 @@
             function parseSortableValue(value) {
                 const raw = String(value ?? "").trim();
                 if (!raw || raw === "-") {
-                    return { type: "empty", value: "" };
+                    return {
+                        type: "empty",
+                        value: ""
+                    };
                 }
 
                 const digitsOnlyCandidate = raw.replace(/[$%\s.,-]/g, "");
@@ -504,10 +604,16 @@
                 const number = Number.parseFloat(numericCandidate);
 
                 if (looksNumeric && numericCandidate && Number.isFinite(number)) {
-                    return { type: "number", value: number };
+                    return {
+                        type: "number",
+                        value: number
+                    };
                 }
 
-                return { type: "text", value: raw.toLocaleLowerCase("es") };
+                return {
+                    type: "text",
+                    value: raw.toLocaleLowerCase("es")
+                };
             }
 
             function compareSortableValues(left, right, direction) {
@@ -550,18 +656,23 @@
                             });
 
                             button.dataset.sortDirection = nextDirection;
-                            button.closest("th")?.setAttribute("aria-sort", nextDirection === "asc" ? "ascending" : "descending");
+                            button.closest("th")?.setAttribute("aria-sort", nextDirection ===
+                                "asc" ? "ascending" : "descending");
                             const activeIcon = button.querySelector("[data-sort-icon]");
                             if (activeIcon) activeIcon.textContent = nextDirection;
 
                             rows.sort((a, b) => {
-                                const left = parseSortableValue(a.cells[columnIndex]?.textContent);
-                                const right = parseSortableValue(b.cells[columnIndex]?.textContent);
-                                const result = compareSortableValues(left, right, nextDirection);
+                                const left = parseSortableValue(a.cells[columnIndex]
+                                    ?.textContent);
+                                const right = parseSortableValue(b.cells[columnIndex]
+                                    ?.textContent);
+                                const result = compareSortableValues(left, right,
+                                    nextDirection);
 
                                 if (result !== 0) return result;
 
-                                return Number(a.dataset.originalIndex || 0) - Number(b.dataset.originalIndex || 0);
+                                return Number(a.dataset.originalIndex || 0) - Number(b
+                                    .dataset.originalIndex || 0);
                             });
 
                             rows.forEach((row) => tbody.appendChild(row));
@@ -572,7 +683,7 @@
 
             async function init() {
                 await loadECharts();
-                buildDonut("donutChannels", "legendChannels");
+                buildDonut("donutSources", "legendSources");
                 buildDonut("donutPlatforms", "legendPlatforms");
                 buildFunnelHistoryDailyChart();
                 buildFunnelHistoryDailyChart("opportunitiesSalesDailyChart", false);
@@ -580,7 +691,9 @@
                 setupSortableTables();
                 setupDatetimeMax();
                 setInterval(setupDatetimeMax, 60 * 1000);
-                window.addEventListener("resize", resizeCharts, { passive: true });
+                window.addEventListener("resize", resizeCharts, {
+                    passive: true
+                });
             }
 
             init();

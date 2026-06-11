@@ -8,7 +8,9 @@ use App\Models\Integration;
 use App\Models\Integrationtype;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class IntegrationWebController extends Controller
@@ -39,8 +41,10 @@ class IntegrationWebController extends Controller
         $integration = new Integration();
         $customers = Customer::orderBy('name')->get(['id', 'name']);
         $types = Integrationtype::orderBy('name')->get(['id', 'name']);
+        $leadFields = $this->leadFields();
+        $kommoPipelineConditions = collect();
 
-        return view('integrations.create', compact('integration', 'customers', 'types'));
+        return view('integrations.create', compact('integration', 'customers', 'types', 'leadFields', 'kommoPipelineConditions'));
     }
 
     public function store(Request $request)
@@ -52,6 +56,8 @@ class IntegrationWebController extends Controller
         $payload['public_key'] = $this->generatePublicKey();
 
         $integration = Integration::create($payload);
+        $integration->load('integrationtype');
+        $this->syncKommoPipelineConditions($integration, $validated);
 
         return redirect()
             ->route('integrations.show', $integration)
@@ -70,6 +76,12 @@ class IntegrationWebController extends Controller
             ]);
         }
 
+        if ($this->normalizeIntegrationTypeName(optional($integration->integrationtype)->name) === 'kommopipeline') {
+            $integration->load([
+                'kommoPipelineConditions' => fn ($query) => $query->orderBy('order')->orderBy('id'),
+            ]);
+        }
+
         return view('integrations.show', compact('integration'));
     }
 
@@ -77,13 +89,29 @@ class IntegrationWebController extends Controller
     {
         $customers = Customer::orderBy('name')->get(['id', 'name']);
         $types = Integrationtype::orderBy('name')->get(['id', 'name']);
+        $leadFields = $this->leadFields();
 
-        return view('integrations.edit', compact('integration', 'customers', 'types'));
+        $integration->loadMissing([
+            'kommoPipelineConditions' => fn ($query) => $query->orderBy('order')->orderBy('id'),
+        ]);
+
+        $kommoPipelineConditions = $integration->kommoPipelineConditions;
+
+        return view('integrations.edit', compact('integration', 'customers', 'types', 'leadFields', 'kommoPipelineConditions'));
     }
 
     public function update(Request $request, Integration $integration)
     {
-        $validated = $request->validate($this->rules($request, true));
+        $validated = $request->validate($this->rules($request, true, $integration));
+
+        $typeName = $this->normalizeIntegrationTypeName(
+            Integrationtype::whereKey($validated['integrationtype_id'])->value('name')
+        );
+
+        if ($typeName === 'kommopipeline' && empty($validated['tokent'])) {
+            $validated['tokent'] = $integration->tokent;
+        }
+
         $payload = $this->normalizePayloadByType($validated);
         $payload = $this->hydrateSalesforceTokenFromCredentials($payload);
 
@@ -92,6 +120,8 @@ class IntegrationWebController extends Controller
         }
 
         $integration->update($payload);
+        $integration->load('integrationtype');
+        $this->syncKommoPipelineConditions($integration, $validated);
 
         return redirect()
             ->route('integrations.show', $integration)
@@ -107,7 +137,21 @@ class IntegrationWebController extends Controller
             ->with('success', 'Integracion eliminada.');
     }
 
-    private function rules(Request $request, bool $updating = false): array
+    public function kommoPipelinePipelines(Integration $integration)
+    {
+        $response = $this->kommoPipelineRequest($integration, '/api/v4/leads/pipelines');
+
+        return response()->json($this->normalizeKommoPipelines($response->json()));
+    }
+
+    public function kommoPipelineStatuses(Integration $integration, string $pipelineId)
+    {
+        $response = $this->kommoPipelineRequest($integration, "/api/v4/leads/pipelines/{$pipelineId}/statuses");
+
+        return response()->json($this->normalizeKommoStatuses($response->json()));
+    }
+
+    private function rules(Request $request, bool $updating = false, ?Integration $integration = null): array
     {
         $typeName = $this->normalizeIntegrationTypeName(
             Integrationtype::whereKey($request->input('integrationtype_id'))->value('name')
@@ -151,6 +195,19 @@ class IntegrationWebController extends Controller
             'url_creacionlead' => ['nullable', 'url', 'max:255'],
             'dealname' => ['nullable', 'string'],
             'dealstage' => ['nullable', 'string', 'max:255'],
+            'kommo_pipeline_default_pipeline_id' => ['nullable', 'string', 'max:255', 'required_with:kommo_pipeline_default_status_id'],
+            'kommo_pipeline_default_pipeline_name' => ['nullable', 'string', 'max:255'],
+            'kommo_pipeline_default_status_id' => ['nullable', 'string', 'max:255', 'required_with:kommo_pipeline_default_pipeline_id'],
+            'kommo_pipeline_default_status_name' => ['nullable', 'string', 'max:255'],
+            'kommo_pipeline_conditions' => ['nullable', 'array'],
+            'kommo_pipeline_conditions.*.lead_field' => ['required_with:kommo_pipeline_conditions', 'string', Rule::in($this->leadFields())],
+            'kommo_pipeline_conditions.*.expected_value' => ['required_with:kommo_pipeline_conditions', 'string', 'max:255'],
+            'kommo_pipeline_conditions.*.pipeline_id' => ['required_with:kommo_pipeline_conditions', 'string', 'max:255'],
+            'kommo_pipeline_conditions.*.pipeline_name' => ['nullable', 'string', 'max:255'],
+            'kommo_pipeline_conditions.*.status_id' => ['required_with:kommo_pipeline_conditions', 'string', 'max:255'],
+            'kommo_pipeline_conditions.*.status_name' => ['nullable', 'string', 'max:255'],
+            'kommo_pipeline_conditions.*.order' => ['nullable', 'integer', 'min:0'],
+            'kommo_pipeline_conditions.*.active' => ['nullable', 'boolean'],
         ];
 
         if ($typeName === 'freshworks') {
@@ -185,6 +242,13 @@ class IntegrationWebController extends Controller
 
         if ($typeName === 'gohighlevel') {
             $rules['tokent'] = ['required', 'string'];
+            $rules['body'] = ['required', 'string'];
+        }
+
+        if ($typeName === 'kommopipeline') {
+            $rules['tokent'] = $updating && filled($integration?->tokent)
+                ? ['nullable', 'string']
+                : ['required', 'string'];
             $rules['body'] = ['required', 'string'];
         }
 
@@ -230,6 +294,16 @@ class IntegrationWebController extends Controller
             $validated = $this->clearHubspotFields($validated);
             $validated = $this->validateKommoPayload($validated);
             $validated = $this->validateCrmIdPrefixPayload($validated, 'Kommo');
+        }
+
+        if ($typeName === 'kommopipeline') {
+            $validated = $this->clearKommoFields($validated);
+            $validated = $this->clearZohoFieldsPreservingToken($validated);
+            $validated = $this->clearFreshworksFields($validated);
+            $validated = $this->clearSalesforceCredentialFields($validated);
+            $validated = $this->clearHubspotFields($validated);
+            $validated = $this->validateKommoPipelinePayload($validated);
+            $validated = $this->validateCrmIdPrefixPayload($validated, 'KommoPipeline');
         }
 
         if ($typeName === 'zoho') {
@@ -287,10 +361,16 @@ class IntegrationWebController extends Controller
             $validated = $this->validateCrmIdPrefixPayload($validated, 'GoHighLevel');
         }
 
-        if (!in_array($typeName, ['google_sheets', 'kommo', 'zoho', 'freshworks', 'salesforce', 'monday', 'hubspot', 'gohighlevel'], true)) {
+        if (!in_array($typeName, ['google_sheets', 'kommo', 'kommopipeline', 'zoho', 'freshworks', 'salesforce', 'monday', 'hubspot', 'gohighlevel'], true)) {
             $validated = $this->clearHubspotFields($validated);
             $validated = $this->clearCrmIdPrefixFields($validated);
         }
+
+        if ($typeName !== 'kommopipeline') {
+            $validated = $this->clearKommoPipelineFields($validated);
+        }
+
+        unset($validated['kommo_pipeline_conditions']);
 
         return $validated;
     }
@@ -307,6 +387,7 @@ class IntegrationWebController extends Controller
 
         return match ($normalized) {
             'go_high_level', 'leadconnector', 'lead_connector' => 'gohighlevel',
+            'kommo_pipeline' => 'kommopipeline',
             default => $normalized,
         };
     }
@@ -342,6 +423,31 @@ class IntegrationWebController extends Controller
 
     private function validateKommoPayload(array $payload): array
     {
+        return $payload;
+    }
+
+    private function validateKommoPipelinePayload(array $payload): array
+    {
+        $messages = [];
+
+        foreach ([
+            'url' => 'URL base de Kommo',
+            'tokent' => 'token de acceso',
+            'body' => 'payload JSON configurable',
+        ] as $field => $label) {
+            if (empty($payload[$field])) {
+                $messages[$field] = "Para KommoPipeline el campo {$label} es obligatorio.";
+            }
+        }
+
+        if (!empty($payload['body']) && !$this->isValidKommoPipelineJsonTemplate($payload['body'])) {
+            $messages['body'] = 'El payload JSON debe ser valido y solo acepta {{$lead->campo}}, {{pipeline_id}} y {{status_id}}.';
+        }
+
+        if ($messages !== []) {
+            throw ValidationException::withMessages($messages);
+        }
+
         return $payload;
     }
 
@@ -685,6 +791,75 @@ class IntegrationWebController extends Controller
             && is_array(json_decode($normalized, true));
     }
 
+    private function isValidKommoPipelineJsonTemplate(?string $value): bool
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return true;
+        }
+
+        preg_match_all('/\{\{\s*([^}]+?)\s*\}\}/', $value, $matches);
+
+        foreach ($matches[1] ?? [] as $expression) {
+            $expression = trim($expression);
+
+            if (in_array($expression, ['pipeline_id', 'status_id'], true)) {
+                continue;
+            }
+
+            if (
+                preg_match('/^\$?lead\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/', $expression, $leadMatches)
+                && in_array($leadMatches[1], $this->leadFields(), true)
+            ) {
+                continue;
+            }
+
+            return false;
+        }
+
+        return is_array(json_decode($this->quoteKommoPipelineUnquotedPlaceholders($value), true));
+    }
+
+    private function quoteKommoPipelineUnquotedPlaceholders(string $template): string
+    {
+        $result = '';
+        $length = strlen($template);
+        $inString = false;
+        $escaped = false;
+
+        for ($i = 0; $i < $length; $i++) {
+            $char = $template[$i];
+
+            if ($char === '"' && !$escaped) {
+                $inString = !$inString;
+                $result .= $char;
+                continue;
+            }
+
+            if (!$inString && $char === '{' && ($template[$i + 1] ?? null) === '{') {
+                $end = strpos($template, '}}', $i + 2);
+
+                if ($end !== false) {
+                    $expression = trim(substr($template, $i + 2, $end - ($i + 2)));
+                    $result .= json_encode('{{' . $expression . '}}', JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    $i = $end + 1;
+                    $escaped = false;
+                    continue;
+                }
+            }
+
+            $result .= $char;
+            $escaped = $char === '\\' && !$escaped;
+
+            if ($char !== '\\') {
+                $escaped = false;
+            }
+        }
+
+        return $result;
+    }
+
     private function normalizeGohighlevelPlaceholderField(string $expression): ?string
     {
         $expression = trim($expression);
@@ -743,6 +918,110 @@ class IntegrationWebController extends Controller
         $payload['dealstage'] = null;
 
         return $payload;
+    }
+
+    private function clearKommoPipelineFields(array $payload): array
+    {
+        $payload['kommo_pipeline_default_pipeline_id'] = null;
+        $payload['kommo_pipeline_default_pipeline_name'] = null;
+        $payload['kommo_pipeline_default_status_id'] = null;
+        $payload['kommo_pipeline_default_status_name'] = null;
+
+        return $payload;
+    }
+
+    private function syncKommoPipelineConditions(Integration $integration, array $validated): void
+    {
+        $typeName = $this->normalizeIntegrationTypeName(optional($integration->integrationtype)->name);
+
+        if ($typeName === '') {
+            $typeName = $this->normalizeIntegrationTypeName(
+                Integrationtype::whereKey($integration->integrationtype_id)->value('name')
+            );
+        }
+
+        if ($typeName !== 'kommopipeline') {
+            $integration->kommoPipelineConditions()->delete();
+            return;
+        }
+
+        $conditions = collect($validated['kommo_pipeline_conditions'] ?? [])
+            ->filter(fn ($condition) => filled($condition['lead_field'] ?? null))
+            ->values();
+
+        $integration->kommoPipelineConditions()->delete();
+
+        foreach ($conditions as $index => $condition) {
+            $integration->kommoPipelineConditions()->create([
+                'lead_field' => $condition['lead_field'],
+                'expected_value' => $condition['expected_value'],
+                'pipeline_id' => $condition['pipeline_id'],
+                'pipeline_name' => $condition['pipeline_name'] ?? null,
+                'status_id' => $condition['status_id'],
+                'status_name' => $condition['status_name'] ?? null,
+                'order' => $condition['order'] ?? $index,
+                'active' => (bool) ($condition['active'] ?? true),
+            ]);
+        }
+    }
+
+    private function kommoPipelineRequest(Integration $integration, string $path)
+    {
+        $url = rtrim((string) $integration->url, '/');
+        $token = trim((string) $integration->tokent);
+
+        if (stripos($token, 'bearer ') === 0) {
+            $token = trim(substr($token, 7));
+        }
+
+        if ($url === '' || $token === '') {
+            abort(422, 'La integracion KommoPipeline requiere URL y token guardados.');
+        }
+
+        $response = Http::acceptJson()
+            ->withToken($token)
+            ->get($url . $path);
+
+        if (!$response->successful()) {
+            abort($response->status(), $response->body());
+        }
+
+        return $response;
+    }
+
+    private function normalizeKommoPipelines($json): array
+    {
+        $pipelines = data_get($json, '_embedded.pipelines', []);
+
+        return collect(is_array($pipelines) ? $pipelines : [])
+            ->map(fn ($pipeline) => [
+                'id' => (string) data_get($pipeline, 'id'),
+                'name' => (string) data_get($pipeline, 'name'),
+            ])
+            ->filter(fn ($pipeline) => $pipeline['id'] !== '')
+            ->values()
+            ->all();
+    }
+
+    private function normalizeKommoStatuses($json): array
+    {
+        $statuses = data_get($json, '_embedded.statuses', []);
+
+        return collect(is_array($statuses) ? $statuses : [])
+            ->map(fn ($status) => [
+                'id' => (string) data_get($status, 'id'),
+                'name' => (string) data_get($status, 'name'),
+            ])
+            ->filter(fn ($status) => $status['id'] !== '')
+            ->values()
+            ->all();
+    }
+
+    private function leadFields(): array
+    {
+        return Schema::hasTable('leads')
+            ? Schema::getColumnListing('leads')
+            : [];
     }
 
     private function generatePublicKey(): string

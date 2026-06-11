@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Services\Customer\CustomerService;
 use App\Http\Services\Integration\IntegrationService;
+use App\Http\Services\Lead\LeadAdSourceClassifier;
 use App\Http\Services\Lead\LeadFunnelHistoryService;
 use App\Http\Services\Lead\LeadService;
 use App\Jobs\ProcessLeadIntegrationsJob;
@@ -98,11 +99,7 @@ class LeadController extends Controller
          * Carga la relación campaignOrigin -> source solo si aún no está cargada.
          * Esto permite validar el Source relacionado sin romper si el Origin no tiene Source asignado.
          */
-        $lead->loadMissing('campaignOrigin.source');
-
-        $sourceName = $lead->campaignOrigin?->source?->name;
-        $isMetaSource = strcasecmp($sourceName ?? '', 'Meta Ads') === 0;
-        $isGoogleSource = strcasecmp($sourceName ?? '', 'Google Ads') === 0;
+        $adSource = LeadAdSourceClassifier::classify($lead);
 
         /**
          * Si el Source del origen de campaña es Meta Ads, se despacha un trabajo
@@ -111,29 +108,25 @@ class LeadController extends Controller
          * Se mantiene fallback con los valores legacy para no romper leads existentes
          * que todavía dependan de campaign_origin como texto/código.
          */
-        $isMetaAds = $isMetaSource
-            || (!$isGoogleSource && in_array($lead->campaign_origin, ['fb', 'meta', 'ig', 'wa', 'mg', 'th'], true));
-        $isGoogleAds = $isGoogleSource
-            || (!$isMetaSource && $this->isGoogleCampaignOrigin($lead->campaign_origin));
-
-        if ($isMetaAds) {
-            SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
-        } elseif ($isGoogleAds) {
-
-        /**
-         * Si el Source del origen de campaña es Google Ads, se despacha un trabajo
-         * para enviar el lead a Google Ads Conversions API.
-         *
-         * Se mantiene fallback con la validación actual isGoogleCampaignOrigin()
-         * para no romper la lógica existente.
-         */
+        if ($adSource['is_meta_ads']) {
+            try {
+                SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
+            } catch (\Throwable $exception) {
+                Log::warning('No fue posible despachar SendLeadToFacebook.', [
+                    'lead_id' => $lead->id,
+                    'campaign_origin' => $lead->campaign_origin,
+                    'source_name' => $adSource['source_name'],
+                    'message' => $exception->getMessage(),
+                ]);
+            }
+        } elseif ($adSource['is_google_ads']) {
             try {
                 SendLeadToGoogleAds::dispatch($lead->id);
             } catch (\Throwable $exception) {
                 Log::warning('No fue posible despachar SendLeadToGoogleAds.', [
                     'lead_id' => $lead->id,
                     'campaign_origin' => $lead->campaign_origin,
-                    'source_name' => $sourceName,
+                    'source_name' => $adSource['source_name'],
                     'message' => $exception->getMessage(),
                 ]);
             }
@@ -202,6 +195,11 @@ class LeadController extends Controller
             'wbraid' => 'sometimes|nullable|string|max:255',
             'gad_source' => 'sometimes|nullable|string|max:255',
             'gad_campaignid' => 'sometimes|nullable|string|max:255',
+            'google_ad_id' => 'sometimes|nullable|string|max:255',
+            'google_adgroup_id' => 'sometimes|nullable|string|max:255',
+            'google_campaign_id' => 'sometimes|nullable|string|max:255',
+            'matchtype' => 'sometimes|nullable|string|max:255',
+            'device' => 'sometimes|nullable|string|max:255',
         ]);
 
         $lead->fill($validated);
@@ -245,10 +243,4 @@ class LeadController extends Controller
         ]);
     }
 
-    private function isGoogleCampaignOrigin(?string $campaignOrigin): bool
-    {
-        $origin = mb_strtolower(trim((string) $campaignOrigin));
-
-        return in_array($origin, ['google', 'gads', 'google_ads', 'google ads'], true);
-    }
 }

@@ -10,6 +10,8 @@ use App\Models\Lead;
 use App\Models\LeadFunnelHistory;
 use App\Models\MetaAdAccount;
 use App\Models\MetaAdInsight;
+use App\Models\Origin;
+use App\Models\Source;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -46,6 +48,7 @@ class DashboardLeadsController extends Controller
         'crm_state',
         'qualification',
         'campaign_origin',
+        'source',
         'plataforma',
         'funnel',
         'funnel_history',
@@ -480,7 +483,6 @@ class DashboardLeadsController extends Controller
                 ->selectRaw("\n                    COALESCE(NULLIF(MIN({$leadTable}.campaign_origin), ''), '__NULL__') as campaign_origin,\n                    COUNT(*) as total\n                ")
                 ->groupByRaw("COALESCE(NULLIF({$leadTable}.campaign_origin, ''), '__NULL__')")
                 ->orderByDesc('total')
-                ->limit(10)
                 ->pluck('total', 'campaign_origin')
                 ->toArray();
 
@@ -495,7 +497,52 @@ class DashboardLeadsController extends Controller
                 $channels['__NULL__'] = $nullChannelsCount;
             }
 
-            // 3) Medio (NO aplica plataforma)
+            // 3) Source (NO aplica campaign_origin, mantiene la logica de Fuente)
+            $sources = [];
+            $sourceLabels = [];
+
+            if (Schema::hasTable((new Origin)->getTable()) && Schema::hasTable((new Source)->getTable())) {
+                $originTable = (new Origin)->getTable();
+                $sourceTable = (new Source)->getTable();
+
+                $qSources = clone $base;
+                $qSources = $this->applyLeadDimensionFilters($qSources, $filters, $leadTable, true, true, true, true);
+
+                $sourceRows = (clone $qSources)
+                    ->leftJoin("{$originTable} as ogsrc", 'ogsrc.code', '=', "{$leadTable}.campaign_origin")
+                    ->leftJoin("{$sourceTable} as src", 'src.id', '=', 'ogsrc.source_id')
+                    ->selectRaw("
+                        COALESCE(CAST(src.id AS CHAR), '__NULL__') as source_id,
+                        COALESCE(NULLIF(MIN(src.name), ''), 'Sin Source') as name,
+                        COUNT(*) as total
+                    ")
+                    ->groupByRaw("COALESCE(CAST(src.id AS CHAR), '__NULL__')")
+                    ->orderByDesc('total')
+                    ->get();
+
+                foreach ($sourceRows as $row) {
+                    $sourceId = (string) $row->source_id;
+                    $sources[$sourceId] = (int) $row->total;
+                    $sourceLabels[$sourceId] = $sourceId === '__NULL__' ? 'Sin Source' : (string) $row->name;
+                }
+
+                $nullSourcesCount = (int) (clone $qSources)
+                    ->leftJoin("{$originTable} as ogsrc_null", 'ogsrc_null.code', '=', "{$leadTable}.campaign_origin")
+                    ->leftJoin("{$sourceTable} as src_null", 'src_null.id', '=', 'ogsrc_null.source_id')
+                    ->where(function ($qq) use ($leadTable) {
+                        $qq->whereNull("{$leadTable}.campaign_origin")
+                            ->orWhere("{$leadTable}.campaign_origin", '')
+                            ->orWhereNull('src_null.id');
+                    })
+                    ->count();
+
+                if ($nullSourcesCount > 0) {
+                    $sources['__NULL__'] = $nullSourcesCount;
+                    $sourceLabels['__NULL__'] = 'Sin Source';
+                }
+            }
+
+            // 4) Medio (NO aplica plataforma)
             $qPlatforms = clone $base;
             $qPlatforms = $this->applyLeadDimensionFilters($qPlatforms, $filters, $leadTable, true, false, true, true);
 
@@ -503,7 +550,6 @@ class DashboardLeadsController extends Controller
                 ->selectRaw("\n                    COALESCE(NULLIF(MIN({$leadTable}.plataforma), ''), '__NULL__') as plataforma,\n                    COUNT(*) as total\n                ")
                 ->groupByRaw("COALESCE(NULLIF({$leadTable}.plataforma, ''), '__NULL__')")
                 ->orderByDesc('total')
-                ->limit(10)
                 ->pluck('total', 'plataforma')
                 ->toArray();
 
@@ -562,6 +608,9 @@ class DashboardLeadsController extends Controller
             // Nota: NO aplica el filtro 'qualification' del dashboard (usa $qQualifications)
             $notEffectiveFunnelId = null;
             $notEffectiveCount = 0;
+            $channelQualificationBreakdown = [];
+            $sourceQualificationBreakdown = [];
+            $platformQualificationBreakdown = [];
 
             // Ã¢Å“â€¦ FUNNELS + CALIFICADOS + VENTAS
             [$funnelTable, $qualFunnelFk] = $this->resolveFunnelJoinInfo();
@@ -632,6 +681,33 @@ class DashboardLeadsController extends Controller
                     $salesCount = $this->countLeadsByFunnelIds($base, $filters, $leadTable, $funnelTable, $qualFunnelFk, [$salesFunnelId]);
                     $salesValueSum = $this->sumLeadsValueByFunnelIds($base, $filters, $leadTable, $funnelTable, $qualFunnelFk, [$salesFunnelId]);
                 }
+
+                $channelQualificationBreakdown = $this->buildCampaignOriginQualificationBreakdown(
+                    $base,
+                    $filters,
+                    $leadTable,
+                    $funnelTable,
+                    $qualFunnelFk,
+                    $qualifiedFunnelIds
+                );
+
+                $sourceQualificationBreakdown = $this->buildSourceQualificationBreakdown(
+                    $base,
+                    $filters,
+                    $leadTable,
+                    $funnelTable,
+                    $qualFunnelFk,
+                    $qualifiedFunnelIds
+                );
+
+                $platformQualificationBreakdown = $this->buildPlatformQualificationBreakdown(
+                    $base,
+                    $filters,
+                    $leadTable,
+                    $funnelTable,
+                    $qualFunnelFk,
+                    $qualifiedFunnelIds
+                );
             }
 
             // Ã¢Å“â€¦ HISTÃƒâ€œRICO: Leads por Funnel (usando LeadFunnelHistory)
@@ -688,6 +764,11 @@ class DashboardLeadsController extends Controller
                 'pending_count' => $pendingCount,
                 'spend' => $metaSpend,
                 'channels' => $channels,
+                'channel_qualification_breakdown' => $channelQualificationBreakdown,
+                'source_qualification_breakdown' => $sourceQualificationBreakdown,
+                'platform_qualification_breakdown' => $platformQualificationBreakdown,
+                'sources' => $sources,
+                'source_labels' => $sourceLabels,
                 'platforms' => $platforms,
                 'crm_states' => $crmStates,
                 'qualifications' => $qualifications,
@@ -773,6 +854,28 @@ class DashboardLeadsController extends Controller
                 });
             } else {
                 $q->where("{$leadTable}.campaign_origin", $groupId);
+            }
+        }
+
+        if ($groupType === 'source') {
+            if (Schema::hasTable((new Origin)->getTable()) && Schema::hasTable((new Source)->getTable())) {
+                $originTable = (new Origin)->getTable();
+                $sourceTable = (new Source)->getTable();
+
+                $q->leftJoin("{$originTable} as ogroup", 'ogroup.code', '=', "{$leadTable}.campaign_origin")
+                    ->leftJoin("{$sourceTable} as sgroup", 'sgroup.id', '=', 'ogroup.source_id');
+
+                if ($groupId === '__NULL__') {
+                    $q->where(function ($qq) use ($leadTable) {
+                        $qq->whereNull("{$leadTable}.campaign_origin")
+                            ->orWhere("{$leadTable}.campaign_origin", '')
+                            ->orWhereNull('sgroup.id');
+                    });
+                } else {
+                    $q->where('sgroup.id', $groupId);
+                }
+            } else {
+                $q->whereRaw('1=0');
             }
         }
 
@@ -947,6 +1050,16 @@ class DashboardLeadsController extends Controller
             return $groupId === '__NULL__' ? 'Sin Fuente' : $groupId;
         }
 
+        if ($groupType === 'source') {
+            if ($groupId === '__NULL__') {
+                return 'Sin Source';
+            }
+
+            $name = Source::query()->whereKey($groupId)->value('name');
+
+            return $name ? (string) $name : $groupId;
+        }
+
         if ($groupType === 'plataforma') {
             return $groupId === '__NULL__' ? 'Sin Medio' : $groupId;
         }
@@ -1106,6 +1219,161 @@ class DashboardLeadsController extends Controller
             ->leftJoin("{$funnelTable} as fn3", 'fn3.id', '=', "qlf3.{$qualFunnelFk}")
             ->whereIn('fn3.id', $funnelIds)
             ->sum("{$leadTable}.value");
+    }
+
+    private function buildCampaignOriginQualificationBreakdown(
+        Builder $base,
+        array $filters,
+        string $leadTable,
+        string $funnelTable,
+        string $qualFunnelFk,
+        array $qualifiedFunnelIds
+    ): array {
+        $q = clone $base;
+        $q = $this->applyLeadDimensionFilters($q, $filters, $leadTable, false, true, true, true);
+
+        $q->leftJoin('crm_state as csqb', 'csqb.id', '=', "{$leadTable}.crm_state")
+            ->leftJoin('qualification as qlqb', 'qlqb.id', '=', 'csqb.qualification')
+            ->leftJoin("{$funnelTable} as fnqb", 'fnqb.id', '=', "qlqb.{$qualFunnelFk}");
+
+        $qualifiedSql = '0';
+        $qualifiedBindings = [];
+
+        if (! empty($qualifiedFunnelIds)) {
+            $placeholders = implode(',', array_fill(0, count($qualifiedFunnelIds), '?'));
+            $qualifiedSql = "COUNT(DISTINCT CASE WHEN fnqb.id IN ({$placeholders}) THEN {$leadTable}.id END)";
+            $qualifiedBindings = $qualifiedFunnelIds;
+        }
+
+        $keyExpr = "COALESCE(NULLIF({$leadTable}.campaign_origin, ''), '__NULL__')";
+        $labelExpr = "COALESCE(NULLIF(MIN({$leadTable}.campaign_origin), ''), '__NULL__')";
+
+        return $q
+            ->selectRaw("{$labelExpr} as campaign_origin")
+            ->selectRaw("COUNT(DISTINCT {$leadTable}.id) as total")
+            ->selectRaw("{$qualifiedSql} as qualified", $qualifiedBindings)
+            ->groupByRaw($keyExpr)
+            ->orderByDesc('total')
+            ->get()
+            ->mapWithKeys(function ($row) {
+                $total = (int) ($row->total ?? 0);
+                $qualified = (int) ($row->qualified ?? 0);
+
+                return [
+                    (string) $row->campaign_origin => [
+                        'total' => $total,
+                        'qualified' => $qualified,
+                        'unqualified' => max(0, $total - $qualified),
+                    ],
+                ];
+            })
+            ->toArray();
+    }
+
+    private function buildSourceQualificationBreakdown(
+        Builder $base,
+        array $filters,
+        string $leadTable,
+        string $funnelTable,
+        string $qualFunnelFk,
+        array $qualifiedFunnelIds
+    ): array {
+        if (! Schema::hasTable((new Origin)->getTable()) || ! Schema::hasTable((new Source)->getTable())) {
+            return [];
+        }
+
+        $originTable = (new Origin)->getTable();
+        $sourceTable = (new Source)->getTable();
+
+        $q = clone $base;
+        $q = $this->applyLeadDimensionFilters($q, $filters, $leadTable, true, true, true, true);
+
+        $q->leftJoin("{$originTable} as ogqb", 'ogqb.code', '=', "{$leadTable}.campaign_origin")
+            ->leftJoin("{$sourceTable} as sqb", 'sqb.id', '=', 'ogqb.source_id')
+            ->leftJoin('crm_state as csqb_src', 'csqb_src.id', '=', "{$leadTable}.crm_state")
+            ->leftJoin('qualification as qlqb_src', 'qlqb_src.id', '=', 'csqb_src.qualification')
+            ->leftJoin("{$funnelTable} as fnqb_src", 'fnqb_src.id', '=', "qlqb_src.{$qualFunnelFk}");
+
+        $qualifiedSql = '0';
+        $qualifiedBindings = [];
+
+        if (! empty($qualifiedFunnelIds)) {
+            $placeholders = implode(',', array_fill(0, count($qualifiedFunnelIds), '?'));
+            $qualifiedSql = "COUNT(DISTINCT CASE WHEN fnqb_src.id IN ({$placeholders}) THEN {$leadTable}.id END)";
+            $qualifiedBindings = $qualifiedFunnelIds;
+        }
+
+        $keyExpr = "COALESCE(CAST(sqb.id AS CHAR), '__NULL__')";
+
+        return $q
+            ->selectRaw("{$keyExpr} as source_id")
+            ->selectRaw("COUNT(DISTINCT {$leadTable}.id) as total")
+            ->selectRaw("{$qualifiedSql} as qualified", $qualifiedBindings)
+            ->groupByRaw($keyExpr)
+            ->orderByDesc('total')
+            ->get()
+            ->mapWithKeys(function ($row) {
+                $total = (int) ($row->total ?? 0);
+                $qualified = (int) ($row->qualified ?? 0);
+
+                return [
+                    (string) $row->source_id => [
+                        'total' => $total,
+                        'qualified' => $qualified,
+                        'unqualified' => max(0, $total - $qualified),
+                    ],
+                ];
+            })
+            ->toArray();
+    }
+
+    private function buildPlatformQualificationBreakdown(
+        Builder $base,
+        array $filters,
+        string $leadTable,
+        string $funnelTable,
+        string $qualFunnelFk,
+        array $qualifiedFunnelIds
+    ): array {
+        $q = clone $base;
+        $q = $this->applyLeadDimensionFilters($q, $filters, $leadTable, true, false, true, true);
+
+        $q->leftJoin('crm_state as csqb_platform', 'csqb_platform.id', '=', "{$leadTable}.crm_state")
+            ->leftJoin('qualification as qlqb_platform', 'qlqb_platform.id', '=', 'csqb_platform.qualification')
+            ->leftJoin("{$funnelTable} as fnqb_platform", 'fnqb_platform.id', '=', "qlqb_platform.{$qualFunnelFk}");
+
+        $qualifiedSql = '0';
+        $qualifiedBindings = [];
+
+        if (! empty($qualifiedFunnelIds)) {
+            $placeholders = implode(',', array_fill(0, count($qualifiedFunnelIds), '?'));
+            $qualifiedSql = "COUNT(DISTINCT CASE WHEN fnqb_platform.id IN ({$placeholders}) THEN {$leadTable}.id END)";
+            $qualifiedBindings = $qualifiedFunnelIds;
+        }
+
+        $keyExpr = "COALESCE(NULLIF({$leadTable}.plataforma, ''), '__NULL__')";
+        $labelExpr = "COALESCE(NULLIF(MIN({$leadTable}.plataforma), ''), '__NULL__')";
+
+        return $q
+            ->selectRaw("{$labelExpr} as plataforma")
+            ->selectRaw("COUNT(DISTINCT {$leadTable}.id) as total")
+            ->selectRaw("{$qualifiedSql} as qualified", $qualifiedBindings)
+            ->groupByRaw($keyExpr)
+            ->orderByDesc('total')
+            ->get()
+            ->mapWithKeys(function ($row) {
+                $total = (int) ($row->total ?? 0);
+                $qualified = (int) ($row->qualified ?? 0);
+
+                return [
+                    (string) $row->plataforma => [
+                        'total' => $total,
+                        'qualified' => $qualified,
+                        'unqualified' => max(0, $total - $qualified),
+                    ],
+                ];
+            })
+            ->toArray();
     }
 
     private function applyLeadScopeFilters(
@@ -1409,7 +1677,12 @@ class DashboardLeadsController extends Controller
         $periodLabel = $from->format('Y-m-d H:i').' -> '.$to->format('Y-m-d H:i');
 
         $channels = $metric['channels'] ?? [];
+        $channelQualificationBreakdown = $metric['channel_qualification_breakdown'] ?? [];
+        $sources = $metric['sources'] ?? [];
+        $sourceLabels = $metric['source_labels'] ?? [];
+        $sourceQualificationBreakdown = $metric['source_qualification_breakdown'] ?? [];
         $platforms = $metric['platforms'] ?? [];
+        $platformQualificationBreakdown = $metric['platform_qualification_breakdown'] ?? [];
 
         $totalLeads = (int) ($metric['count'] ?? 0);
 
@@ -1631,11 +1904,16 @@ class DashboardLeadsController extends Controller
         $salesValueFormatted = '$ '.number_format($salesValueSum, 0, ',', '.');
 
         // Donuts (datos + baseUrl para JS)
-        $channelsDonut = $this->buildDonutChartData($channels, 'campaign_origin');
-        $platformsDonut = $this->buildDonutChartData($platforms, 'plataforma');
+        $channelsDonut = $this->buildDonutChartData($channels, 'campaign_origin', [], $channelQualificationBreakdown);
+        $sourcesDonut = $this->buildDonutChartData($sources, 'source', $sourceLabels, $sourceQualificationBreakdown);
+        $platformsDonut = $this->buildDonutChartData($platforms, 'plataforma', [], $platformQualificationBreakdown);
 
         $baseForChannels = route('dashboard.leads.list', Arr::except($request->query(), [
             'campaign_origin', 'crm_state', 'qualification', 'group_type', 'group_id', 'page',
+        ]));
+
+        $baseForSources = route('dashboard.leads.list', Arr::except($request->query(), [
+            'crm_state', 'qualification', 'group_type', 'group_id', 'page',
         ]));
 
         $baseForPlatforms = route('dashboard.leads.list', Arr::except($request->query(), [
@@ -1796,6 +2074,10 @@ class DashboardLeadsController extends Controller
                     'base_url' => $baseForChannels,
                     'group_type' => 'campaign_origin',
                 ]),
+                'sources' => array_merge($sourcesDonut, [
+                    'base_url' => $baseForSources,
+                    'group_type' => 'source',
+                ]),
                 'platforms' => array_merge($platformsDonut, [
                     'base_url' => $baseForPlatforms,
                     'group_type' => 'plataforma',
@@ -1826,10 +2108,10 @@ class DashboardLeadsController extends Controller
         ];
     }
 
-    private function buildDonutChartData(array $data, string $dimension): array
+    private function buildDonutChartData(array $data, string $dimension, array $labelsByKey = [], array $breakdownsByKey = []): array
     {
         if (empty($data)) {
-            return ['keys' => [], 'labels' => [], 'values' => [], 'pairs' => [], 'total' => 0];
+            return ['keys' => [], 'labels' => [], 'values' => [], 'pairs' => [], 'breakdown_rows' => [], 'total' => 0];
         }
 
         arsort($data);
@@ -1844,20 +2126,68 @@ class DashboardLeadsController extends Controller
         $keys = array_keys($top);
         $values = array_values($top);
 
-        $labels = array_map(function ($k) use ($dimension) {
+        $labels = array_map(function ($k) use ($dimension, $labelsByKey) {
             if ($k === '__OTHER__') {
                 return 'Otros';
             }
             if ($k === '__NULL__') {
-                return $dimension === 'campaign_origin' ? 'Sin Fuente' : 'Sin Medio';
+                return match ($dimension) {
+                    'campaign_origin' => 'Sin Fuente',
+                    'source' => 'Sin Source',
+                    default => 'Sin Medio',
+                };
+            }
+            if (array_key_exists($k, $labelsByKey)) {
+                return (string) $labelsByKey[$k];
             }
 
             return (string) $k;
         }, $keys);
 
         $pairs = [];
+        $breakdownRows = [];
+
+        $buildBreakdown = function (string $key, int $fallbackTotal, ?array $sourceKeys = null) use ($breakdownsByKey) {
+            if (empty($breakdownsByKey)) {
+                return null;
+            }
+
+            $sourceKeys ??= [$key];
+            $total = 0;
+            $qualified = 0;
+
+            foreach ($sourceKeys as $sourceKey) {
+                $row = $breakdownsByKey[$sourceKey] ?? null;
+                if (! $row) {
+                    continue;
+                }
+
+                $total += (int) ($row['total'] ?? 0);
+                $qualified += (int) ($row['qualified'] ?? 0);
+            }
+
+            if ($total === 0) {
+                $total = $fallbackTotal;
+            }
+
+            return [
+                'key' => $key,
+                'total' => $total,
+                'qualified' => $qualified,
+                'unqualified' => max(0, $total - $qualified),
+            ];
+        };
+
         foreach ($keys as $i => $k) {
             $pairs[] = ['key' => $k, 'label' => $labels[$i], 'count' => (int) $values[$i]];
+
+            $breakdown = $k === '__OTHER__'
+                ? $buildBreakdown($k, (int) $values[$i], array_keys($rest))
+                : $buildBreakdown($k, (int) $values[$i]);
+
+            if ($breakdown !== null) {
+                $breakdownRows[] = array_merge($breakdown, ['label' => $labels[$i]]);
+            }
         }
 
         return [
@@ -1865,6 +2195,7 @@ class DashboardLeadsController extends Controller
             'labels' => $labels,
             'values' => $values,
             'pairs' => $pairs,
+            'breakdown_rows' => $breakdownRows,
             'total' => array_sum($values),
         ];
     }
@@ -2923,6 +3254,7 @@ class DashboardLeadsController extends Controller
         $leadTable = (new Lead)->getTable();
         $googleAdsTable = (new GoogleAdsAd)->getTable();
         $customerTable = (new Customer)->getTable();
+        $googleAdLeadIdExpression = "COALESCE(NULLIF({$leadTable}.google_ad_id, ''), NULLIF({$leadTable}.g_ad, ''))";
         $excluded = ['lead no efectivo', 'sin gestionar', 'n/a'];
         $excludedSql = "'".implode("','", array_map(fn ($s) => str_replace("'", "''", $s), $excluded))."'";
         $roasSelect = Schema::hasColumn($table, 'roas') ? "AVG({$table}.roas) as roas" : 'NULL as roas';
@@ -2953,13 +3285,13 @@ class DashboardLeadsController extends Controller
 
         $leadRows = (clone $base)
             ->join($customerTable, "{$customerTable}.id", '=', "{$leadTable}.customer_id")
-            ->leftJoin("{$googleAdsTable} as gads", function ($join) use ($leadTable) {
-                $join->on("gads.google_ad_id", '=', "{$leadTable}.g_ad");
+            ->leftJoin("{$googleAdsTable} as gads", function ($join) use ($leadTable, $googleAdLeadIdExpression) {
+                $join->on("gads.customer_id", '=', "{$leadTable}.customer_id")
+                    ->whereRaw("gads.google_ad_id = {$googleAdLeadIdExpression}");
             })
             ->leftJoin('crm_state as cs', 'cs.id', '=', "{$leadTable}.crm_state")
             ->leftJoin('qualification as q', 'q.id', '=', 'cs.qualification')
-            ->whereNotNull("{$leadTable}.g_ad")
-            ->where("{$leadTable}.g_ad", '!=', '')
+            ->whereRaw("{$googleAdLeadIdExpression} IS NOT NULL")
             ->whereNotNull('gads.google_ad_id')
             ->selectRaw("
                 {$leadTable}.customer_id,
@@ -3047,7 +3379,7 @@ class DashboardLeadsController extends Controller
             'table' => [
                 'enabled' => ! empty($rows),
                 'note' => ! empty($rows)
-                    ? 'Cálculo siguiendo la lógica de Meta: costo desde Google Ads y leads emparejados por leads.g_ad con google_ads_ads.google_ad_id.'
+                    ? 'Cálculo siguiendo la lógica de Meta: costo desde Google Ads y leads emparejados por leads.google_ad_id con google_ads_ads.google_ad_id, usando leads.g_ad como respaldo.'
                     : 'No hay datos disponibles para los filtros seleccionados.',
                 'columns' => [
                     ['key' => 'name', 'label' => 'Nombre'],
@@ -3122,6 +3454,7 @@ class DashboardLeadsController extends Controller
         $customerTable = (new Customer)->getTable();
         $leadTable = (new Lead)->getTable();
         $googleAdsTable = (new GoogleAdsAd)->getTable();
+        $googleAdLeadIdExpression = "COALESCE(NULLIF({$leadTable}.google_ad_id, ''), NULLIF({$leadTable}.g_ad, ''))";
         $excluded = ['lead no efectivo', 'sin gestionar', 'n/a'];
         $excludedSql = "'".implode("','", array_map(fn ($s) => str_replace("'", "''", $s), $excluded))."'";
         $roasSelect = Schema::hasColumn($table, 'roas') ? "AVG({$table}.roas) as roas" : 'NULL as roas';
@@ -3152,9 +3485,9 @@ class DashboardLeadsController extends Controller
 
         $leadRows = (clone $base)
             ->join($customerTable, "{$customerTable}.id", '=', "{$leadTable}.customer_id")
-            ->leftJoin("{$googleAdsTable} as gads", function ($join) use ($leadTable) {
-                $join->on("gads.google_ad_id", '=', "{$leadTable}.g_ad");
-                $join->on("gads.customer_id", '=', "{$leadTable}.customer_id");
+            ->leftJoin("{$googleAdsTable} as gads", function ($join) use ($leadTable, $googleAdLeadIdExpression) {
+                $join->on("gads.customer_id", '=', "{$leadTable}.customer_id")
+                    ->whereRaw("gads.google_ad_id = {$googleAdLeadIdExpression}");
             })
             ->leftJoin('crm_state as cs', 'cs.id', '=', "{$leadTable}.crm_state")
             ->leftJoin('qualification as q', 'q.id', '=', 'cs.qualification')
@@ -3245,7 +3578,7 @@ class DashboardLeadsController extends Controller
                 'enabled' => ! empty($formattedRows),
                 'note' => empty($formattedRows)
                     ? 'No hay datos de Google Ads para los filtros seleccionados.'
-                    : 'Calculo por Grupo de anuncios: costo desde Google Ads y leads desde leads.g_ad relacionado de forma flexible con google_ads_ads.google_ad_id.',
+                    : 'Calculo por Grupo de anuncios: costo desde Google Ads y leads desde leads.google_ad_id relacionado con google_ads_ads.google_ad_id, usando leads.g_ad como respaldo.',
                 'columns' => [
                     ['key' => 'customer_name', 'label' => 'Cliente'],
                     ['key' => 'ad_group_name', 'label' => 'Grupo de anuncio'],

@@ -63,6 +63,7 @@
 
     <script>
         const optionsData = @json($options);
+        const googleOriginCodes = new Set(@json($googleOriginCodes ?? []));
 
         function addRow() {
             const tbody = document.getElementById('matrixBody');
@@ -167,6 +168,20 @@
                 let finalUrl = `${baseUrl}?effective_lead=${lead}&campaign_origin=${originEl.value}&platform=${platformEl.value}&geo=${geoEl.value}&language=${langEl.value}&services=${service}`;
                 if (campaignObjectiveEl.value) finalUrl += `&campaign_objective=${campaignObjectiveEl.value}`;
                 if (sitelink) finalUrl += `&site_link=${sitelink}`;
+                if (googleOriginCodes.has(originEl.value)) {
+                    finalUrl += '&' + [
+                        'utm_source=google',
+                        'utm_medium=cpc',
+                        'utm_campaign={campaignid}',
+                        'utm_content={creative}',
+                        'utm_term={keyword}',
+                        'google_ad_id={creative}',
+                        'google_adgroup_id={adgroupid}',
+                        'google_campaign_id={campaignid}',
+                        'matchtype={matchtype}',
+                        'device={device}',
+                    ].join('&');
+                }
                 
                 row.querySelector('.result-url').value = finalUrl;
             } else {

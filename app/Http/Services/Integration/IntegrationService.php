@@ -22,6 +22,7 @@ class IntegrationService
 {
     private $GooglesheetsIntegrationService;
     private $KommoIntegrationService;
+    private $KommoPipelineService;
     private $LetyIntegrationService;
     private $ZohoIntegrationService;
     private $FreshworksIntegrationService;
@@ -33,6 +34,7 @@ class IntegrationService
     public function __construct(
         GoogleSheetsIntegrationService $GooglesheetsIntegrationService,
         KommoIntegrationService $KommoIntegrationService,
+        KommoPipelineService $KommoPipelineService,
         LetyIntegrationService $LetyIntegrationService,
         ZohoIntegrationService $ZohoIntegrationService,
         FreshworksIntegrationService $FreshworksIntegrationService,
@@ -43,6 +45,7 @@ class IntegrationService
     ) {
         $this->GooglesheetsIntegrationService = $GooglesheetsIntegrationService;
         $this->KommoIntegrationService = $KommoIntegrationService;
+        $this->KommoPipelineService = $KommoPipelineService;
         $this->LetyIntegrationService = $LetyIntegrationService;
         $this->ZohoIntegrationService = $ZohoIntegrationService;
         $this->FreshworksIntegrationService = $FreshworksIntegrationService;
@@ -87,6 +90,7 @@ class IntegrationService
             $handlers = [
                 'google_sheets' => fn() => $this->GooglesheetsIntegrationService->sendToGoogleSheets($lead, $integration),
                 'kommo' => fn() => $this->KommoIntegrationService->sendToKommo($lead, $integration),
+                'kommopipeline' => fn() => $this->KommoPipelineService->sendToKommoPipeline($lead, $integration),
                 'lety' => fn() => $this->LetyIntegrationService->sendToLety($lead, $integration),
                 'zoho' => fn() => $this->ZohoIntegrationService->sendToZoho($lead, $integration),
                 'freshworks' => fn() => $this->FreshworksIntegrationService->sendToFreshworks($lead, $integration),
@@ -99,6 +103,7 @@ class IntegrationService
             $serviceMap = [
                 'google_sheets' => $this->GooglesheetsIntegrationService::class,
                 'kommo' => $this->KommoIntegrationService::class,
+                'kommopipeline' => $this->KommoPipelineService::class,
                 'lety' => $this->LetyIntegrationService::class,
                 'zoho' => $this->ZohoIntegrationService::class,
                 'freshworks' => $this->FreshworksIntegrationService::class,
@@ -182,6 +187,7 @@ class IntegrationService
         return match ($normalized) {
             'googlesheets' => 'google_sheets',
             'go_high_level', 'leadconnector', 'lead_connector' => 'gohighlevel',
+            'kommo_pipeline' => 'kommopipeline',
             default => $normalized !== '' ? $normalized : 'webhook',
         };
     }
@@ -213,6 +219,14 @@ class IntegrationService
                 'crm_id_email_present' => filled($integration->crm_Id_email),
                 'crm_id_service_present' => filled($integration->crm_Id_service),
                 'crm_id_fuente_present' => filled($integration->crm_Id_fuente),
+            ],
+            'kommopipeline' => [
+                'integration_url' => $integration->url,
+                'url_present' => filled($integration->url),
+                'token_present' => filled($integration->tokent),
+                'body_present' => filled($integration->body),
+                'default_pipeline_present' => filled($integration->kommo_pipeline_default_pipeline_id),
+                'default_status_present' => filled($integration->kommo_pipeline_default_status_id),
             ],
             'hubspot' => [
                 'integration_url' => $integration->url,

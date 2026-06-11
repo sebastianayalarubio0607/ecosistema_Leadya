@@ -1,6 +1,6 @@
 @php($widths = ['w-full', 'w-11/12', 'w-10/12', 'w-9/12', 'w-8/12'])
 
-<div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 col-span-3">
+<div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 {{ $cardClass ?? 'col-span-3' }}">
     <div class="flex items-center justify-between mb-3">
         <h3 class="text-white font-semibold">{{ $title }}</h3>
         <div class="text-xs text-white/50">

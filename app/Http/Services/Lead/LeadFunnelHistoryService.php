@@ -10,20 +10,22 @@ use Illuminate\Support\Facades\DB;
 class LeadFunnelHistoryService
 {
     /**
-     * Crea un registro SOLO si el funnel actual del lead es diferente
-     * al último funnel registrado en el histórico de ese lead.
+     * Crea un registro solo si no existe ya la combinacion lead + funnel.
+     * Si existe, actualiza updated_at para registrar la actividad reciente.
      */
     public function recordIfFunnelChanged(Lead $lead): ?LeadFunnelHistory
     {
         $newFunnelId = $this->resolveFunnelIdForLead($lead);
 
-        $last = LeadFunnelHistory::query()
+        $existing = LeadFunnelHistory::query()
             ->where('lead_id', $lead->id)
-            ->latest('id')
+            ->where('funnel_id', $newFunnelId)
             ->first();
 
-        if ($last && (int) $last->funnel_id === (int) $newFunnelId) {
-            return null;
+        if ($existing) {
+            $existing->touch();
+
+            return $existing;
         }
 
         return LeadFunnelHistory::create([
@@ -35,7 +37,7 @@ class LeadFunnelHistoryService
     /**
      * Resuelve funnel_id desde:
      * lead->crm_state -> crm_state.qualification -> qualification.funnel_id
-     * Si crm_state null/vacío o no se resuelve funnel => usa/crea funnel "Lead".
+     * Si crm_state null/vacio o no se resuelve funnel => usa/crea funnel "Lead".
      */
     public function resolveFunnelIdForLead(Lead $lead): int
     {

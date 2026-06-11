@@ -62,6 +62,10 @@ Route::middleware('auth')->group(function () {
 
     Route::resource('customers', CustomerController::class);
     Route::resource('integrationtypes', IntegrationtypeWebController::class);
+    Route::get('integrations/kommo-pipeline/pipelines/{integration}', [IntegrationWebController::class, 'kommoPipelinePipelines'])
+        ->name('integrations.kommo-pipeline.pipelines');
+    Route::get('integrations/kommo-pipeline/statuses/{integration}/{pipelineId}', [IntegrationWebController::class, 'kommoPipelineStatuses'])
+        ->name('integrations.kommo-pipeline.statuses');
     Route::resource('integrations', IntegrationWebController::class);
 
     
