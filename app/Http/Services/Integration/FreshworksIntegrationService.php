@@ -22,7 +22,7 @@ class FreshworksIntegrationService
             throw new RuntimeException('No existe token de autenticacion configurado para Freshworks.');
         }
 
-        $customField = $this->parseCustomField($integration->custom_field, $lead);
+        $customField = $this->parseCustomField($integration->custom_field, $lead, $integration);
 
         $contact = [
             'first_source' => $this->firstNonEmpty($lead->campaignOrigin?->name, 'Organico'),
@@ -86,7 +86,7 @@ class FreshworksIntegrationService
         return $response;
     }
 
-    private function parseCustomField(?string $customField, Lead $lead): array
+    private function parseCustomField(?string $customField, Lead $lead, Integration $integration): array
     {
         $customField = trim((string) $customField);
         if ($customField === '') {
@@ -98,7 +98,11 @@ class FreshworksIntegrationService
             throw new RuntimeException('El campo custom_field de Freshworks debe ser un JSON valido.');
         }
 
-        return $this->resolveCustomFieldPlaceholders($decoded, $lead);
+        return $this->resolveCustomFieldPlaceholders(
+            $decoded,
+            $lead,
+            $this->freshworksVariableMappings($integration)
+        );
     }
 
     private function decodeCustomFieldTemplate(string $customField): ?array
@@ -132,12 +136,12 @@ class FreshworksIntegrationService
         }, $value);
     }
 
-    private function resolveCustomFieldPlaceholders(array $payload, Lead $lead): array
+    private function resolveCustomFieldPlaceholders(array $payload, Lead $lead, $mappings, ?string $targetVariable = null): array
     {
         $resolved = [];
 
         foreach ($payload as $key => $value) {
-            $resolvedValue = $this->resolveCustomFieldValue($value, $lead);
+            $resolvedValue = $this->resolveCustomFieldValue($value, $lead, $mappings, $targetVariable ?? (string) $key);
 
             if ($resolvedValue === null || $resolvedValue === '') {
                 continue;
@@ -149,22 +153,10 @@ class FreshworksIntegrationService
         return $resolved;
     }
 
-    private function resolveCustomFieldValue($value, Lead $lead)
+    private function resolveCustomFieldValue($value, Lead $lead, $mappings, ?string $targetVariable = null)
     {
         if (is_array($value)) {
-            $resolved = [];
-
-            foreach ($value as $key => $nestedValue) {
-                $resolvedValue = $this->resolveCustomFieldValue($nestedValue, $lead);
-
-                if ($resolvedValue === null || $resolvedValue === '') {
-                    continue;
-                }
-
-                $resolved[$key] = $resolvedValue;
-            }
-
-            return $resolved;
+            return $this->resolveCustomFieldPlaceholders($value, $lead, $mappings, $targetVariable);
         }
 
         if (!is_string($value)) {
@@ -175,7 +167,61 @@ class FreshworksIntegrationService
             return $value;
         }
 
-        return data_get($lead, $matches[1]);
+        $leadField = $matches[1];
+        $leadValue = data_get($lead, $leadField);
+
+        return $this->resolveMappedCustomFieldValue($mappings, $targetVariable, $leadField, $leadValue);
+    }
+
+    private function freshworksVariableMappings(Integration $integration)
+    {
+        if ($integration->relationLoaded('freshworksVariableMappings')) {
+            return $integration->freshworksVariableMappings
+                ->where('active', true)
+                ->sortBy(fn ($mapping) => sprintf('%010d-%010d', $mapping->order ?? 0, $mapping->id ?? 0))
+                ->values();
+        }
+
+        return $integration->freshworksVariableMappings()
+            ->where('active', true)
+            ->orderBy('order')
+            ->orderBy('id')
+            ->get();
+    }
+
+    private function resolveMappedCustomFieldValue($mappings, ?string $targetVariable, string $leadField, $leadValue)
+    {
+        if ($targetVariable === null || $leadValue === null || $leadValue === '') {
+            return $leadValue;
+        }
+
+        foreach ($mappings as $mapping) {
+            if ((string) $mapping->target_variable !== (string) $targetVariable) {
+                continue;
+            }
+
+            if ((string) $mapping->lead_field !== (string) $leadField) {
+                continue;
+            }
+
+            if ((string) $mapping->expected_value !== (string) $leadValue) {
+                continue;
+            }
+
+            if ($mapping->mapped_value === null || $mapping->mapped_value === '') {
+                return $leadValue;
+            }
+
+            Log::info('FRESHWORKS VARIABLE MAPPING MATCHED', [
+                'target_variable' => $targetVariable,
+                'lead_field' => $leadField,
+                'expected_value' => $mapping->expected_value,
+            ]);
+
+            return $mapping->mapped_value;
+        }
+
+        return $leadValue;
     }
 
     private function placeholderToken(string $field): string

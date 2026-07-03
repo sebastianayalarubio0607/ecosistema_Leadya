@@ -2,6 +2,7 @@
 
 namespace App\Http\Services\Integration;
 
+use App\Http\Services\Integration\Concerns\ResolvesIntegrationVariableMappings;
 use App\Models\Integration;
 use App\Models\Lead;
 use Illuminate\Support\Facades\Http;
@@ -10,6 +11,8 @@ use RuntimeException;
 
 class HubspotIntegrationService
 {
+    use ResolvesIntegrationVariableMappings;
+
     public function sendToHubspot(Lead $lead, Integration $integration)
     {
         $token = trim((string) $integration->tokent);
@@ -157,7 +160,7 @@ class HubspotIntegrationService
             throw new RuntimeException('El campo body de HubSpot debe ser un JSON valido.');
         }
 
-        return $this->resolveBodyPlaceholders($decoded, $lead);
+        return $this->resolveBodyPlaceholders($decoded, $lead, $integration);
     }
 
     private function buildDealPayload(Lead $lead, Integration $integration, string $contactId): array
@@ -166,7 +169,7 @@ class HubspotIntegrationService
 
         return [
             'properties' => [
-                'dealname' => $this->renderTemplateString((string) $integration->dealname, $lead),
+                'dealname' => $this->renderTemplateString((string) $integration->dealname, $lead, $integration, 'dealname'),
                 'dealstage' => (string) $integration->dealstage,
                 'pipeline' => 'default',
                 'amount' => '500',
@@ -267,18 +270,18 @@ class HubspotIntegrationService
         }, $value);
     }
 
-    private function resolveBodyPlaceholders(array $payload, Lead $lead): array
+    private function resolveBodyPlaceholders(array $payload, Lead $lead, Integration $integration): array
     {
-        return $this->replacePlaceholders($payload, [], $lead);
+        return $this->replacePlaceholders($payload, [], $lead, $integration, $this->integrationVariableMappings($integration));
     }
 
-    private function replacePlaceholders($value, array $replacements, ?Lead $lead = null)
+    private function replacePlaceholders($value, array $replacements, ?Lead $lead = null, ?Integration $integration = null, $mappings = null, ?string $targetVariable = null)
     {
         if (is_array($value)) {
             $result = [];
 
             foreach ($value as $key => $item) {
-                $resolved = $this->replacePlaceholders($item, $replacements, $lead);
+                $resolved = $this->replacePlaceholders($item, $replacements, $lead, $integration, $mappings ?? collect(), (string) $key);
 
                 if ($resolved === null || $resolved === '') {
                     continue;
@@ -292,7 +295,13 @@ class HubspotIntegrationService
 
         if (is_string($value)) {
             if ($lead && preg_match('/^__hubspot_lead_field__:(.+)$/', $value, $matches)) {
-                return data_get($lead, $matches[1]);
+                $leadValue = data_get($lead, $matches[1]);
+
+                if ($integration) {
+                    return $this->resolveMappedIntegrationValue($mappings ?? collect(), $targetVariable, $matches[1], $leadValue, $leadValue, 'HUBSPOT');
+                }
+
+                return $leadValue;
             }
 
             return strtr($value, $replacements);
@@ -301,9 +310,11 @@ class HubspotIntegrationService
         return $value;
     }
 
-    private function renderTemplateString(string $value, Lead $lead): string
+    private function renderTemplateString(string $value, Lead $lead, ?Integration $integration = null, ?string $targetVariable = null): string
     {
-        return (string) preg_replace_callback('/\{\{\s*([^}]+?)\s*\}\}/', function ($matches) use ($lead) {
+        $mappings = $integration ? $this->integrationVariableMappings($integration) : collect();
+
+        return (string) preg_replace_callback('/\{\{\s*([^}]+?)\s*\}\}/', function ($matches) use ($lead, $integration, $mappings, $targetVariable) {
             $path = $this->normalizePlaceholderPath($matches[1]);
 
             if ($path === null) {
@@ -311,6 +322,10 @@ class HubspotIntegrationService
             }
 
             $resolved = data_get($lead, $path);
+
+            if ($integration) {
+                $resolved = $this->resolveMappedIntegrationValue($mappings, $targetVariable, $path, $resolved, $resolved, 'HUBSPOT');
+            }
 
             return $resolved === null ? '' : (string) $resolved;
         }, $value);

@@ -166,7 +166,7 @@ class LeadController extends Controller
         return response()->json($lead);
     }
 
-    public function update(Request $request, $id)
+    public function update(Request $request, LeadFunnelHistoryService $historyService, $id)
     {
         $customerId = $request->header('X-Customer-ID');
 
@@ -190,9 +190,12 @@ class LeadController extends Controller
 
             // ✅ permitir crm_state (si este endpoint lo modifica)
             'crm_state' => 'sometimes|nullable|string|max:255',
+            'g_clid' => 'sometimes|nullable|string|max:255',
             'gclid' => 'sometimes|nullable|string|max:255',
             'gbraid' => 'sometimes|nullable|string|max:255',
+            'g_braid' => 'sometimes|nullable|string|max:255',
             'wbraid' => 'sometimes|nullable|string|max:255',
+            'w_braid' => 'sometimes|nullable|string|max:255',
             'gad_source' => 'sometimes|nullable|string|max:255',
             'gad_campaignid' => 'sometimes|nullable|string|max:255',
             'google_ad_id' => 'sometimes|nullable|string|max:255',
@@ -201,6 +204,8 @@ class LeadController extends Controller
             'matchtype' => 'sometimes|nullable|string|max:255',
             'device' => 'sometimes|nullable|string|max:255',
         ]);
+
+        $validated = $this->leadsService->normalizeGoogleClickTracking($validated);
 
         $lead->fill($validated);
         $crmChanged = $lead->isDirty('crm_state');

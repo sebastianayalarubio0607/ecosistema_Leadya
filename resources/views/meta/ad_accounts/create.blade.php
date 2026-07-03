@@ -7,7 +7,7 @@
 @endsection
 
 @section('content')
-    @php($ad_account = new \App\Models\MetaAdAccount())
+    @php($ad_account = $ad_account ?? new \App\Models\MetaAdAccount())
 
     <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 space-y-4">
         <form method="POST" action="{{ route('meta.ad-accounts.store') }}" class="space-y-4">

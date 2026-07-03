@@ -24,6 +24,7 @@ class MetaGraphService
         $items = [];
         $nextUrl = $this->url($path);
         $nextQuery = $query;
+        $accessToken = $query['access_token'] ?? null;
 
         do {
             $response = Http::retry(3, 1000)
@@ -35,9 +36,37 @@ class MetaGraphService
             $items = array_merge($items, $payload['data'] ?? []);
             $nextUrl = data_get($payload, 'paging.next');
             $nextQuery = [];
+
+            if ($nextUrl && $accessToken && ! $this->urlHasQueryParam($nextUrl, 'access_token')) {
+                $nextUrl = $this->appendQueryParams($nextUrl, ['access_token' => $accessToken]);
+            }
         } while ($nextUrl);
 
         return $items;
+    }
+
+    private function appendQueryParams(string $url, array $params): string
+    {
+        $query = http_build_query($params, '', '&', PHP_QUERY_RFC3986);
+
+        if ($query === '') {
+            return $url;
+        }
+
+        return $url.(str_contains($url, '?') ? '&' : '?').$query;
+    }
+
+    private function urlHasQueryParam(string $url, string $param): bool
+    {
+        $query = parse_url($url, PHP_URL_QUERY);
+
+        if (! is_string($query) || $query === '') {
+            return false;
+        }
+
+        parse_str($query, $params);
+
+        return filled($params[$param] ?? null);
     }
 
     private function url(string $path): string

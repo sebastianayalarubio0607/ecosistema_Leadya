@@ -143,6 +143,62 @@
                 'legendId' => 'legendPlatforms',
                 'cardClass' => 'col-span-1',
             ])
+
+            <div class="col-span-1 lg:col-span-2 grid grid-cols-1 gap-4">
+            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 col-span-1">
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <div class="text-sm text-white/60">Desglose</div>
+                        <h3 class="text-white font-semibold">Totales Por Source</h3>
+                    </div>
+                    <div class="text-xs text-white/50">
+                        Total: <span class="text-white/80 font-semibold">{{ $ui['donuts']['sources']['total'] ?? 0 }}</span>
+                    </div>
+                </div>
+
+                <div class="py-12 grid grid-cols-12 gap-4 items-center">
+                    <div class="col-span-12 md:col-span-6">
+                        <div class="relative h-60">
+                            <canvas id="donutSourceTotals"
+                                data-breakdown-rows='@json($ui['donuts']['sources']['breakdown_rows'] ?? [])'
+                                data-dimension-title="Source"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="col-span-12 md:col-span-6">
+                        <div class="text-xs text-white/50 mb-2">Tabla de totales</div>
+                        <div id="legendSourceTotals" class="overflow-x-auto"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 col-span-1">
+                <div class="flex items-center justify-between mb-3">
+                    <div>
+                        <div class="text-sm text-white/60">Desglose</div>
+                        <h3 class="text-white font-semibold">Totales Por Medio</h3>
+                    </div>
+                    <div class="text-xs text-white/50">
+                        Total: <span class="text-white/80 font-semibold">{{ $ui['donuts']['platforms']['total'] ?? 0 }}</span>
+                    </div>
+                </div>
+
+                <div class="py-12 grid grid-cols-12 gap-4 items-center">
+                    <div class="col-span-12 md:col-span-6">
+                        <div class="relative h-60">
+                            <canvas id="donutPlatformTotals"
+                                data-breakdown-rows='@json($ui['donuts']['platforms']['breakdown_rows'] ?? [])'
+                                data-dimension-title="Medio"></canvas>
+                        </div>
+                    </div>
+
+                    <div class="col-span-12 md:col-span-6">
+                        <div class="text-xs text-white/50 mb-2">Tabla de totales</div>
+                        <div id="legendPlatformTotals" class="overflow-x-auto"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
         </div>
         <h2 class="text-2xl text-white font-bold">Funnel - {{ $ui['header']['selected_customer_name'] }}</h2>
 
@@ -253,7 +309,13 @@
                     const dimensionTitle = groupType === "source" ?
                         "Source" :
                         (groupType === "plataforma" ? "Medio" : "Fuente");
-                    [dimensionTitle, "Total", "No calif.", "Calif."].forEach((title, index) => {
+                    const hasDimensionTotal = breakdownRows.some((item) =>
+                        Object.prototype.hasOwnProperty.call(item, "dimension_total") && item.dimension_total !== null
+                    );
+                    const metricHeaders = hasDimensionTotal
+                        ? [`Total ${dimensionTitle}`, "Leads calificados", "Leads no calificados"]
+                        : ["Total", "Calif.", "No calif."];
+                    [dimensionTitle, ...metricHeaders].forEach((title, index) => {
                         const th = document.createElement("th");
                         th.className = index === 0 ? "px-2 py-1 font-medium" :
                             "px-2 py-1 font-medium text-right";
@@ -265,6 +327,10 @@
 
                     const tbody = document.createElement("tbody");
                     tbody.className = "divide-y divide-white/10";
+                    const metricFields = hasDimensionTotal
+                        ? ["dimension_total", "qualified", "unqualified"]
+                        : ["total", "qualified", "unqualified"];
+                    const columnTotals = Object.fromEntries(metricFields.map((field) => [field, 0]));
 
                     breakdownRows.forEach((item, index) => {
                         const key = item.key ?? keys[index];
@@ -295,11 +361,14 @@
                         source.appendChild(sourceWrap);
                         row.appendChild(source);
 
-                        ["total", "qualified", "unqualified"].forEach((field) => {
+                        metricFields.forEach((field) => {
+                            const value = Number(item[field] ?? 0);
+                            columnTotals[field] += Number.isFinite(value) ? value : 0;
+
                             const td = document.createElement("td");
                             td.className =
                                 "px-2 py-2 text-right text-white/75 font-semibold tabular-nums";
-                            td.textContent = numberFormatter.format(Number(item[field] ?? 0));
+                            td.textContent = numberFormatter.format(value);
                             row.appendChild(td);
                         });
 
@@ -307,6 +376,25 @@
                     });
 
                     table.appendChild(tbody);
+
+                    const tfoot = document.createElement("tfoot");
+                    const totalRow = document.createElement("tr");
+                    totalRow.className = "border-t border-white/20 bg-white/5";
+
+                    const totalLabel = document.createElement("td");
+                    totalLabel.className = "px-2 py-2 text-white font-semibold";
+                    totalLabel.textContent = "Total";
+                    totalRow.appendChild(totalLabel);
+
+                    metricFields.forEach((field) => {
+                        const td = document.createElement("td");
+                        td.className = "px-2 py-2 text-right text-white font-bold tabular-nums";
+                        td.textContent = numberFormatter.format(columnTotals[field] ?? 0);
+                        totalRow.appendChild(td);
+                    });
+
+                    tfoot.appendChild(totalRow);
+                    table.appendChild(tfoot);
                     container.appendChild(table);
                     return;
                 }
@@ -372,6 +460,129 @@
 
             function chartTextColor(alpha = ".75") {
                 return `rgba(255,255,255,${alpha})`;
+            }
+
+            function breakdownTotals(breakdownRows = []) {
+                return breakdownRows.reduce((totals, item) => {
+                    const qualified = Number(item.qualified ?? 0);
+                    const unqualified = Number(item.unqualified ?? 0);
+                    const rowTotal = Number(item.dimension_total ?? item.total ?? 0);
+
+                    totals.qualified += Number.isFinite(qualified) ? qualified : 0;
+                    totals.unqualified += Number.isFinite(unqualified) ? unqualified : 0;
+                    totals.total += Number.isFinite(rowTotal) ? rowTotal : 0;
+
+                    return totals;
+                }, {
+                    total: 0,
+                    qualified: 0,
+                    unqualified: 0
+                });
+            }
+
+            function renderTotalsLegend(containerId, totals, dimensionTitle) {
+                const container = document.getElementById(containerId);
+                if (!container) return;
+
+                const numberFormatter = new Intl.NumberFormat("es-CO");
+                const table = document.createElement("table");
+                table.className = "min-w-full text-xs text-left";
+                const thead = document.createElement("thead");
+                thead.className = "text-white/50";
+                const headerRow = document.createElement("tr");
+
+                [`Total ${dimensionTitle}`, "Leads calificados", "Leads no calificados"].forEach((title) => {
+                    const th = document.createElement("th");
+                    th.className = "px-2 py-1 font-medium text-right first:text-left";
+                    th.textContent = title;
+                    headerRow.appendChild(th);
+                });
+
+                thead.appendChild(headerRow);
+                table.appendChild(thead);
+
+                const tbody = document.createElement("tbody");
+                tbody.className = "divide-y divide-white/10";
+                const row = document.createElement("tr");
+                row.className = "border-t border-white/20 bg-white/5";
+
+                [totals.total, totals.qualified, totals.unqualified].forEach((value) => {
+                    const td = document.createElement("td");
+                    td.className = "px-2 py-2 text-right first:text-left text-white font-bold tabular-nums";
+                    td.textContent = numberFormatter.format(value);
+                    row.appendChild(td);
+                });
+
+                tbody.appendChild(row);
+                table.appendChild(tbody);
+
+                container.innerHTML = "";
+                container.appendChild(table);
+            }
+
+            function buildTotalsDonut(canvasId, legendId) {
+                const canvas = chartContainer(document.getElementById(canvasId));
+                if (!canvas || !window.echarts) return;
+
+                const breakdownRows = JSON.parse(canvas.dataset.breakdownRows || "[]");
+                const dimensionTitle = canvas.dataset.dimensionTitle || "Source";
+                const totals = breakdownTotals(breakdownRows);
+                const values = [totals.qualified, totals.unqualified];
+                const total = values.reduce((sum, value) => sum + value, 0);
+
+                renderTotalsLegend(legendId, totals, dimensionTitle);
+                if (total <= 0) return;
+
+                const chartId = canvas.id;
+                disposeChart(chartId);
+
+                charts[chartId] = echarts.init(canvas, null, {
+                    renderer: "canvas"
+                });
+                charts[chartId].setOption({
+                    color: ["#22C55E", "#F59E0B"],
+                    tooltip: {
+                        trigger: "item",
+                        backgroundColor: "rgba(15,23,42,.96)",
+                        borderColor: "rgba(255,255,255,.12)",
+                        textStyle: {
+                            color: "#fff"
+                        },
+                        formatter: "{b}<br/><strong>{c}</strong> ({d}%)"
+                    },
+                    legend: {
+                        bottom: 0,
+                        icon: "roundRect",
+                        textStyle: {
+                            color: chartTextColor(".78")
+                        }
+                    },
+                    series: [{
+                        type: "pie",
+                        radius: ["40%", "68%"],
+                        center: ["50%", "42%"],
+                        avoidLabelOverlap: false,
+                        itemStyle: {
+                            borderRadius: 0
+                        },
+                        label: {
+                            show: false
+                        },
+                        emphasis: {
+                            scale: true,
+                            scaleSize: 2
+                        },
+                        data: [{
+                                name: "Leads calificados",
+                                value: totals.qualified
+                            },
+                            {
+                                name: "Leads no calificados",
+                                value: totals.unqualified
+                            }
+                        ]
+                    }]
+                });
             }
 
             function buildDonut(canvasId, legendId) {
@@ -685,6 +896,8 @@
                 await loadECharts();
                 buildDonut("donutSources", "legendSources");
                 buildDonut("donutPlatforms", "legendPlatforms");
+                buildTotalsDonut("donutSourceTotals", "legendSourceTotals");
+                buildTotalsDonut("donutPlatformTotals", "legendPlatformTotals");
                 buildFunnelHistoryDailyChart();
                 buildFunnelHistoryDailyChart("opportunitiesSalesDailyChart", false);
                 buildFunnelHistoryDailyChart("opportunitiesSalesDailyLineChart", false, "line");

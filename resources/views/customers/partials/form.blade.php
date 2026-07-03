@@ -5,6 +5,8 @@
     $fbPixelId = old('fb_pixel_id', $customer?->fb_pixel_id);
     $fbAccessToken = old('fb_access_token', $customer?->fb_access_token);
     $idGads = old('id_Gads', $customer?->id_Gads);
+    $selectedCurrencyId = old('default_currency_id', $customer?->default_currency_id ?? ($defaultCurrencyId ?? null));
+    $defaultLeadValue = old('default_lead_value', $customer?->default_lead_value ?? 100000);
     $selectedMetaPageIds = old('meta_page_ids', $selectedMetaPageIds ?? []);
 @endphp
 
@@ -56,6 +58,34 @@
                placeholder="ID de la cuenta publicitaria de Google Ads. Solo números. Ej: 1234567890" />
         @error('id_Gads') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
     </div>
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div>
+            <label class="block mb-1 text-white/70">Divisa predeterminada</label>
+            <select name="default_currency_id" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+                @foreach(($currencies ?? collect()) as $currency)
+                    <option value="{{ $currency->id }}" @selected((string) $selectedCurrencyId === (string) $currency->id)>
+                        {{ $currency->code }} - {{ $currency->name }}{{ $currency->status ? '' : ' (inactiva)' }}
+                    </option>
+                @endforeach
+            </select>
+            @error('default_currency_id') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+        </div>
+
+        <div>
+            <label class="block mb-1 text-white/70">Valor minimo predeterminado</label>
+            <input name="default_lead_value"
+                   type="number"
+                   min="0"
+                   step="0.01"
+                   value="{{ $defaultLeadValue }}"
+                   class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
+                   placeholder="100000" />
+            @error('default_lead_value') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+        </div>
+    </div>
+
+    @include('customers.partials.meta-ad-accounts', ['customer' => $customer])
 
     <div>
         <label class="block mb-2 text-white/70">Meta Pages asociadas</label>

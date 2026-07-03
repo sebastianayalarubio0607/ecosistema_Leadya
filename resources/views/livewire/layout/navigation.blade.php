@@ -31,6 +31,12 @@ new class extends Component {
             'icon' => 'users',
         ],
         [
+            'label' => 'Divisas',
+            'route' => 'currencies.index',
+            'active' => ['currencies.*'],
+            'icon' => 'currency',
+        ],
+        [
             'label' => 'Meta Ad Accounts',
             'route' => 'meta.ad-accounts.index',
             'active' => ['meta.ad-accounts.*'],

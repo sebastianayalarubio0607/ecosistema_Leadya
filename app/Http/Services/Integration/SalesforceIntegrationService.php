@@ -2,6 +2,7 @@
 
 namespace App\Http\Services\Integration;
 
+use App\Http\Services\Integration\Concerns\ResolvesIntegrationVariableMappings;
 use App\Models\Integration;
 use App\Models\Lead;
 use Illuminate\Support\Facades\Http;
@@ -10,7 +11,10 @@ use RuntimeException;
 
 class SalesforceIntegrationService
 {
+    use ResolvesIntegrationVariableMappings;
+
     private const FECHA_INSCRIPCION_FORMAT = 'n/d/Y h:i:s A';
+    private const SALESFORCE_FECHA_INSCRIPCION_FORMAT = 'n/j/Y g:i:s A';
 
     public function sendToSalesforce(Lead $lead, Integration $integration)
     {
@@ -19,7 +23,7 @@ class SalesforceIntegrationService
             throw new RuntimeException('No existe url configurada para Salesforce.');
         }
 
-        $payload = $this->buildPayload($lead, $integration);
+        $payload = $this->preparePayloadForSalesforce($this->buildPayload($lead, $integration), $lead);
         $oauth = $this->getValidAccessToken($integration);
 
         Log::info('SALESFORCE URL', ['url' => $url]);
@@ -177,7 +181,7 @@ class SalesforceIntegrationService
         }
 
         return $this->applyFechaInscripcionField(
-            $this->resolveBodyPlaceholders($decoded, $lead),
+            $this->resolveBodyPlaceholders($decoded, $lead, $integration),
             $lead
         );
     }
@@ -196,6 +200,56 @@ class SalesforceIntegrationService
         return $lead->created_at
             ? $lead->created_at->copy()->format(self::FECHA_INSCRIPCION_FORMAT)
             : '';
+    }
+
+    private function formatLeadCreatedAtForSalesforceTransport(Lead $lead): string
+    {
+        return $lead->created_at
+            ? $lead->created_at->copy()->format(self::SALESFORCE_FECHA_INSCRIPCION_FORMAT)
+            : '';
+    }
+
+    private function preparePayloadForSalesforce(array $payload, Lead $lead): array
+    {
+        foreach ($payload as $key => $value) {
+            if (is_array($value)) {
+                $payload[$key] = $this->preparePayloadForSalesforce($value, $lead);
+
+                continue;
+            }
+
+            if (strcasecmp((string) $key, 'fechaInscripcion') === 0) {
+                $payload[$key] = $this->formatLeadCreatedAtForSalesforceTransport($lead);
+
+                continue;
+            }
+
+            if (is_string($value)) {
+                $payload[$key] = $this->normalizeSalesforceTemporalString($value);
+            }
+        }
+
+        return $payload;
+    }
+
+    private function normalizeSalesforceTemporalString(string $value): string
+    {
+        $value = preg_replace_callback(
+            '/\b(\d{4})-(\d{2,})-(\d{2,})\b/',
+            fn ($matches) => sprintf(
+                '%s-%02d-%02d',
+                $matches[1],
+                (int) $matches[2],
+                (int) $matches[3]
+            ),
+            $value
+        );
+
+        return preg_replace_callback(
+            '/\b(\d{3,})(:\d{2}:\d{2})\b/',
+            fn ($matches) => sprintf('%02d%s', (int) $matches[1], $matches[2]),
+            $value
+        );
     }
 
     private function applyFechaInscripcionField(array $payload, Lead $lead): array
@@ -246,17 +300,17 @@ class SalesforceIntegrationService
         }, $value);
     }
 
-    private function resolveBodyPlaceholders(array $payload, Lead $lead): array
+    private function resolveBodyPlaceholders(array $payload, Lead $lead, Integration $integration): array
     {
-        return $this->replacePlaceholders($payload, [], $lead);
+        return $this->replacePlaceholders($payload, [], $lead, $integration, $this->integrationVariableMappings($integration));
     }
 
-    private function replacePlaceholders($value, array $replacements, ?Lead $lead = null)
+    private function replacePlaceholders($value, array $replacements, ?Lead $lead = null, ?Integration $integration = null, $mappings = null, ?string $targetVariable = null)
     {
         if (is_array($value)) {
             $result = [];
             foreach ($value as $key => $item) {
-                $result[$key] = $this->replacePlaceholders($item, $replacements, $lead);
+                $result[$key] = $this->replacePlaceholders($item, $replacements, $lead, $integration, $mappings ?? collect(), (string) $key);
             }
 
             return $result;
@@ -265,14 +319,26 @@ class SalesforceIntegrationService
         if (is_string($value)) {
             if ($lead && preg_match('/^__salesforce_lead_field__:(.+)$/', $value, $matches)) {
                 if ($matches[1] === 'created_at') {
-                    return $this->formatLeadCreatedAt($lead);
+                    $leadValue = $this->formatLeadCreatedAt($lead);
+
+                    return $integration
+                        ? $this->resolveMappedIntegrationValue($mappings ?? collect(), $targetVariable, 'created_at', $leadValue, $leadValue, 'SALESFORCE')
+                        : $leadValue;
                 }
 
                 if ($matches[1] === '__tipo_servicio') {
-                    return $this->firstNonEmpty($lead->service, 'Test Drive');
+                    $leadValue = $this->firstNonEmpty($lead->service, 'Test Drive');
+
+                    return $integration
+                        ? $this->resolveMappedIntegrationValue($mappings ?? collect(), $targetVariable, 'service', $leadValue, $leadValue, 'SALESFORCE')
+                        : $leadValue;
                 }
 
-                return data_get($lead, $matches[1]);
+                $leadValue = data_get($lead, $matches[1]);
+
+                return $integration
+                    ? $this->resolveMappedIntegrationValue($mappings ?? collect(), $targetVariable, $matches[1], $leadValue, $leadValue, 'SALESFORCE')
+                    : $leadValue;
             }
 
             return strtr($value, $replacements);

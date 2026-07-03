@@ -2,6 +2,7 @@
 
 namespace App\Http\Services\Integration;
 
+use App\Http\Services\Integration\Concerns\ResolvesIntegrationVariableMappings;
 use App\Models\Integration;
 use App\Models\Lead;
 use App\Models\MondayBoard;
@@ -20,6 +21,8 @@ use RuntimeException;
 
 class MondayIntegrationService
 {
+    use ResolvesIntegrationVariableMappings;
+
     public function sendToMonday(Lead $lead, Integration $integration): Response
     {
         $boards = $integration->mondayBoards()
@@ -397,9 +400,10 @@ class MondayIntegrationService
         return $actual === $expected;
     }
 
-    protected function buildColumnValues(MondayBoard $board, Lead $lead): array
+    protected function buildColumnValues(MondayBoard $board, Lead $lead, ?Integration $integration = null): array
     {
         $board->loadMissing('columns.mapping');
+        $mappings = $integration ? $this->integrationVariableMappings($integration) : collect();
 
         $values = [];
 
@@ -413,6 +417,18 @@ class MondayIntegrationService
             $rawValue = $sourceType === 'fixed_value'
                 ? $mapping->static_value
                 : $this->resolveLeadFieldValue($lead, $mapping->lead_field_name);
+
+            if ($sourceType === 'lead_field' && $integration) {
+                $leadValue = $this->resolveLeadFieldValue($lead, $mapping->lead_field_name);
+                $rawValue = $this->resolveMappedIntegrationValueForTargets(
+                    $mappings,
+                    [$column->monday_column_id, $column->title],
+                    (string) $mapping->lead_field_name,
+                    $leadValue,
+                    $rawValue,
+                    'MONDAY'
+                );
+            }
 
             $formattedValue = $this->formatColumnValue($column, $rawValue, $lead);
 
@@ -429,7 +445,7 @@ class MondayIntegrationService
     protected function createItem(Integration $integration, MondayBoard $board, Lead $lead): Response
     {
         $itemName = $this->buildItemName($board, $lead);
-        $columnValues = $this->buildColumnValues($board, $lead);
+        $columnValues = $this->buildColumnValues($board, $lead, $integration);
 
         $result = $this->sendGraphQLRequest(
             $integration,
@@ -768,7 +784,6 @@ class MondayIntegrationService
         return null;
     }
 }
-
 
 
 

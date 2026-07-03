@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\CrmState\CrmStateWebController;
+use App\Http\Controllers\CurrencyController;
 use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\DashboardLeadsController;
 use App\Http\Controllers\Funnel\FunnelWebController;
@@ -61,11 +62,14 @@ Route::middleware('auth')->group(function () {
     Volt::route('register', 'pages.auth.register')->name('register');
 
     Route::resource('customers', CustomerController::class);
+    Route::resource('currencies', CurrencyController::class);
     Route::resource('integrationtypes', IntegrationtypeWebController::class);
     Route::get('integrations/kommo-pipeline/pipelines/{integration}', [IntegrationWebController::class, 'kommoPipelinePipelines'])
         ->name('integrations.kommo-pipeline.pipelines');
     Route::get('integrations/kommo-pipeline/statuses/{integration}/{pipelineId}', [IntegrationWebController::class, 'kommoPipelineStatuses'])
         ->name('integrations.kommo-pipeline.statuses');
+    Route::post('integrations/{integration}/kommo/sync-boards', [IntegrationWebController::class, 'syncKommoBoards'])
+        ->name('integrations.kommo.sync-boards');
     Route::resource('integrations', IntegrationWebController::class);
 
     

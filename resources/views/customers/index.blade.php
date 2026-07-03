@@ -1,7 +1,7 @@
 @extends('meta.layout')
 
 @section('title', 'Customers')
-@section('subtitle', 'Administración de clientes y páginas Meta asociadas')
+@section('subtitle', 'Administración de clientes, páginas y cuentas Meta asociadas')
 
 @section('header_actions')
     <a href="{{ route('customers.create') }}"
@@ -17,7 +17,7 @@
                 <label class="block mb-1 text-white/70">Buscar</label>
                 <input name="q" value="{{ $q }}"
                        class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
-                       placeholder="Buscar por nombre, pixel id o Google Ads id..." />
+                       placeholder="Buscar por nombre, pixel id, Google Ads id o Meta Account..." />
             </div>
 
             <div class="md:col-span-2 flex gap-2">
@@ -39,6 +39,10 @@
                         <th class="text-left px-3 py-2">Status</th>
                         <th class="text-left px-3 py-2">FB Pixel ID</th>
                         <th class="text-left px-3 py-2">ID Google Ads</th>
+                        <th class="text-left px-3 py-2">Divisa</th>
+                        <th class="text-left px-3 py-2">Valor minimo</th>
+                        <th class="text-left px-3 py-2">Meta Account ID</th>
+                        <th class="text-left px-3 py-2">Meta Pages asociadas</th>
                         <th class="text-left px-3 py-2 w-72">Acciones</th>
                     </tr>
                 </thead>
@@ -53,6 +57,30 @@
                             </td>
                             <td class="px-3 py-2">{{ $customer->fb_pixel_id ?: '—' }}</td>
                             <td class="px-3 py-2">{{ $customer->id_Gads ?: '—' }}</td>
+                            <td class="px-3 py-2 font-mono">{{ $customer->defaultCurrency?->code ?? 'COP' }}</td>
+                            <td class="px-3 py-2">{{ number_format((float) ($customer->default_lead_value ?? 100000), 2, '.', ',') }}</td>
+                            <td class="px-3 py-2">
+                                <div class="space-y-1">
+                                    @forelse($customer->metaAdAccounts as $account)
+                                        <div class="text-xs break-all rounded-lg border border-white/10 bg-white/5 px-2 py-1">
+                                            {{ $account->meta_account_id }}
+                                        </div>
+                                    @empty
+                                        <span class="text-white/50">-</span>
+                                    @endforelse
+                                </div>
+                            </td>
+                            <td class="px-3 py-2">
+                                <div class="space-y-1">
+                                    @forelse($customer->metaPages as $metaPage)
+                                        <div class="text-xs break-all rounded-lg border border-white/10 bg-white/5 px-2 py-1">
+                                            {{ $metaPage->name }} ({{ $metaPage->meta_page_id }})
+                                        </div>
+                                    @empty
+                                        <span class="text-white/50">-</span>
+                                    @endforelse
+                                </div>
+                            </td>
                             <td class="px-3 py-2">
                                 <div class="flex items-center gap-2">
                                     <a class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs"
@@ -79,7 +107,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td class="px-3 py-8 text-center text-white/60" colspan="5">No hay customers.</td>
+                            <td class="px-3 py-8 text-center text-white/60" colspan="9">No hay customers.</td>
                         </tr>
                     @endforelse
                 </tbody>

@@ -32,10 +32,16 @@ class MetaAdAccountController extends Controller
         ]);
     }
 
-    public function create()
+    public function create(Request $request)
     {
+        $selectedCustomerId = $request->filled('customer_id')
+            && Customer::query()->whereKey($request->integer('customer_id'))->exists()
+                ? $request->integer('customer_id')
+                : null;
+
         return view('meta.ad_accounts.create', [
             'customers' => Customer::orderBy('name')->get(),
+            'ad_account' => new MetaAdAccount(['customer_id' => $selectedCustomerId]),
         ]);
     }
 

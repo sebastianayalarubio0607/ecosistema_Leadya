@@ -2,6 +2,7 @@
 
 namespace App\Http\Services\Lead;
 
+use App\Models\Customer;
 use App\Models\Lead;
 
 /**
@@ -9,6 +10,8 @@ use App\Models\Lead;
  */
 class LeadService
 {
+    private const DEFAULT_LEAD_VALUE = 100000;
+
     /**
      * Obtiene los leads filtrados por customer_id si no es admin (customer_id != 1).
      *
@@ -34,7 +37,7 @@ class LeadService
      */
     public function validateLeadRequest($request)
     {
-        return $request->validate([
+        $validated = $request->validate([
             'name'            => 'required|string|max:255',
             'last_name'       => 'sometimes|nullable|string|max:255',
             'position'        => 'sometimes|nullable|string|max:255',
@@ -71,7 +74,9 @@ class LeadService
             'g_clid'          => 'sometimes|nullable|string|max:255',
             'gclid'           => 'sometimes|nullable|string|max:255',
             'gbraid'          => 'sometimes|nullable|string|max:255',
+            'g_braid'         => 'sometimes|nullable|string|max:255',
             'wbraid'          => 'sometimes|nullable|string|max:255',
+            'w_braid'         => 'sometimes|nullable|string|max:255',
             'gad_source'      => 'sometimes|nullable|string|max:255',
             'gad_campaignid'  => 'sometimes|nullable|string|max:255',
             'google_ad_id'    => 'sometimes|nullable|string|max:255',
@@ -98,10 +103,65 @@ class LeadService
             'campo_text_5'    => 'sometimes|nullable|string',
             
         ]);
+
+        return $this->normalizeGoogleClickTracking($validated);
     }
 
     public function createLead(array $lead)
     {
-        return Lead::create($lead);
+        return Lead::create($this->applyDefaultLeadValue($lead));
+    }
+
+    public function normalizeGoogleClickTracking(array $lead): array
+    {
+        if (empty($lead['g_clid']) && ! empty($lead['gclid'])) {
+            $lead['g_clid'] = $lead['gclid'];
+        }
+
+        if (empty($lead['gbraid']) && ! empty($lead['g_braid'])) {
+            $lead['gbraid'] = $lead['g_braid'];
+        }
+
+        if (empty($lead['wbraid']) && ! empty($lead['w_braid'])) {
+            $lead['wbraid'] = $lead['w_braid'];
+        }
+
+        unset($lead['g_braid'], $lead['w_braid']);
+
+        return $lead;
+    }
+
+    public function applyDefaultLeadValue(array $lead): array
+    {
+        if ($this->hasValidLeadValue($lead['value'] ?? null)) {
+            return $lead;
+        }
+
+        $customer = ! empty($lead['customer_id'])
+            ? Customer::query()->find($lead['customer_id'])
+            : null;
+
+        $lead['value'] = $this->defaultLeadValue($customer);
+
+        return $lead;
+    }
+
+    private function hasValidLeadValue(mixed $value): bool
+    {
+        return $value !== null
+            && $value !== ''
+            && is_numeric($value)
+            && (float) $value > 0;
+    }
+
+    private function defaultLeadValue(?Customer $customer): float
+    {
+        $value = $customer?->default_lead_value;
+
+        if ($this->hasValidLeadValue($value)) {
+            return (float) $value;
+        }
+
+        return self::DEFAULT_LEAD_VALUE;
     }
 }

@@ -16,7 +16,7 @@ use Illuminate\Support\Str;
 class GoogleAdsConversionsService
 {
     private const API_VERSION = 'v24';
-    private const DEFAULT_VALUE = 0.5;
+    private const DEFAULT_VALUE = 100000;
     private const DEFAULT_CURRENCY = 'COP';
     private const TIMEZONE = 'America/Bogota';
 
@@ -147,7 +147,7 @@ class GoogleAdsConversionsService
             ]);
         }
 
-        $payload = $this->buildPayload($lead, $crmState, $conversionAction, $identifierType, $identifierValue, $orderId);
+        $payload = $this->buildPayload($lead, $customer, $crmState, $conversionAction, $identifierType, $identifierValue, $orderId);
         $url = "https://googleads.googleapis.com/".self::API_VERSION."/customers/{$googleAdsCustomerId}:uploadClickConversions";
 
         try {
@@ -243,6 +243,7 @@ class GoogleAdsConversionsService
 
     protected function buildPayload(
         Lead $lead,
+        Customer $customer,
         CrmState $crmState,
         string $conversionAction,
         string $identifierType,
@@ -253,8 +254,8 @@ class GoogleAdsConversionsService
             $identifierType => $identifierValue,
             'conversionAction' => $conversionAction,
             'conversionDateTime' => $this->conversionDateTime($lead),
-            'conversionValue' => (float) ($crmState->google_ads_conversion_value ?? self::DEFAULT_VALUE),
-            'currencyCode' => $crmState->google_ads_conversion_currency ?: self::DEFAULT_CURRENCY,
+            'conversionValue' => $this->conversionValue($lead, $customer, $crmState),
+            'currencyCode' => $this->currencyCode($customer),
             'orderId' => $orderId,
             'consent' => [
                 'adUserData' => 'GRANTED',
@@ -272,6 +273,30 @@ class GoogleAdsConversionsService
             'conversions' => [$conversion],
             'partialFailure' => true,
         ];
+    }
+
+    protected function conversionValue(Lead $lead, Customer $customer, CrmState $crmState): float
+    {
+        foreach ([
+            $crmState->google_ads_conversion_value,
+            $lead->value,
+            $customer->default_lead_value,
+        ] as $value) {
+            if ($value !== null && $value !== '' && is_numeric($value) && (float) $value > 0) {
+                return (float) $value;
+            }
+        }
+
+        return (float) self::DEFAULT_VALUE;
+    }
+
+    protected function currencyCode(Customer $customer): string
+    {
+        $customer->loadMissing('defaultCurrency');
+
+        $code = strtoupper(trim((string) $customer->defaultCurrency?->code));
+
+        return $code !== '' ? $code : self::DEFAULT_CURRENCY;
     }
 
     protected function conversionDateTime(Lead $lead): string

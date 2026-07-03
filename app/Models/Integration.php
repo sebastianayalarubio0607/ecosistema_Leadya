@@ -13,6 +13,7 @@ class Integration extends Model
 
     protected $casts = [
         'status' => 'boolean',
+        'priority' => 'integer',
         'token_expires_at' => 'datetime',
         'disable_integration_id_crm_prefix' => 'boolean',
     ];
@@ -25,6 +26,7 @@ class Integration extends Model
         'url',
         'tokent',
         'status',
+        'priority',
         'crm_Id_phone',
         'crm_Id_service',
         'crm_Id_fuente',
@@ -95,5 +97,35 @@ class Integration extends Model
     public function kommoPipelineConditions(): HasMany
     {
         return $this->hasMany(KommoPipelineCondition::class);
+    }
+
+    public function atomWebhooks(): HasMany
+    {
+        return $this->hasMany(AtomWebhook::class);
+    }
+
+    public function atomConditions(): HasMany
+    {
+        return $this->hasMany(AtomCondition::class);
+    }
+
+    public function letyWebhooks(): HasMany
+    {
+        return $this->hasMany(LetyWebhook::class);
+    }
+
+    public function letyConditions(): HasMany
+    {
+        return $this->hasMany(LetyCondition::class);
+    }
+
+    public function freshworksVariableMappings(): HasMany
+    {
+        return $this->hasMany(FreshworksVariableMapping::class);
+    }
+
+    public function variableMappings(): HasMany
+    {
+        return $this->hasMany(IntegrationVariableMapping::class);
     }
 }

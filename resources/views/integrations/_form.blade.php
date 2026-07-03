@@ -48,6 +48,19 @@
         @error('status') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
     </div>
 
+    <div>
+        <label class="block mb-1 text-white/70">Prioridad *</label>
+        <input name="priority"
+               type="number"
+               min="0"
+               step="1"
+               value="{{ old('priority', $integration->priority ?? 100) }}"
+               class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
+               required>
+        @error('priority') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+        <p class="mt-1 text-xs text-white/50">Las integraciones con mayor número se procesan primero. Si empatan, se ordenan por ID.</p>
+    </div>
+
     <div class="grid grid-cols-1 gap-4 hidden" data-show-for="kommo kommopipeline freshworks hubspot gohighlevel">
         <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
             <p class="text-sm text-white/70">
@@ -238,6 +251,229 @@ JSON;
         </div>
     </div>
 
+    @php
+        $atomBodyPlaceholder = <<<'JSON'
+{
+  "name": "{{$lead->name}}",
+  "email": "{{$lead.email}}",
+  "phone": "{{$lead->phone}}"
+}
+JSON;
+
+        $atomStoredWebhooks = isset($atomWebhooks)
+            ? $atomWebhooks->map(fn ($webhook) => [
+                'key' => (string) $webhook->id,
+                'name' => $webhook->name,
+                'url' => $webhook->url,
+                'order' => $webhook->order,
+                'active' => $webhook->active ? 1 : 0,
+                'is_default' => $webhook->is_default ? 1 : 0,
+            ])->values()->all()
+            : [];
+
+        $atomStoredConditions = isset($atomConditions)
+            ? $atomConditions->map(fn ($condition) => [
+                'lead_field' => $condition->lead_field,
+                'expected_value' => $condition->expected_value,
+                'webhook_key' => (string) $condition->atom_webhook_id,
+                'order' => $condition->order,
+                'active' => $condition->active ? 1 : 0,
+            ])->values()->all()
+            : [];
+
+        $atomInitialWebhooks = collect(old('atom_webhooks', $atomStoredWebhooks))->values();
+        $atomInitialConditions = collect(old('atom_conditions', $atomStoredConditions))->values();
+        $atomTokenMask = \App\Support\SensitiveValue::mask($integration->tokent ?? null);
+    @endphp
+
+    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="atom" data-atom-block>
+        <div>
+            <label class="block mb-1 text-white/70">Token de autenticacion *</label>
+            <input name="tokent"
+                   type="password"
+                   value="{{ old('tokent') }}"
+                   class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white"
+                   placeholder="{{ ($integration->exists && filled($integration->tokent ?? null)) ? $atomTokenMask : 'Bearer token' }}"
+                   data-required-for="atom">
+            @error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+            @if($integration->exists && filled($integration->tokent ?? null))
+                <p class="mt-1 text-xs text-white/50">Deja este campo vacio para conservar el token guardado.</p>
+            @endif
+        </div>
+
+        <div>
+            <label class="block mb-1 text-white/70">Body JSON *</label>
+            <textarea name="body"
+                      rows="12"
+                      class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-sm text-white"
+                      placeholder="{{ $atomBodyPlaceholder }}"
+                      data-required-for="atom">{{ old('body', $integration->body ?? '') }}</textarea>
+            @error('body') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+        </div>
+
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h3 class="text-base font-semibold text-white">Webhooks Atom</h3>
+                    <p class="text-sm text-white/50">Configura los endpoints y el JSON que se enviara a cada uno.</p>
+                </div>
+                <button type="button"
+                        class="px-3 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10"
+                        data-atom-add-webhook>
+                    Agregar webhook
+                </button>
+            </div>
+
+            @error('atom_webhooks') <div class="mb-2 text-sm text-rose-300">{{ $message }}</div> @enderror
+
+            <div class="overflow-x-auto rounded-xl border border-white/10">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-white/5 text-white/70">
+                        <tr>
+                            <th class="text-left px-3 py-2">Nombre</th>
+                            <th class="text-left px-3 py-2">URL</th>
+                            <th class="text-left px-3 py-2">Por defecto</th>
+                            <th class="text-left px-3 py-2">Activo</th>
+                            <th class="text-left px-3 py-2 w-24">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/10 text-white/80" data-atom-webhooks-body>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h3 class="text-base font-semibold text-white">Condiciones Atom</h3>
+                    <p class="text-sm text-white/50">Si varias condiciones coinciden, se envian todos los webhooks relacionados.</p>
+                </div>
+                <button type="button"
+                        class="px-3 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10"
+                        data-atom-add-condition>
+                    Agregar condicion
+                </button>
+            </div>
+
+            @error('atom_conditions') <div class="mb-2 text-sm text-rose-300">{{ $message }}</div> @enderror
+
+            <div class="overflow-x-auto rounded-xl border border-white/10">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-white/5 text-white/70">
+                        <tr>
+                            <th class="text-left px-3 py-2">Campo Lead</th>
+                            <th class="text-left px-3 py-2">Valor esperado</th>
+                            <th class="text-left px-3 py-2">Webhook</th>
+                            <th class="text-left px-3 py-2">Activa</th>
+                            <th class="text-left px-3 py-2 w-24">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/10 text-white/80" data-atom-conditions-body>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    @php
+        $letyBodyPlaceholder = <<<'TEXT'
+name={{$lead->name}}
+email={{$lead.email}}
+phone={{$lead->phone}}
+TEXT;
+
+        $letyStoredWebhooks = isset($letyWebhooks)
+            ? $letyWebhooks->map(fn ($webhook) => [
+                'key' => (string) $webhook->id,
+                'name' => $webhook->name,
+                'url' => $webhook->url,
+                'body' => $webhook->body,
+                'order' => $webhook->order,
+                'active' => $webhook->active ? 1 : 0,
+            ])->values()->all()
+            : [];
+
+        $letyStoredConditions = isset($letyConditions)
+            ? $letyConditions->map(fn ($condition) => [
+                'lead_field' => $condition->lead_field,
+                'expected_value' => $condition->expected_value,
+                'webhook_key' => (string) $condition->lety_webhook_id,
+                'order' => $condition->order,
+                'active' => $condition->active ? 1 : 0,
+            ])->values()->all()
+            : [];
+
+        $letyInitialWebhooks = collect(old('lety_webhooks', $letyStoredWebhooks))->values();
+        $letyInitialConditions = collect(old('lety_conditions', $letyStoredConditions))->values();
+    @endphp
+
+    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="lety" data-lety-block>
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h3 class="text-base font-semibold text-white">Webhooks Lety</h3>
+                    <p class="text-sm text-white/50">Configura endpoints y payloads form-urlencoded, un campo por linea.</p>
+                </div>
+                <button type="button"
+                        class="px-3 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10"
+                        data-lety-add-webhook>
+                    Agregar webhook
+                </button>
+            </div>
+
+            @error('lety_webhooks') <div class="mb-2 text-sm text-rose-300">{{ $message }}</div> @enderror
+
+            <div class="overflow-x-auto rounded-xl border border-white/10">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-white/5 text-white/70">
+                        <tr>
+                            <th class="text-left px-3 py-2">Nombre</th>
+                            <th class="text-left px-3 py-2">URL</th>
+                            <th class="text-left px-3 py-2">Payload form-urlencoded</th>
+                            <th class="text-left px-3 py-2">Activo</th>
+                            <th class="text-left px-3 py-2 w-24">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/10 text-white/80" data-lety-webhooks-body>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h3 class="text-base font-semibold text-white">Condiciones Lety</h3>
+                    <p class="text-sm text-white/50">Si varias condiciones coinciden, se envian todos los webhooks relacionados.</p>
+                </div>
+                <button type="button"
+                        class="px-3 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10"
+                        data-lety-add-condition>
+                    Agregar condicion
+                </button>
+            </div>
+
+            @error('lety_conditions') <div class="mb-2 text-sm text-rose-300">{{ $message }}</div> @enderror
+
+            <div class="overflow-x-auto rounded-xl border border-white/10">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-white/5 text-white/70">
+                        <tr>
+                            <th class="text-left px-3 py-2">Campo Lead</th>
+                            <th class="text-left px-3 py-2">Valor esperado</th>
+                            <th class="text-left px-3 py-2">Webhook</th>
+                            <th class="text-left px-3 py-2">Activa</th>
+                            <th class="text-left px-3 py-2 w-24">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/10 text-white/80" data-lety-conditions-body>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden" data-show-for="zoho">
         <div><label class="block mb-1 text-white/70">client_id</label><input name="client_id" value="{{ old('client_id', $integration->client_id ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('client_id') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">client_secret</label><input name="client_secret" value="{{ old('client_secret', $integration->client_secret ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('client_secret') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
@@ -246,13 +482,111 @@ JSON;
         <div><label class="block mb-1 text-white/70">refresh_token</label><input name="refresh_token" value="{{ old('refresh_token', $integration->refresh_token ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('refresh_token') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
     </div>
 
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden" data-show-for="freshworks">
+    @php
+        $freshworksStoredMappings = isset($freshworksVariableMappings)
+            ? $freshworksVariableMappings->map(fn ($mapping) => [
+                'target_variable' => $mapping->target_variable,
+                'lead_field' => $mapping->lead_field,
+                'expected_value' => $mapping->expected_value,
+                'mapped_value' => $mapping->mapped_value,
+                'order' => $mapping->order,
+                'active' => $mapping->active ? 1 : 0,
+            ])->values()->all()
+            : [];
+
+        $freshworksInitialMappings = collect(old('freshworks_variable_mappings', $freshworksStoredMappings))->values();
+    @endphp
+
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden" data-show-for="freshworks" data-freshworks-block>
         <div><label class="block mb-1 text-white/70">token *</label><input name="tokent" value="{{ old('tokent', $integration->tokent ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="freshworks">@error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">territory_id *</label><input name="territory_id" value="{{ old('territory_id', $integration->territory_id ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="freshworks">@error('territory_id') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">owner_id *</label><input name="owner_id" value="{{ old('owner_id', $integration->owner_id ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="freshworks">@error('owner_id') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">City *</label><input name="city" value="{{ old('city', $integration->city ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="freshworks">@error('city') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">lead_source_id *</label><input name="lead_source_id" value="{{ old('lead_source_id', $integration->lead_source_id ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="freshworks">@error('lead_source_id') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div class="md:col-span-2"><label class="block mb-1 text-white/70">custom_field *</label><textarea name="custom_field" rows="8" class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-sm text-white" placeholder='json con los campos necesarios para crear el lead' data-required-for="freshworks">{{ old('custom_field', $integration->custom_field ?? '') }}</textarea>@error('custom_field') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
+
+        <div class="md:col-span-2 rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h3 class="text-base font-semibold text-white">Mapeo de variables</h3>
+                    <p class="text-sm text-white/50">Normaliza valores del lead para variables del custom_field. Si no hay valor parametrizado, se usa el valor original.</p>
+                </div>
+                <button type="button"
+                        class="px-3 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10"
+                        data-freshworks-add-mapping>
+                    Agregar variable
+                </button>
+            </div>
+
+            @error('freshworks_variable_mappings') <div class="mb-2 text-sm text-rose-300">{{ $message }}</div> @enderror
+
+            <div class="overflow-x-auto rounded-xl border border-white/10">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-white/5 text-white/70">
+                        <tr>
+                            <th class="text-left px-3 py-2">Variable payload</th>
+                            <th class="text-left px-3 py-2">Campo Lead</th>
+                            <th class="text-left px-3 py-2">Valor esperado</th>
+                            <th class="text-left px-3 py-2">Valor a enviar</th>
+                            <th class="text-left px-3 py-2">Activa</th>
+                            <th class="text-left px-3 py-2 w-24">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/10 text-white/80" data-freshworks-mappings-body>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    @php
+        $integrationStoredMappings = isset($integrationVariableMappings)
+            ? $integrationVariableMappings->map(fn ($mapping) => [
+                'target_variable' => $mapping->target_variable,
+                'lead_field' => $mapping->lead_field,
+                'expected_value' => $mapping->expected_value,
+                'mapped_value' => $mapping->mapped_value,
+                'order' => $mapping->order,
+                'active' => $mapping->active ? 1 : 0,
+            ])->values()->all()
+            : [];
+
+        $integrationInitialMappings = collect(old('integration_variable_mappings', $integrationStoredMappings))->values();
+    @endphp
+
+    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="atom zoho salesforce monday lety hubspot gohighlevel" data-integration-mappings-block>
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+            <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                    <h3 class="text-base font-semibold text-white">Mapeo de variables</h3>
+                    <p class="text-sm text-white/50">Normaliza valores del lead para llaves del payload. Si no hay valor parametrizado, se usa el valor original.</p>
+                </div>
+                <button type="button"
+                        class="px-3 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10"
+                        data-integration-add-mapping>
+                    Agregar variable
+                </button>
+            </div>
+
+            @error('integration_variable_mappings') <div class="mb-2 text-sm text-rose-300">{{ $message }}</div> @enderror
+
+            <div class="overflow-x-auto rounded-xl border border-white/10">
+                <table class="min-w-full text-sm">
+                    <thead class="bg-white/5 text-white/70">
+                        <tr>
+                            <th class="text-left px-3 py-2">Variable payload</th>
+                            <th class="text-left px-3 py-2">Campo Lead</th>
+                            <th class="text-left px-3 py-2">Valor esperado</th>
+                            <th class="text-left px-3 py-2">Valor a enviar</th>
+                            <th class="text-left px-3 py-2">Activa</th>
+                            <th class="text-left px-3 py-2 w-24">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/10 text-white/80" data-integration-mappings-body>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     @php
@@ -370,18 +704,49 @@ document.addEventListener('DOMContentLoaded', () => {
   const kommoPipelineBlock = document.querySelector('[data-kommo-pipeline-block]');
   const kommoConditionsBody = document.querySelector('[data-kommo-conditions-body]');
   const kommoAddConditionButton = document.querySelector('[data-kommo-add-condition]');
+  const atomBlock = document.querySelector('[data-atom-block]');
+  const atomWebhooksBody = document.querySelector('[data-atom-webhooks-body]');
+  const atomConditionsBody = document.querySelector('[data-atom-conditions-body]');
+  const atomAddWebhookButton = document.querySelector('[data-atom-add-webhook]');
+  const atomAddConditionButton = document.querySelector('[data-atom-add-condition]');
+  const letyBlock = document.querySelector('[data-lety-block]');
+  const letyWebhooksBody = document.querySelector('[data-lety-webhooks-body]');
+  const letyConditionsBody = document.querySelector('[data-lety-conditions-body]');
+  const letyAddWebhookButton = document.querySelector('[data-lety-add-webhook]');
+  const letyAddConditionButton = document.querySelector('[data-lety-add-condition]');
+  const freshworksBlock = document.querySelector('[data-freshworks-block]');
+  const freshworksMappingsBody = document.querySelector('[data-freshworks-mappings-body]');
+  const freshworksAddMappingButton = document.querySelector('[data-freshworks-add-mapping]');
+  const integrationMappingsBlock = document.querySelector('[data-integration-mappings-block]');
+  const integrationMappingsBody = document.querySelector('[data-integration-mappings-body]');
+  const integrationAddMappingButton = document.querySelector('[data-integration-add-mapping]');
   const leadFields = @json(array_values($leadFields ?? []));
   const initialKommoConditions = @json($kommoPipelineInitialConditions ?? []);
+  const initialAtomWebhooks = @json($atomInitialWebhooks ?? []);
+  const initialAtomConditions = @json($atomInitialConditions ?? []);
+  const initialLetyWebhooks = @json($letyInitialWebhooks ?? []);
+  const initialLetyConditions = @json($letyInitialConditions ?? []);
+  const initialFreshworksMappings = @json($freshworksInitialMappings ?? []);
+  const initialIntegrationMappings = @json($integrationInitialMappings ?? []);
+  const letyBodyPlaceholder = @json($letyBodyPlaceholder ?? '');
   const kommoPipelinesUrl = @json(($integration->exists ?? false) ? route('integrations.kommo-pipeline.pipelines', $integration) : null);
   const kommoStatusesUrlTemplate = @json(($integration->exists ?? false) ? route('integrations.kommo-pipeline.statuses', [$integration, '__PIPELINE_ID__']) : null);
   let kommoPipelinesCache = null;
   let kommoConditionIndex = 0;
+  let atomWebhookIndex = 0;
+  let atomConditionIndex = 0;
+  let letyWebhookIndex = 0;
+  let letyConditionIndex = 0;
+  let freshworksMappingIndex = 0;
+  let integrationMappingIndex = 0;
 
   function normalizeTypeKey(raw) {
     const key = (raw || '').trim().toLowerCase();
     if (key.includes('google')) return 'google_sheets';
     if (key.includes('kommopipeline') || key.includes('kommo_pipeline') || key.includes('kommo pipeline')) return 'kommopipeline';
     if (key.includes('kommo')) return 'kommo';
+    if (key.includes('atom')) return 'atom';
+    if (key.includes('lety')) return 'lety';
     if (key.includes('zoho')) return 'zoho';
     if (key.includes('freshworks')) return 'freshworks';
     if (key.includes('salesforce')) return 'salesforce';
@@ -428,8 +793,8 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     if (baseUrlBlock && baseUrlInput) {
-      const shouldHideBaseUrl = key === 'hubspot';
-      const shouldRequireBaseUrl = key !== 'hubspot' && key !== 'gohighlevel';
+      const shouldHideBaseUrl = key === 'hubspot' || key === 'atom' || key === 'lety';
+      const shouldRequireBaseUrl = key !== 'hubspot' && key !== 'gohighlevel' && key !== 'atom' && key !== 'lety';
       baseUrlBlock.classList.toggle('hidden', shouldHideBaseUrl);
       baseUrlInput.disabled = shouldHideBaseUrl;
       baseUrlInput.required = shouldRequireBaseUrl;
@@ -525,17 +890,27 @@ document.addEventListener('DOMContentLoaded', () => {
   function textInput(name, value, placeholder = '') {
     const input = document.createElement('input');
     input.name = name;
-    input.value = value || '';
+    input.value = value ?? '';
     input.placeholder = placeholder;
     input.className = 'w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white';
     return input;
+  }
+
+  function textareaInput(name, value, placeholder = '') {
+    const textarea = document.createElement('textarea');
+    textarea.name = name;
+    textarea.value = value ?? '';
+    textarea.placeholder = placeholder;
+    textarea.rows = 8;
+    textarea.className = 'w-full min-w-72 rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-xs text-white';
+    return textarea;
   }
 
   function hiddenInput(name, value = '') {
     const input = document.createElement('input');
     input.type = 'hidden';
     input.name = name;
-    input.value = value || '';
+    input.value = value ?? '';
     return input;
   }
 
@@ -618,6 +993,422 @@ document.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  function currentAtomWebhooks() {
+    if (!atomWebhooksBody) return [];
+
+    return Array.from(atomWebhooksBody.querySelectorAll('[data-atom-webhook-row]')).map(row => {
+      const nameInput = row.querySelector('[data-atom-webhook-name]');
+      const urlInput = row.querySelector('[data-atom-webhook-url]');
+      return {
+        key: row.dataset.atomWebhookKey || '',
+        name: nameInput?.value || urlInput?.value || 'Webhook',
+      };
+    }).filter(webhook => webhook.key !== '');
+  }
+
+  function atomWebhookSelect(name, selected) {
+    const select = document.createElement('select');
+    select.name = name;
+    select.className = 'w-full min-w-48 rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white';
+    select.dataset.atomWebhookSelect = '1';
+    select.dataset.selectedWebhook = selected || '';
+    return select;
+  }
+
+  function refreshAtomWebhookSelects() {
+    const webhooks = currentAtomWebhooks();
+
+    document.querySelectorAll('[data-atom-webhook-select]').forEach(select => {
+      const selected = select.value || select.dataset.selectedWebhook || '';
+      select.innerHTML = '';
+      select.appendChild(option('', webhooks.length > 0 ? 'Seleccione...' : 'Agrega un webhook primero'));
+
+      webhooks.forEach(webhook => {
+        select.appendChild(option(webhook.key, webhook.name, String(webhook.key) === String(selected)));
+      });
+
+      if (selected && !webhooks.some(webhook => String(webhook.key) === String(selected))) {
+        select.appendChild(option(selected, selected, true));
+      }
+
+      select.dataset.selectedWebhook = select.value;
+    });
+  }
+
+  function addAtomWebhook(webhook = {}) {
+    if (!atomWebhooksBody) return;
+
+    const index = atomWebhookIndex++;
+    const key = webhook.key || `new_${index}`;
+    const row = document.createElement('tr');
+    row.className = 'hover:bg-white/5';
+    row.dataset.atomWebhookRow = '1';
+    row.dataset.atomWebhookKey = key;
+
+    const nameWrap = document.createElement('div');
+    nameWrap.appendChild(hiddenInput(`atom_webhooks[${index}][key]`, key));
+    const nameInput = textInput(`atom_webhooks[${index}][name]`, webhook.name || '', 'Ej: CRM principal');
+    nameInput.dataset.atomWebhookName = '1';
+    nameInput.addEventListener('input', refreshAtomWebhookSelects);
+    nameWrap.appendChild(nameInput);
+    row.appendChild(cell(nameWrap));
+
+    const urlInput = textInput(`atom_webhooks[${index}][url]`, webhook.url || '', 'https://...');
+    urlInput.dataset.atomWebhookUrl = '1';
+    row.appendChild(cell(urlInput));
+
+    const defaultWrap = document.createElement('label');
+    defaultWrap.className = 'inline-flex items-center gap-2';
+    defaultWrap.appendChild(hiddenInput(`atom_webhooks[${index}][is_default]`, '0'));
+    const isDefault = document.createElement('input');
+    isDefault.type = 'checkbox';
+    isDefault.name = `atom_webhooks[${index}][is_default]`;
+    isDefault.value = '1';
+    isDefault.checked = String(webhook.is_default ?? '0') !== '0';
+    isDefault.className = 'rounded border-white/10 bg-slate-900/60';
+    isDefault.dataset.atomDefaultCheckbox = '1';
+    isDefault.addEventListener('change', () => {
+      if (!isDefault.checked) return;
+      document.querySelectorAll('[data-atom-default-checkbox]').forEach(other => {
+        if (other !== isDefault) other.checked = false;
+      });
+    });
+    defaultWrap.appendChild(isDefault);
+    defaultWrap.appendChild(document.createTextNode('Si'));
+    row.appendChild(cell(defaultWrap));
+
+    const activeWrap = document.createElement('label');
+    activeWrap.className = 'inline-flex items-center gap-2';
+    activeWrap.appendChild(hiddenInput(`atom_webhooks[${index}][active]`, '0'));
+    const active = document.createElement('input');
+    active.type = 'checkbox';
+    active.name = `atom_webhooks[${index}][active]`;
+    active.value = '1';
+    active.checked = String(webhook.active ?? '1') !== '0';
+    active.className = 'rounded border-white/10 bg-slate-900/60';
+    activeWrap.appendChild(active);
+    activeWrap.appendChild(document.createTextNode('Si'));
+    row.appendChild(cell(activeWrap));
+
+    const actions = document.createElement('td');
+    actions.className = 'px-3 py-2 align-top';
+    actions.appendChild(hiddenInput(`atom_webhooks[${index}][order]`, webhook.order ?? index));
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-300/20 text-white';
+    remove.textContent = 'Quitar';
+    remove.addEventListener('click', () => {
+      row.remove();
+      refreshAtomWebhookSelects();
+    });
+    actions.appendChild(remove);
+    row.appendChild(actions);
+
+    atomWebhooksBody.appendChild(row);
+    refreshAtomWebhookSelects();
+  }
+
+  function addAtomCondition(condition = {}) {
+    if (!atomConditionsBody) return;
+
+    const index = atomConditionIndex++;
+    const row = document.createElement('tr');
+    row.className = 'hover:bg-white/5';
+
+    row.appendChild(cell(leadFieldSelect(`atom_conditions[${index}][lead_field]`, condition.lead_field || '')));
+    row.appendChild(cell(textInput(`atom_conditions[${index}][expected_value]`, condition.expected_value || '', 'Ej: Bogota')));
+    row.appendChild(cell(atomWebhookSelect(`atom_conditions[${index}][webhook_key]`, condition.webhook_key || '')));
+
+    const activeWrap = document.createElement('label');
+    activeWrap.className = 'inline-flex items-center gap-2';
+    activeWrap.appendChild(hiddenInput(`atom_conditions[${index}][active]`, '0'));
+    const active = document.createElement('input');
+    active.type = 'checkbox';
+    active.name = `atom_conditions[${index}][active]`;
+    active.value = '1';
+    active.checked = String(condition.active ?? '1') !== '0';
+    active.className = 'rounded border-white/10 bg-slate-900/60';
+    activeWrap.appendChild(active);
+    activeWrap.appendChild(document.createTextNode('Si'));
+    row.appendChild(cell(activeWrap));
+
+    const actions = document.createElement('td');
+    actions.className = 'px-3 py-2 align-top';
+    actions.appendChild(hiddenInput(`atom_conditions[${index}][order]`, condition.order ?? index));
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-300/20 text-white';
+    remove.textContent = 'Quitar';
+    remove.addEventListener('click', () => row.remove());
+    actions.appendChild(remove);
+    row.appendChild(actions);
+
+    atomConditionsBody.appendChild(row);
+    refreshAtomWebhookSelects();
+  }
+
+  function bootAtom() {
+    if (!atomBlock) return;
+
+    if (initialAtomWebhooks.length > 0) {
+      initialAtomWebhooks.forEach(webhook => addAtomWebhook(webhook));
+    } else {
+      addAtomWebhook({ is_default: 1 });
+    }
+
+    if (initialAtomConditions.length > 0) {
+      initialAtomConditions.forEach(condition => addAtomCondition(condition));
+    } else {
+      addAtomCondition();
+    }
+  }
+
+  function currentLetyWebhooks() {
+    if (!letyWebhooksBody) return [];
+
+    return Array.from(letyWebhooksBody.querySelectorAll('[data-lety-webhook-row]')).map(row => {
+      const nameInput = row.querySelector('[data-lety-webhook-name]');
+      const urlInput = row.querySelector('[data-lety-webhook-url]');
+      return {
+        key: row.dataset.letyWebhookKey || '',
+        name: nameInput?.value || urlInput?.value || 'Webhook',
+      };
+    }).filter(webhook => webhook.key !== '');
+  }
+
+  function letyWebhookSelect(name, selected) {
+    const select = document.createElement('select');
+    select.name = name;
+    select.className = 'w-full min-w-48 rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white';
+    select.dataset.letyWebhookSelect = '1';
+    select.dataset.selectedWebhook = selected || '';
+    return select;
+  }
+
+  function refreshLetyWebhookSelects() {
+    const webhooks = currentLetyWebhooks();
+
+    document.querySelectorAll('[data-lety-webhook-select]').forEach(select => {
+      const selected = select.value || select.dataset.selectedWebhook || '';
+      select.innerHTML = '';
+      select.appendChild(option('', webhooks.length > 0 ? 'Seleccione...' : 'Agrega un webhook primero'));
+
+      webhooks.forEach(webhook => {
+        select.appendChild(option(webhook.key, webhook.name, String(webhook.key) === String(selected)));
+      });
+
+      if (selected && !webhooks.some(webhook => String(webhook.key) === String(selected))) {
+        select.appendChild(option(selected, selected, true));
+      }
+
+      select.dataset.selectedWebhook = select.value;
+    });
+  }
+
+  function addLetyWebhook(webhook = {}) {
+    if (!letyWebhooksBody) return;
+
+    const index = letyWebhookIndex++;
+    const key = webhook.key || `new_${index}`;
+    const row = document.createElement('tr');
+    row.className = 'hover:bg-white/5';
+    row.dataset.letyWebhookRow = '1';
+    row.dataset.letyWebhookKey = key;
+
+    const nameWrap = document.createElement('div');
+    nameWrap.appendChild(hiddenInput(`lety_webhooks[${index}][key]`, key));
+    const nameInput = textInput(`lety_webhooks[${index}][name]`, webhook.name || '', 'Ej: Lety principal');
+    nameInput.dataset.letyWebhookName = '1';
+    nameInput.addEventListener('input', refreshLetyWebhookSelects);
+    nameWrap.appendChild(nameInput);
+    row.appendChild(cell(nameWrap));
+
+    const urlInput = textInput(`lety_webhooks[${index}][url]`, webhook.url || '', 'https://...');
+    urlInput.dataset.letyWebhookUrl = '1';
+    row.appendChild(cell(urlInput));
+
+    row.appendChild(cell(textareaInput(`lety_webhooks[${index}][body]`, webhook.body || letyBodyPlaceholder, letyBodyPlaceholder)));
+
+    const activeWrap = document.createElement('label');
+    activeWrap.className = 'inline-flex items-center gap-2';
+    activeWrap.appendChild(hiddenInput(`lety_webhooks[${index}][active]`, '0'));
+    const active = document.createElement('input');
+    active.type = 'checkbox';
+    active.name = `lety_webhooks[${index}][active]`;
+    active.value = '1';
+    active.checked = String(webhook.active ?? '1') !== '0';
+    active.className = 'rounded border-white/10 bg-slate-900/60';
+    activeWrap.appendChild(active);
+    activeWrap.appendChild(document.createTextNode('Si'));
+    row.appendChild(cell(activeWrap));
+
+    const actions = document.createElement('td');
+    actions.className = 'px-3 py-2 align-top';
+    actions.appendChild(hiddenInput(`lety_webhooks[${index}][order]`, webhook.order ?? index));
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-300/20 text-white';
+    remove.textContent = 'Quitar';
+    remove.addEventListener('click', () => {
+      row.remove();
+      refreshLetyWebhookSelects();
+    });
+    actions.appendChild(remove);
+    row.appendChild(actions);
+
+    letyWebhooksBody.appendChild(row);
+    refreshLetyWebhookSelects();
+  }
+
+  function addLetyCondition(condition = {}) {
+    if (!letyConditionsBody) return;
+
+    const index = letyConditionIndex++;
+    const row = document.createElement('tr');
+    row.className = 'hover:bg-white/5';
+
+    row.appendChild(cell(leadFieldSelect(`lety_conditions[${index}][lead_field]`, condition.lead_field || '')));
+    row.appendChild(cell(textInput(`lety_conditions[${index}][expected_value]`, condition.expected_value || '', 'Ej: Bogota')));
+    row.appendChild(cell(letyWebhookSelect(`lety_conditions[${index}][webhook_key]`, condition.webhook_key || '')));
+
+    const activeWrap = document.createElement('label');
+    activeWrap.className = 'inline-flex items-center gap-2';
+    activeWrap.appendChild(hiddenInput(`lety_conditions[${index}][active]`, '0'));
+    const active = document.createElement('input');
+    active.type = 'checkbox';
+    active.name = `lety_conditions[${index}][active]`;
+    active.value = '1';
+    active.checked = String(condition.active ?? '1') !== '0';
+    active.className = 'rounded border-white/10 bg-slate-900/60';
+    activeWrap.appendChild(active);
+    activeWrap.appendChild(document.createTextNode('Si'));
+    row.appendChild(cell(activeWrap));
+
+    const actions = document.createElement('td');
+    actions.className = 'px-3 py-2 align-top';
+    actions.appendChild(hiddenInput(`lety_conditions[${index}][order]`, condition.order ?? index));
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-300/20 text-white';
+    remove.textContent = 'Quitar';
+    remove.addEventListener('click', () => row.remove());
+    actions.appendChild(remove);
+    row.appendChild(actions);
+
+    letyConditionsBody.appendChild(row);
+    refreshLetyWebhookSelects();
+  }
+
+  function bootLety() {
+    if (!letyBlock) return;
+
+    if (initialLetyWebhooks.length > 0) {
+      initialLetyWebhooks.forEach(webhook => addLetyWebhook(webhook));
+    } else {
+      addLetyWebhook({ body: letyBodyPlaceholder });
+    }
+
+    if (initialLetyConditions.length > 0) {
+      initialLetyConditions.forEach(condition => addLetyCondition(condition));
+    } else {
+      addLetyCondition();
+    }
+  }
+
+  function addFreshworksMapping(mapping = {}) {
+    if (!freshworksMappingsBody) return;
+
+    const index = freshworksMappingIndex++;
+    const row = document.createElement('tr');
+    row.className = 'hover:bg-white/5';
+
+    row.appendChild(cell(textInput(`freshworks_variable_mappings[${index}][target_variable]`, mapping.target_variable || '', 'Ej: variable1')));
+    row.appendChild(cell(leadFieldSelect(`freshworks_variable_mappings[${index}][lead_field]`, mapping.lead_field || '')));
+    row.appendChild(cell(textInput(`freshworks_variable_mappings[${index}][expected_value]`, mapping.expected_value || '', 'Ej: medellin')));
+    row.appendChild(cell(textInput(`freshworks_variable_mappings[${index}][mapped_value]`, mapping.mapped_value ?? '', 'Ej: Medellin')));
+
+    const activeWrap = document.createElement('label');
+    activeWrap.className = 'inline-flex items-center gap-2';
+    activeWrap.appendChild(hiddenInput(`freshworks_variable_mappings[${index}][active]`, '0'));
+    const active = document.createElement('input');
+    active.type = 'checkbox';
+    active.name = `freshworks_variable_mappings[${index}][active]`;
+    active.value = '1';
+    active.checked = String(mapping.active ?? '1') !== '0';
+    active.className = 'rounded border-white/10 bg-slate-900/60';
+    activeWrap.appendChild(active);
+    activeWrap.appendChild(document.createTextNode('Si'));
+    row.appendChild(cell(activeWrap));
+
+    const actions = document.createElement('td');
+    actions.className = 'px-3 py-2 align-top';
+    actions.appendChild(hiddenInput(`freshworks_variable_mappings[${index}][order]`, mapping.order ?? index));
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-300/20 text-white';
+    remove.textContent = 'Quitar';
+    remove.addEventListener('click', () => row.remove());
+    actions.appendChild(remove);
+    row.appendChild(actions);
+
+    freshworksMappingsBody.appendChild(row);
+  }
+
+  function bootFreshworks() {
+    if (!freshworksBlock) return;
+
+    if (initialFreshworksMappings.length > 0) {
+      initialFreshworksMappings.forEach(mapping => addFreshworksMapping(mapping));
+    }
+  }
+
+  function addIntegrationMapping(mapping = {}) {
+    if (!integrationMappingsBody) return;
+
+    const index = integrationMappingIndex++;
+    const row = document.createElement('tr');
+    row.className = 'hover:bg-white/5';
+
+    row.appendChild(cell(textInput(`integration_variable_mappings[${index}][target_variable]`, mapping.target_variable || '', 'Ej: city')));
+    row.appendChild(cell(leadFieldSelect(`integration_variable_mappings[${index}][lead_field]`, mapping.lead_field || '')));
+    row.appendChild(cell(textInput(`integration_variable_mappings[${index}][expected_value]`, mapping.expected_value || '', 'Ej: medellin')));
+    row.appendChild(cell(textInput(`integration_variable_mappings[${index}][mapped_value]`, mapping.mapped_value ?? '', 'Ej: Medellin')));
+
+    const activeWrap = document.createElement('label');
+    activeWrap.className = 'inline-flex items-center gap-2';
+    activeWrap.appendChild(hiddenInput(`integration_variable_mappings[${index}][active]`, '0'));
+    const active = document.createElement('input');
+    active.type = 'checkbox';
+    active.name = `integration_variable_mappings[${index}][active]`;
+    active.value = '1';
+    active.checked = String(mapping.active ?? '1') !== '0';
+    active.className = 'rounded border-white/10 bg-slate-900/60';
+    activeWrap.appendChild(active);
+    activeWrap.appendChild(document.createTextNode('Si'));
+    row.appendChild(cell(activeWrap));
+
+    const actions = document.createElement('td');
+    actions.className = 'px-3 py-2 align-top';
+    actions.appendChild(hiddenInput(`integration_variable_mappings[${index}][order]`, mapping.order ?? index));
+    const remove = document.createElement('button');
+    remove.type = 'button';
+    remove.className = 'px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-300/20 text-white';
+    remove.textContent = 'Quitar';
+    remove.addEventListener('click', () => row.remove());
+    actions.appendChild(remove);
+    row.appendChild(actions);
+
+    integrationMappingsBody.appendChild(row);
+  }
+
+  function bootIntegrationMappings() {
+    if (!integrationMappingsBlock) return;
+
+    if (initialIntegrationMappings.length > 0) {
+      initialIntegrationMappings.forEach(mapping => addIntegrationMapping(mapping));
+    }
+  }
+
   function bootKommoPipeline() {
     if (!kommoPipelineBlock) return;
 
@@ -653,7 +1444,17 @@ document.addEventListener('DOMContentLoaded', () => {
   if (typeSelect) typeSelect.addEventListener('change', refresh);
   if (crmPrefixToggle) crmPrefixToggle.addEventListener('change', refreshCrmPrefixRequirement);
   if (kommoAddConditionButton) kommoAddConditionButton.addEventListener('click', () => addKommoCondition());
+  if (atomAddWebhookButton) atomAddWebhookButton.addEventListener('click', () => addAtomWebhook());
+  if (atomAddConditionButton) atomAddConditionButton.addEventListener('click', () => addAtomCondition());
+  if (letyAddWebhookButton) letyAddWebhookButton.addEventListener('click', () => addLetyWebhook({ body: letyBodyPlaceholder }));
+  if (letyAddConditionButton) letyAddConditionButton.addEventListener('click', () => addLetyCondition());
+  if (freshworksAddMappingButton) freshworksAddMappingButton.addEventListener('click', () => addFreshworksMapping());
+  if (integrationAddMappingButton) integrationAddMappingButton.addEventListener('click', () => addIntegrationMapping());
   bootKommoPipeline();
+  bootAtom();
+  bootLety();
+  bootFreshworks();
+  bootIntegrationMappings();
   refresh();
 });
 </script>

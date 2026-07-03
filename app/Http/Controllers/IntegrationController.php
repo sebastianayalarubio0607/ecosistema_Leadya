@@ -21,10 +21,15 @@ class IntegrationController extends Controller
         }
 
         if ((int) $customerId === 1) {
-            $integrations = Integration::with('integrationtype')->get();
+            $integrations = Integration::with('integrationtype')
+                ->orderByDesc('priority')
+                ->orderBy('id')
+                ->get();
         } else {
             $integrations = Integration::where('customer_id', $customerId)
                 ->with('integrationtype')
+                ->orderByDesc('priority')
+                ->orderBy('id')
                 ->get();
         }
 
@@ -150,6 +155,7 @@ class IntegrationController extends Controller
             'integrationtype_id' => 'required|exists:integrationtypes,id',
             'url' => ($typeName === 'gohighlevel' ? 'nullable' : 'required').'|url',
             'status' => 'required|boolean',
+            'priority' => ['nullable', 'integer', 'min:0'],
             'tokent' => 'nullable|string',
             'body' => ['nullable', 'string'],
             'crm_Id_phone' => ['nullable', 'string', 'max:255'],

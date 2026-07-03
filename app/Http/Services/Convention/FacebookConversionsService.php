@@ -16,6 +16,7 @@ class FacebookConversionsService
     private const DEFAULT_TEST_EVENT_CODE = '';
 
     private const DEFAULT_CURRENCY = 'COP';
+    private const DEFAULT_VALUE = 100000;
 
     public function sendLeadEvent(Lead $lead, int $customerId): array
     {
@@ -118,8 +119,8 @@ class FacebookConversionsService
                     'agent' => $lead->agent ?? null,
                     'client_ip' => $customData['client_ip'] ?? null,
 
-                    'currency' => self::DEFAULT_CURRENCY,
-                    'value' => $this->normalizeValue($lead->value),
+                    'currency' => $this->currencyCode($customer),
+                    'value' => $this->conversionValue($lead, $customer),
                 ],
                 // opcional (si vienen en fields_custom)
                 $this->extractStandardEventCustomData($lead)
@@ -225,6 +226,15 @@ class FacebookConversionsService
         return [$userData, $customData];
     }
 
+    protected function currencyCode(Customer $customer): string
+    {
+        $customer->loadMissing('defaultCurrency');
+
+        $code = strtoupper(trim((string) $customer->defaultCurrency?->code));
+
+        return $code !== '' ? $code : self::DEFAULT_CURRENCY;
+    }
+
     /**
      * Si viene "ip, proxy1, proxy2", toma la primera.
      * NO convierte, NO normaliza: solo limpia.
@@ -274,6 +284,22 @@ class FacebookConversionsService
     /**
      * Opcional: parámetros e-commerce si vienen en fields_custom.
      */
+    protected function conversionValue(Lead $lead, Customer $customer): float
+    {
+        foreach ([
+            $lead->value,
+            $customer->default_lead_value,
+        ] as $value) {
+            $normalized = $this->normalizeValue($value);
+
+            if ($normalized > 0) {
+                return $normalized;
+            }
+        }
+
+        return (float) self::DEFAULT_VALUE;
+    }
+
     protected function extractStandardEventCustomData(Lead $lead): array
     {
         $fc = $lead->fields_custom ?? [];

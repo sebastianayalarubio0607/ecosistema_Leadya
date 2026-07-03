@@ -2,6 +2,7 @@
 
 namespace App\Http\Services\Integration;
 
+use App\Http\Services\Integration\Concerns\ResolvesIntegrationVariableMappings;
 use App\Models\Integration;
 use App\Models\Lead;
 use Illuminate\Contracts\Cache\LockTimeoutException;
@@ -12,6 +13,8 @@ use RuntimeException;
 
 class ZohoIntegrationService
 {
+    use ResolvesIntegrationVariableMappings;
+
     public function sendToZoho(Lead $lead, Integration $integration)
     {
         $oauth = $this->getValidAccessToken($integration);
@@ -54,6 +57,8 @@ class ZohoIntegrationService
         if ($numberLocations !== null) {
             $leadData['Cantidad_de_Sedes'] = $numberLocations;
         }
+
+        $leadData = $this->applyLeadDataMappings($leadData, $lead, $integration);
 
         $payload = [
             'data' => [$leadData],
@@ -248,6 +253,50 @@ class ZohoIntegrationService
         }
 
         return null;
+    }
+
+    private function applyLeadDataMappings(array $leadData, Lead $lead, Integration $integration): array
+    {
+        $fieldMap = [
+            'Last_Name' => 'last_name',
+            'First_Name' => 'name',
+            'Company' => 'company',
+            'Email' => 'email',
+            'Phone' => 'phone',
+            'Mobile' => 'phone',
+            'Description' => 'message',
+            'Lead_Source' => 'campaign_origin',
+            'UTM_Campaign' => 'service',
+            'UTM_Medium' => 'plataforma',
+            'UTM_Source' => 'campaign_origin',
+            'No_of_Employees' => 'number_workers',
+            'Cantidad_de_Sedes' => 'number_locations',
+        ];
+
+        $mappings = $this->integrationVariableMappings($integration);
+
+        foreach ($fieldMap as $targetVariable => $leadField) {
+            if (!array_key_exists($targetVariable, $leadData)) {
+                continue;
+            }
+
+            $leadValue = data_get($lead, $leadField);
+
+            if ($targetVariable === 'Cantidad_de_Sedes' && ($leadValue === null || $leadValue === '')) {
+                $leadValue = data_get($lead, 'umber_locations');
+            }
+
+            $leadData[$targetVariable] = $this->resolveMappedIntegrationValue(
+                $mappings,
+                $targetVariable,
+                $leadField,
+                $leadValue,
+                $leadData[$targetVariable],
+                'ZOHO'
+            );
+        }
+
+        return $leadData;
     }
 
     private function firstInteger(...$values): ?int

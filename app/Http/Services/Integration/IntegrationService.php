@@ -23,6 +23,7 @@ class IntegrationService
     private $GooglesheetsIntegrationService;
     private $KommoIntegrationService;
     private $KommoPipelineService;
+    private $AtomIntegrationService;
     private $LetyIntegrationService;
     private $ZohoIntegrationService;
     private $FreshworksIntegrationService;
@@ -35,6 +36,7 @@ class IntegrationService
         GoogleSheetsIntegrationService $GooglesheetsIntegrationService,
         KommoIntegrationService $KommoIntegrationService,
         KommoPipelineService $KommoPipelineService,
+        AtomIntegrationService $AtomIntegrationService,
         LetyIntegrationService $LetyIntegrationService,
         ZohoIntegrationService $ZohoIntegrationService,
         FreshworksIntegrationService $FreshworksIntegrationService,
@@ -46,6 +48,7 @@ class IntegrationService
         $this->GooglesheetsIntegrationService = $GooglesheetsIntegrationService;
         $this->KommoIntegrationService = $KommoIntegrationService;
         $this->KommoPipelineService = $KommoPipelineService;
+        $this->AtomIntegrationService = $AtomIntegrationService;
         $this->LetyIntegrationService = $LetyIntegrationService;
         $this->ZohoIntegrationService = $ZohoIntegrationService;
         $this->FreshworksIntegrationService = $FreshworksIntegrationService;
@@ -61,6 +64,8 @@ class IntegrationService
             ->where('status', 1)
             ->with(['integrationtype' => function ($query) {
             }])
+            ->orderByDesc('priority')
+            ->orderBy('id')
             ->get();
     }
 
@@ -91,6 +96,7 @@ class IntegrationService
                 'google_sheets' => fn() => $this->GooglesheetsIntegrationService->sendToGoogleSheets($lead, $integration),
                 'kommo' => fn() => $this->KommoIntegrationService->sendToKommo($lead, $integration),
                 'kommopipeline' => fn() => $this->KommoPipelineService->sendToKommoPipeline($lead, $integration),
+                'atom' => fn() => $this->AtomIntegrationService->sendToAtom($lead, $integration),
                 'lety' => fn() => $this->LetyIntegrationService->sendToLety($lead, $integration),
                 'zoho' => fn() => $this->ZohoIntegrationService->sendToZoho($lead, $integration),
                 'freshworks' => fn() => $this->FreshworksIntegrationService->sendToFreshworks($lead, $integration),
@@ -104,6 +110,7 @@ class IntegrationService
                 'google_sheets' => $this->GooglesheetsIntegrationService::class,
                 'kommo' => $this->KommoIntegrationService::class,
                 'kommopipeline' => $this->KommoPipelineService::class,
+                'atom' => $this->AtomIntegrationService::class,
                 'lety' => $this->LetyIntegrationService::class,
                 'zoho' => $this->ZohoIntegrationService::class,
                 'freshworks' => $this->FreshworksIntegrationService::class,
@@ -188,6 +195,7 @@ class IntegrationService
             'googlesheets' => 'google_sheets',
             'go_high_level', 'leadconnector', 'lead_connector' => 'gohighlevel',
             'kommo_pipeline' => 'kommopipeline',
+            'atom_webhook', 'atom_webhooks' => 'atom',
             default => $normalized !== '' ? $normalized : 'webhook',
         };
     }
@@ -227,6 +235,15 @@ class IntegrationService
                 'body_present' => filled($integration->body),
                 'default_pipeline_present' => filled($integration->kommo_pipeline_default_pipeline_id),
                 'default_status_present' => filled($integration->kommo_pipeline_default_status_id),
+            ],
+            'atom' => [
+                'token_present' => filled($integration->tokent),
+                'webhooks_count' => $integration->atomWebhooks()->count(),
+                'conditions_count' => $integration->atomConditions()->count(),
+            ],
+            'lety' => [
+                'webhooks_count' => $integration->letyWebhooks()->count(),
+                'conditions_count' => $integration->letyConditions()->count(),
             ],
             'hubspot' => [
                 'integration_url' => $integration->url,

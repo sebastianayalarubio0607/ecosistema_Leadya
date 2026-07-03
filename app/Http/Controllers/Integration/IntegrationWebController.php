@@ -3,11 +3,14 @@
 namespace App\Http\Controllers\Integration;
 
 use App\Http\Controllers\Controller;
+use App\Http\Services\Integration\KommoPipelineSyncService;
 use App\Models\Customer;
 use App\Models\Integration;
 use App\Models\Integrationtype;
 use Illuminate\Http\Request;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -16,24 +19,40 @@ use Illuminate\Validation\ValidationException;
 class IntegrationWebController extends Controller
 {
     private const DEFAULT_GOHIGHLEVEL_URL = 'https://services.leadconnectorhq.com/contacts/upsert';
+    private const VARIABLE_MAPPING_INTEGRATION_TYPES = ['atom', 'zoho', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel'];
 
     public function index(Request $request)
     {
         $q = $request->get('q');
+        $name = $request->get('name');
+        $customerId = $request->get('customer_id');
+        $typeId = $request->get('integrationtype_id');
+        $priority = $request->get('priority');
+        $hasPriorityColumn = $this->hasIntegrationPriorityColumn();
 
         $integrations = Integration::query()
             ->with(['customer:id,name', 'integrationtype:id,name'])
             ->when($q, function ($query) use ($q) {
-                $query->where('name', 'like', "%{$q}%")
-                    ->orWhere('description', 'like', "%{$q}%")
-                    ->orWhere('url', 'like', "%{$q}%")
-                    ->orWhere('public_key', 'like', "%{$q}%");
+                $query->where(function ($query) use ($q) {
+                    $query->where('name', 'like', "%{$q}%")
+                        ->orWhere('description', 'like', "%{$q}%")
+                        ->orWhere('url', 'like', "%{$q}%")
+                        ->orWhere('public_key', 'like', "%{$q}%");
+                });
             })
-            ->orderByDesc('id')
+            ->when($name, fn ($query) => $query->where('name', 'like', "%{$name}%"))
+            ->when($customerId, fn ($query) => $query->where('customer_id', $customerId))
+            ->when($typeId, fn ($query) => $query->where('integrationtype_id', $typeId))
+            ->when($hasPriorityColumn && $priority !== null && $priority !== '', fn ($query) => $query->where('priority', (int) $priority))
+            ->when($hasPriorityColumn, fn ($query) => $query->orderByDesc('priority'))
+            ->orderBy('id')
             ->paginate(15)
             ->withQueryString();
 
-        return view('integrations.index', compact('integrations', 'q'));
+        $customers = Customer::orderBy('name')->get(['id', 'name']);
+        $types = Integrationtype::orderBy('name')->get(['id', 'name']);
+
+        return view('integrations.index', compact('integrations', 'q', 'name', 'customerId', 'typeId', 'priority', 'hasPriorityColumn', 'customers', 'types'));
     }
 
     public function create()
@@ -43,8 +62,14 @@ class IntegrationWebController extends Controller
         $types = Integrationtype::orderBy('name')->get(['id', 'name']);
         $leadFields = $this->leadFields();
         $kommoPipelineConditions = collect();
+        $atomWebhooks = collect();
+        $atomConditions = collect();
+        $letyWebhooks = collect();
+        $letyConditions = collect();
+        $freshworksVariableMappings = collect();
+        $integrationVariableMappings = collect();
 
-        return view('integrations.create', compact('integration', 'customers', 'types', 'leadFields', 'kommoPipelineConditions'));
+        return view('integrations.create', compact('integration', 'customers', 'types', 'leadFields', 'kommoPipelineConditions', 'atomWebhooks', 'atomConditions', 'letyWebhooks', 'letyConditions', 'freshworksVariableMappings', 'integrationVariableMappings'));
     }
 
     public function store(Request $request)
@@ -58,6 +83,10 @@ class IntegrationWebController extends Controller
         $integration = Integration::create($payload);
         $integration->load('integrationtype');
         $this->syncKommoPipelineConditions($integration, $validated);
+        $this->syncAtomConfiguration($integration, $validated);
+        $this->syncLetyConfiguration($integration, $validated);
+        $this->syncFreshworksVariableMappings($integration, $validated);
+        $this->syncIntegrationVariableMappings($integration, $validated);
 
         return redirect()
             ->route('integrations.show', $integration)
@@ -82,6 +111,32 @@ class IntegrationWebController extends Controller
             ]);
         }
 
+        if ($this->normalizeIntegrationTypeName(optional($integration->integrationtype)->name) === 'atom') {
+            $integration->load([
+                'atomWebhooks' => fn ($query) => $query->orderBy('order')->orderBy('id'),
+                'atomConditions' => fn ($query) => $query->with('webhook')->orderBy('order')->orderBy('id'),
+            ]);
+        }
+
+        if ($this->normalizeIntegrationTypeName(optional($integration->integrationtype)->name) === 'lety') {
+            $integration->load([
+                'letyWebhooks' => fn ($query) => $query->orderBy('order')->orderBy('id'),
+                'letyConditions' => fn ($query) => $query->with('webhook')->orderBy('order')->orderBy('id'),
+            ]);
+        }
+
+        if ($this->normalizeIntegrationTypeName(optional($integration->integrationtype)->name) === 'freshworks') {
+            $integration->load([
+                'freshworksVariableMappings' => fn ($query) => $query->orderBy('order')->orderBy('id'),
+            ]);
+        }
+
+        if (in_array($this->normalizeIntegrationTypeName(optional($integration->integrationtype)->name), self::VARIABLE_MAPPING_INTEGRATION_TYPES, true)) {
+            $integration->load([
+                'variableMappings' => fn ($query) => $query->orderBy('order')->orderBy('id'),
+            ]);
+        }
+
         return view('integrations.show', compact('integration'));
     }
 
@@ -93,11 +148,23 @@ class IntegrationWebController extends Controller
 
         $integration->loadMissing([
             'kommoPipelineConditions' => fn ($query) => $query->orderBy('order')->orderBy('id'),
+            'atomWebhooks' => fn ($query) => $query->orderBy('order')->orderBy('id'),
+            'atomConditions' => fn ($query) => $query->orderBy('order')->orderBy('id'),
+            'letyWebhooks' => fn ($query) => $query->orderBy('order')->orderBy('id'),
+            'letyConditions' => fn ($query) => $query->orderBy('order')->orderBy('id'),
+            'freshworksVariableMappings' => fn ($query) => $query->orderBy('order')->orderBy('id'),
+            'variableMappings' => fn ($query) => $query->orderBy('order')->orderBy('id'),
         ]);
 
         $kommoPipelineConditions = $integration->kommoPipelineConditions;
+        $atomWebhooks = $integration->atomWebhooks;
+        $atomConditions = $integration->atomConditions;
+        $letyWebhooks = $integration->letyWebhooks;
+        $letyConditions = $integration->letyConditions;
+        $freshworksVariableMappings = $integration->freshworksVariableMappings;
+        $integrationVariableMappings = $integration->variableMappings;
 
-        return view('integrations.edit', compact('integration', 'customers', 'types', 'leadFields', 'kommoPipelineConditions'));
+        return view('integrations.edit', compact('integration', 'customers', 'types', 'leadFields', 'kommoPipelineConditions', 'atomWebhooks', 'atomConditions', 'letyWebhooks', 'letyConditions', 'freshworksVariableMappings', 'integrationVariableMappings'));
     }
 
     public function update(Request $request, Integration $integration)
@@ -112,6 +179,10 @@ class IntegrationWebController extends Controller
             $validated['tokent'] = $integration->tokent;
         }
 
+        if ($typeName === 'atom' && empty($validated['tokent'])) {
+            $validated['tokent'] = $integration->tokent;
+        }
+
         $payload = $this->normalizePayloadByType($validated);
         $payload = $this->hydrateSalesforceTokenFromCredentials($payload);
 
@@ -122,6 +193,10 @@ class IntegrationWebController extends Controller
         $integration->update($payload);
         $integration->load('integrationtype');
         $this->syncKommoPipelineConditions($integration, $validated);
+        $this->syncAtomConfiguration($integration, $validated);
+        $this->syncLetyConfiguration($integration, $validated);
+        $this->syncFreshworksVariableMappings($integration, $validated);
+        $this->syncIntegrationVariableMappings($integration, $validated);
 
         return redirect()
             ->route('integrations.show', $integration)
@@ -151,6 +226,41 @@ class IntegrationWebController extends Controller
         return response()->json($this->normalizeKommoStatuses($response->json()));
     }
 
+    public function syncKommoBoards(Integration $integration, KommoPipelineSyncService $service): RedirectResponse
+    {
+        $integration->loadMissing('integrationtype:id,name');
+
+        if (! $service->supports($integration)) {
+            return redirect()
+                ->route('integrations.show', $integration)
+                ->withErrors(['sync' => 'Esta integracion no permite sincronizar tableros de Kommo.']);
+        }
+
+        try {
+            $result = $service->syncCrmStates($integration);
+        } catch (\Throwable $exception) {
+            Log::error('KOMMO PIPELINE CRM STATES SYNC FAILED', [
+                'integration_id' => $integration->id,
+                'message' => $exception->getMessage(),
+            ]);
+
+            $message = $exception instanceof \RuntimeException
+                ? $exception->getMessage()
+                : 'No fue posible sincronizar los tableros de Kommo. Intentalo de nuevo o revisa los logs.';
+
+            return redirect()
+                ->route('integrations.show', $integration)
+                ->withErrors(['sync' => $message]);
+        }
+
+        return redirect()
+            ->route('integrations.show', $integration)
+            ->with(
+                'success',
+                "Tableros sincronizados correctamente. Estados creados: {$result['created']}. Estados actualizados: {$result['updated']}."
+            );
+    }
+
     private function rules(Request $request, bool $updating = false, ?Integration $integration = null): array
     {
         $typeName = $this->normalizeIntegrationTypeName(
@@ -162,7 +272,7 @@ class IntegrationWebController extends Controller
             'description' => 'nullable|string',
             'integrationtype_id' => 'required|exists:integrationtypes,id',
             'customer_id' => 'required|exists:customers,id',
-            'url' => (in_array($typeName, ['hubspot', 'gohighlevel'], true) ? 'nullable' : 'required').'|url',
+            'url' => (in_array($typeName, ['hubspot', 'gohighlevel', 'atom', 'lety'], true) ? 'nullable' : 'required').'|url',
             'status' => 'required|boolean',
             'crm_Id_phone' => ['nullable', 'string', 'max:255'],
             'crm_Id_service' => ['nullable', 'string', 'max:255'],
@@ -208,7 +318,51 @@ class IntegrationWebController extends Controller
             'kommo_pipeline_conditions.*.status_name' => ['nullable', 'string', 'max:255'],
             'kommo_pipeline_conditions.*.order' => ['nullable', 'integer', 'min:0'],
             'kommo_pipeline_conditions.*.active' => ['nullable', 'boolean'],
+            'atom_webhooks' => ['nullable', 'array'],
+            'atom_webhooks.*.key' => ['required_with:atom_webhooks', 'string', 'max:80'],
+            'atom_webhooks.*.name' => ['required_with:atom_webhooks', 'string', 'max:255'],
+            'atom_webhooks.*.url' => ['required_with:atom_webhooks', 'url', 'max:255'],
+            'atom_webhooks.*.order' => ['nullable', 'integer', 'min:0'],
+            'atom_webhooks.*.active' => ['nullable', 'boolean'],
+            'atom_webhooks.*.is_default' => ['nullable', 'boolean'],
+            'atom_conditions' => ['nullable', 'array'],
+            'atom_conditions.*.lead_field' => ['required_with:atom_conditions', 'string', Rule::in($this->leadFields())],
+            'atom_conditions.*.expected_value' => ['required_with:atom_conditions', 'string', 'max:255'],
+            'atom_conditions.*.webhook_key' => ['required_with:atom_conditions', 'string', 'max:80'],
+            'atom_conditions.*.order' => ['nullable', 'integer', 'min:0'],
+            'atom_conditions.*.active' => ['nullable', 'boolean'],
+            'lety_webhooks' => ['nullable', 'array'],
+            'lety_webhooks.*.key' => ['required_with:lety_webhooks', 'string', 'max:80'],
+            'lety_webhooks.*.name' => ['required_with:lety_webhooks', 'string', 'max:255'],
+            'lety_webhooks.*.url' => ['required_with:lety_webhooks', 'url', 'max:255'],
+            'lety_webhooks.*.body' => ['required_with:lety_webhooks', 'string'],
+            'lety_webhooks.*.order' => ['nullable', 'integer', 'min:0'],
+            'lety_webhooks.*.active' => ['nullable', 'boolean'],
+            'lety_conditions' => ['nullable', 'array'],
+            'lety_conditions.*.lead_field' => ['required_with:lety_conditions', 'string', Rule::in($this->leadFields())],
+            'lety_conditions.*.expected_value' => ['required_with:lety_conditions', 'string', 'max:255'],
+            'lety_conditions.*.webhook_key' => ['required_with:lety_conditions', 'string', 'max:80'],
+            'lety_conditions.*.order' => ['nullable', 'integer', 'min:0'],
+            'lety_conditions.*.active' => ['nullable', 'boolean'],
+            'freshworks_variable_mappings' => ['nullable', 'array'],
+            'freshworks_variable_mappings.*.target_variable' => ['required_with:freshworks_variable_mappings', 'string', 'max:255'],
+            'freshworks_variable_mappings.*.lead_field' => ['required_with:freshworks_variable_mappings', 'string', Rule::in($this->leadFields())],
+            'freshworks_variable_mappings.*.expected_value' => ['required_with:freshworks_variable_mappings', 'string', 'max:255'],
+            'freshworks_variable_mappings.*.mapped_value' => ['nullable', 'string'],
+            'freshworks_variable_mappings.*.order' => ['nullable', 'integer', 'min:0'],
+            'freshworks_variable_mappings.*.active' => ['nullable', 'boolean'],
+            'integration_variable_mappings' => ['nullable', 'array'],
+            'integration_variable_mappings.*.target_variable' => ['required_with:integration_variable_mappings', 'string', 'max:255'],
+            'integration_variable_mappings.*.lead_field' => ['required_with:integration_variable_mappings', 'string', Rule::in($this->leadFields())],
+            'integration_variable_mappings.*.expected_value' => ['required_with:integration_variable_mappings', 'string', 'max:255'],
+            'integration_variable_mappings.*.mapped_value' => ['nullable', 'string'],
+            'integration_variable_mappings.*.order' => ['nullable', 'integer', 'min:0'],
+            'integration_variable_mappings.*.active' => ['nullable', 'boolean'],
         ];
+
+        if ($this->hasIntegrationPriorityColumn()) {
+            $rules['priority'] = ['required', 'integer', 'min:0'];
+        }
 
         if ($typeName === 'freshworks') {
             $rules['tokent'] = ['required', 'string'];
@@ -252,6 +406,13 @@ class IntegrationWebController extends Controller
             $rules['body'] = ['required', 'string'];
         }
 
+        if ($typeName === 'atom') {
+            $rules['tokent'] = $updating && filled($integration?->tokent)
+                ? ['nullable', 'string']
+                : ['required', 'string'];
+            $rules['body'] = ['required', 'string'];
+        }
+
         if ($updating) {
             $rules['regenerate_public_key'] = 'nullable|boolean';
         }
@@ -263,6 +424,12 @@ class IntegrationWebController extends Controller
     {
         $validated['status'] = array_key_exists('status', $validated) ? (int) $validated['status'] : 1;
 
+        if ($this->hasIntegrationPriorityColumn()) {
+            $validated['priority'] = array_key_exists('priority', $validated) ? (int) $validated['priority'] : 100;
+        } else {
+            unset($validated['priority']);
+        }
+
         if (array_key_exists('access_token', $validated)) {
             $validated['tokent'] = $validated['access_token'];
             unset($validated['access_token']);
@@ -272,7 +439,7 @@ class IntegrationWebController extends Controller
             Integrationtype::whereKey($validated['integrationtype_id'])->value('name')
         );
 
-        if (!in_array($typeName, ['hubspot', 'gohighlevel'], true) && empty($validated['url'])) {
+        if (!in_array($typeName, ['hubspot', 'gohighlevel', 'atom', 'lety'], true) && empty($validated['url'])) {
             throw ValidationException::withMessages([
                 'url' => 'El campo URL es obligatorio.',
             ]);
@@ -304,6 +471,30 @@ class IntegrationWebController extends Controller
             $validated = $this->clearHubspotFields($validated);
             $validated = $this->validateKommoPipelinePayload($validated);
             $validated = $this->validateCrmIdPrefixPayload($validated, 'KommoPipeline');
+        }
+
+        if ($typeName === 'atom') {
+            $validated['url'] = null;
+            $validated = $this->clearKommoFields($validated);
+            $validated = $this->clearZohoFieldsPreservingToken($validated);
+            $validated = $this->clearFreshworksFields($validated);
+            $validated = $this->clearSalesforceCredentialFields($validated);
+            $validated = $this->clearHubspotFields($validated);
+            $validated = $this->clearCrmIdPrefixFields($validated);
+            $validated = $this->validateAtomPayload($validated);
+        }
+
+        if ($typeName === 'lety') {
+            $validated['url'] = null;
+            $validated['tokent'] = null;
+            $validated['body'] = null;
+            $validated = $this->clearKommoFields($validated);
+            $validated = $this->clearZohoFields($validated);
+            $validated = $this->clearFreshworksFields($validated);
+            $validated = $this->clearSalesforceFields($validated);
+            $validated = $this->clearHubspotFields($validated);
+            $validated = $this->clearCrmIdPrefixFields($validated);
+            $validated = $this->validateLetyPayload($validated);
         }
 
         if ($typeName === 'zoho') {
@@ -361,7 +552,7 @@ class IntegrationWebController extends Controller
             $validated = $this->validateCrmIdPrefixPayload($validated, 'GoHighLevel');
         }
 
-        if (!in_array($typeName, ['google_sheets', 'kommo', 'kommopipeline', 'zoho', 'freshworks', 'salesforce', 'monday', 'hubspot', 'gohighlevel'], true)) {
+        if (!in_array($typeName, ['google_sheets', 'kommo', 'kommopipeline', 'atom', 'lety', 'zoho', 'freshworks', 'salesforce', 'monday', 'hubspot', 'gohighlevel'], true)) {
             $validated = $this->clearHubspotFields($validated);
             $validated = $this->clearCrmIdPrefixFields($validated);
         }
@@ -371,8 +562,14 @@ class IntegrationWebController extends Controller
         }
 
         unset($validated['kommo_pipeline_conditions']);
+        unset($validated['atom_webhooks'], $validated['atom_conditions'], $validated['lety_webhooks'], $validated['lety_conditions'], $validated['freshworks_variable_mappings'], $validated['integration_variable_mappings']);
 
         return $validated;
+    }
+
+    private function hasIntegrationPriorityColumn(): bool
+    {
+        return Schema::hasColumn('integrations', 'priority');
     }
 
     private function normalizeIntegrationTypeName(?string $typeName): string
@@ -388,6 +585,8 @@ class IntegrationWebController extends Controller
         return match ($normalized) {
             'go_high_level', 'leadconnector', 'lead_connector' => 'gohighlevel',
             'kommo_pipeline' => 'kommopipeline',
+            'atom_webhook', 'atom_webhooks' => 'atom',
+            'lety_webhook', 'lety_webhooks' => 'lety',
             default => $normalized,
         };
     }
@@ -442,6 +641,107 @@ class IntegrationWebController extends Controller
 
         if (!empty($payload['body']) && !$this->isValidKommoPipelineJsonTemplate($payload['body'])) {
             $messages['body'] = 'El payload JSON debe ser valido y solo acepta {{$lead->campo}}, {{pipeline_id}} y {{status_id}}.';
+        }
+
+        if ($messages !== []) {
+            throw ValidationException::withMessages($messages);
+        }
+
+        return $payload;
+    }
+
+    private function validateAtomPayload(array $payload): array
+    {
+        $messages = [];
+        $webhooks = collect($payload['atom_webhooks'] ?? [])
+            ->filter(fn ($webhook) => filled($webhook['key'] ?? null))
+            ->values();
+        $conditions = collect($payload['atom_conditions'] ?? [])
+            ->filter(fn ($condition) => filled($condition['lead_field'] ?? null))
+            ->values();
+
+        if (empty($payload['tokent'])) {
+            $messages['tokent'] = 'Para Atom el token de autenticacion es obligatorio.';
+        }
+
+        if (empty($payload['body'])) {
+            $messages['body'] = 'Para Atom el body JSON es obligatorio.';
+        } elseif (!$this->isValidAtomJsonTemplate($payload['body'])) {
+            $messages['body'] = 'El body Atom debe ser JSON valido y solo acepta variables {{$lead->campo}} o {{$lead.campo}}.';
+        }
+
+        if ($webhooks->isEmpty()) {
+            $messages['atom_webhooks'] = 'Para Atom debes configurar al menos un webhook.';
+        }
+
+        $defaultWebhooks = $webhooks->filter(fn ($webhook) => (bool) ($webhook['is_default'] ?? false) && (bool) ($webhook['active'] ?? true));
+
+        if ($defaultWebhooks->isEmpty()) {
+            $messages['atom_webhooks'] = 'Para Atom debes marcar un webhook por defecto.';
+        } elseif ($defaultWebhooks->count() > 1) {
+            $messages['atom_webhooks'] = 'Para Atom solo debes marcar un webhook por defecto.';
+        }
+
+        if ($conditions->isEmpty()) {
+            $messages['atom_conditions'] = 'Para Atom debes configurar al menos una condicion.';
+        }
+
+        $webhookKeys = $webhooks
+            ->pluck('key')
+            ->map(fn ($key) => (string) $key)
+            ->all();
+
+        foreach ($conditions as $index => $condition) {
+            if (!in_array((string) ($condition['webhook_key'] ?? ''), $webhookKeys, true)) {
+                $messages["atom_conditions.{$index}.webhook_key"] = 'La condicion Atom debe apuntar a un webhook configurado.';
+            }
+        }
+
+        if ($messages !== []) {
+            throw ValidationException::withMessages($messages);
+        }
+
+        return $payload;
+    }
+
+    private function validateLetyPayload(array $payload): array
+    {
+        $messages = [];
+        $webhooks = collect($payload['lety_webhooks'] ?? [])
+            ->filter(fn ($webhook) => filled($webhook['key'] ?? null))
+            ->values();
+        $conditions = collect($payload['lety_conditions'] ?? [])
+            ->filter(fn ($condition) => filled($condition['lead_field'] ?? null))
+            ->values();
+
+        if ($webhooks->isEmpty()) {
+            $messages['lety_webhooks'] = 'Para Lety debes configurar al menos un webhook.';
+        }
+
+        if ($conditions->isEmpty()) {
+            $messages['lety_conditions'] = 'Para Lety debes configurar al menos una condicion.';
+        }
+
+        $webhookKeys = $webhooks
+            ->pluck('key')
+            ->map(fn ($key) => (string) $key)
+            ->all();
+
+        foreach ($webhooks as $index => $webhook) {
+            if (empty($webhook['body'])) {
+                $messages["lety_webhooks.{$index}.body"] = 'El payload de Lety es obligatorio.';
+                continue;
+            }
+
+            if (!$this->isValidLetyFormTemplate((string) $webhook['body'])) {
+                $messages["lety_webhooks.{$index}.body"] = 'El payload de Lety debe usar lineas campo=valor y solo acepta variables {{$lead->campo}} o {{$lead.campo}}.';
+            }
+        }
+
+        foreach ($conditions as $index => $condition) {
+            if (!in_array((string) ($condition['webhook_key'] ?? ''), $webhookKeys, true)) {
+                $messages["lety_conditions.{$index}.webhook_key"] = 'La condicion Lety debe apuntar a un webhook configurado.';
+            }
         }
 
         if ($messages !== []) {
@@ -821,6 +1121,91 @@ class IntegrationWebController extends Controller
         return is_array(json_decode($this->quoteKommoPipelineUnquotedPlaceholders($value), true));
     }
 
+    private function isValidAtomJsonTemplate(?string $value): bool
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return true;
+        }
+
+        preg_match_all('/\{\{\s*([^}]+?)\s*\}\}/', $value, $matches);
+
+        foreach ($matches[1] ?? [] as $expression) {
+            $expression = trim($expression);
+
+            if (
+                preg_match('/^\$?lead\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/', $expression, $leadMatches)
+                && in_array($leadMatches[1], $this->leadFields(), true)
+            ) {
+                continue;
+            }
+
+            return false;
+        }
+
+        return is_array(json_decode($this->quoteKommoPipelineUnquotedPlaceholders($value), true));
+    }
+
+    private function isValidLetyFormTemplate(?string $value): bool
+    {
+        $value = trim((string) $value);
+
+        if ($value === '') {
+            return false;
+        }
+
+        if (!$this->containsOnlySupportedLeadPlaceholders($value)) {
+            return false;
+        }
+
+        $pairs = preg_split('/(?:\r\n|\r|\n|&)+/', $value) ?: [];
+        $hasPair = false;
+
+        foreach ($pairs as $pair) {
+            $pair = trim($pair);
+
+            if ($pair === '') {
+                continue;
+            }
+
+            if (!str_contains($pair, '=')) {
+                return false;
+            }
+
+            [$key] = explode('=', $pair, 2);
+            $key = trim(rawurldecode($key));
+
+            if (!preg_match('/^[A-Za-z0-9_.\-\[\]]+$/', $key)) {
+                return false;
+            }
+
+            $hasPair = true;
+        }
+
+        return $hasPair;
+    }
+
+    private function containsOnlySupportedLeadPlaceholders(string $value): bool
+    {
+        preg_match_all('/\{\{\s*([^}]+?)\s*\}\}/', $value, $matches);
+
+        foreach ($matches[1] ?? [] as $expression) {
+            $expression = trim($expression);
+
+            if (
+                preg_match('/^\$?lead\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/', $expression, $leadMatches)
+                && in_array($leadMatches[1], $this->leadFields(), true)
+            ) {
+                continue;
+            }
+
+            return false;
+        }
+
+        return true;
+    }
+
     private function quoteKommoPipelineUnquotedPlaceholders(string $template): string
     {
         $result = '';
@@ -961,6 +1346,190 @@ class IntegrationWebController extends Controller
                 'status_name' => $condition['status_name'] ?? null,
                 'order' => $condition['order'] ?? $index,
                 'active' => (bool) ($condition['active'] ?? true),
+            ]);
+        }
+    }
+
+    private function syncAtomConfiguration(Integration $integration, array $validated): void
+    {
+        $typeName = $this->normalizeIntegrationTypeName(optional($integration->integrationtype)->name);
+
+        if ($typeName === '') {
+            $typeName = $this->normalizeIntegrationTypeName(
+                Integrationtype::whereKey($integration->integrationtype_id)->value('name')
+            );
+        }
+
+        if ($typeName !== 'atom') {
+            $integration->atomConditions()->delete();
+            $integration->atomWebhooks()->delete();
+            return;
+        }
+
+        $webhooks = collect($validated['atom_webhooks'] ?? [])
+            ->filter(fn ($webhook) => filled($webhook['key'] ?? null))
+            ->values();
+        $conditions = collect($validated['atom_conditions'] ?? [])
+            ->filter(fn ($condition) => filled($condition['lead_field'] ?? null))
+            ->values();
+
+        $integration->atomConditions()->delete();
+        $integration->atomWebhooks()->delete();
+
+        $webhookMap = [];
+
+        foreach ($webhooks as $index => $webhook) {
+            $created = $integration->atomWebhooks()->create([
+                'name' => $webhook['name'],
+                'url' => $webhook['url'],
+                'order' => $webhook['order'] ?? $index,
+                'active' => (bool) ($webhook['active'] ?? true),
+                'is_default' => (bool) ($webhook['is_default'] ?? false),
+            ]);
+
+            $webhookMap[(string) $webhook['key']] = $created->id;
+        }
+
+        foreach ($conditions as $index => $condition) {
+            $webhookId = $webhookMap[(string) ($condition['webhook_key'] ?? '')] ?? null;
+
+            if ($webhookId === null) {
+                continue;
+            }
+
+            $integration->atomConditions()->create([
+                'atom_webhook_id' => $webhookId,
+                'lead_field' => $condition['lead_field'],
+                'expected_value' => $condition['expected_value'],
+                'order' => $condition['order'] ?? $index,
+                'active' => (bool) ($condition['active'] ?? true),
+            ]);
+        }
+    }
+
+    private function syncLetyConfiguration(Integration $integration, array $validated): void
+    {
+        $typeName = $this->normalizeIntegrationTypeName(optional($integration->integrationtype)->name);
+
+        if ($typeName === '') {
+            $typeName = $this->normalizeIntegrationTypeName(
+                Integrationtype::whereKey($integration->integrationtype_id)->value('name')
+            );
+        }
+
+        if ($typeName !== 'lety') {
+            $integration->letyConditions()->delete();
+            $integration->letyWebhooks()->delete();
+            return;
+        }
+
+        $webhooks = collect($validated['lety_webhooks'] ?? [])
+            ->filter(fn ($webhook) => filled($webhook['key'] ?? null))
+            ->values();
+        $conditions = collect($validated['lety_conditions'] ?? [])
+            ->filter(fn ($condition) => filled($condition['lead_field'] ?? null))
+            ->values();
+
+        $integration->letyConditions()->delete();
+        $integration->letyWebhooks()->delete();
+
+        $webhookMap = [];
+
+        foreach ($webhooks as $index => $webhook) {
+            $created = $integration->letyWebhooks()->create([
+                'name' => $webhook['name'],
+                'url' => $webhook['url'],
+                'body' => $webhook['body'],
+                'order' => $webhook['order'] ?? $index,
+                'active' => (bool) ($webhook['active'] ?? true),
+            ]);
+
+            $webhookMap[(string) $webhook['key']] = $created->id;
+        }
+
+        foreach ($conditions as $index => $condition) {
+            $webhookId = $webhookMap[(string) ($condition['webhook_key'] ?? '')] ?? null;
+
+            if ($webhookId === null) {
+                continue;
+            }
+
+            $integration->letyConditions()->create([
+                'lety_webhook_id' => $webhookId,
+                'lead_field' => $condition['lead_field'],
+                'expected_value' => $condition['expected_value'],
+                'order' => $condition['order'] ?? $index,
+                'active' => (bool) ($condition['active'] ?? true),
+            ]);
+        }
+    }
+
+    private function syncFreshworksVariableMappings(Integration $integration, array $validated): void
+    {
+        $typeName = $this->normalizeIntegrationTypeName(optional($integration->integrationtype)->name);
+
+        if ($typeName === '') {
+            $typeName = $this->normalizeIntegrationTypeName(
+                Integrationtype::whereKey($integration->integrationtype_id)->value('name')
+            );
+        }
+
+        if ($typeName !== 'freshworks') {
+            $integration->freshworksVariableMappings()->delete();
+            return;
+        }
+
+        $mappings = collect($validated['freshworks_variable_mappings'] ?? [])
+            ->filter(fn ($mapping) => filled($mapping['target_variable'] ?? null) && filled($mapping['lead_field'] ?? null))
+            ->values();
+
+        $integration->freshworksVariableMappings()->delete();
+
+        foreach ($mappings as $index => $mapping) {
+            $integration->freshworksVariableMappings()->create([
+                'target_variable' => trim((string) $mapping['target_variable']),
+                'lead_field' => $mapping['lead_field'],
+                'expected_value' => $mapping['expected_value'],
+                'mapped_value' => array_key_exists('mapped_value', $mapping) && $mapping['mapped_value'] !== ''
+                    ? $mapping['mapped_value']
+                    : null,
+                'order' => $mapping['order'] ?? $index,
+                'active' => (bool) ($mapping['active'] ?? true),
+            ]);
+        }
+    }
+
+    private function syncIntegrationVariableMappings(Integration $integration, array $validated): void
+    {
+        $typeName = $this->normalizeIntegrationTypeName(optional($integration->integrationtype)->name);
+
+        if ($typeName === '') {
+            $typeName = $this->normalizeIntegrationTypeName(
+                Integrationtype::whereKey($integration->integrationtype_id)->value('name')
+            );
+        }
+
+        if (!in_array($typeName, self::VARIABLE_MAPPING_INTEGRATION_TYPES, true)) {
+            $integration->variableMappings()->delete();
+            return;
+        }
+
+        $mappings = collect($validated['integration_variable_mappings'] ?? [])
+            ->filter(fn ($mapping) => filled($mapping['target_variable'] ?? null) && filled($mapping['lead_field'] ?? null))
+            ->values();
+
+        $integration->variableMappings()->delete();
+
+        foreach ($mappings as $index => $mapping) {
+            $integration->variableMappings()->create([
+                'target_variable' => trim((string) $mapping['target_variable']),
+                'lead_field' => $mapping['lead_field'],
+                'expected_value' => $mapping['expected_value'],
+                'mapped_value' => array_key_exists('mapped_value', $mapping) && $mapping['mapped_value'] !== ''
+                    ? $mapping['mapped_value']
+                    : null,
+                'order' => $mapping['order'] ?? $index,
+                'active' => (bool) ($mapping['active'] ?? true),
             ]);
         }
     }

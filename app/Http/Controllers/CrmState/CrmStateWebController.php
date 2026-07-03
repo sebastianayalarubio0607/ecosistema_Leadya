@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CrmState;
 use App\Models\Customer;
 use App\Models\Integration;
+use App\Models\Integrationtype;
 use App\Models\MetaEvent;
 use App\Models\Qualification;
 use Illuminate\Http\Request;
@@ -17,6 +18,16 @@ class CrmStateWebController extends Controller
     public function index(Request $request)
     {
         $q = $request->get('q');
+        $name = $request->get('name');
+        $customerId = $request->get('customer_id');
+        $typeId = $request->get('integrationtype_id');
+        $integrationId = $request->get('integration_id');
+        $unmanaged = $request->get('unmanaged');
+        $qualificationId = $request->get('qualification');
+        $metaEventId = $request->get('meta_event_id');
+        $googleAdsEnabled = $request->get('google_ads_conversion_enabled');
+
+        $integrationFiltersActive = filled($customerId) || filled($typeId) || filled($integrationId);
 
         $crmstates = CrmState::query()
             ->with([
@@ -25,14 +36,74 @@ class CrmStateWebController extends Controller
                 'googleAdsConversions.customer:id,name,id_Gads',
             ])
             ->when($q, function ($query) use ($q) {
-                $query->where('id', 'like', "%{$q}%")
-                    ->orWhere('name', 'like', "%{$q}%");
+                $query->where(function ($query) use ($q) {
+                    $query->where('id', 'like', "%{$q}%")
+                        ->orWhere('name', 'like', "%{$q}%");
+                });
+            })
+            ->when($name, fn ($query) => $query->where('name', 'like', "%{$name}%"))
+            ->when($unmanaged !== null && $unmanaged !== '', fn ($query) => $query->where('unmanaged', (bool) $unmanaged))
+            ->when($qualificationId, fn ($query) => $query->where('qualification', $qualificationId))
+            ->when($metaEventId !== null && $metaEventId !== '', function ($query) use ($metaEventId) {
+                $metaEventId === 'none'
+                    ? $query->whereNull('meta_event_id')
+                    : $query->where('meta_event_id', $metaEventId);
+            })
+            ->when($googleAdsEnabled !== null && $googleAdsEnabled !== '', fn ($query) => $query->where('google_ads_conversion_enabled', (bool) $googleAdsEnabled))
+            ->when($integrationFiltersActive, function ($query) use ($customerId, $typeId, $integrationId) {
+                $prefixes = Integration::query()
+                    ->when($customerId, fn ($query) => $query->where('customer_id', $customerId))
+                    ->when($typeId, fn ($query) => $query->where('integrationtype_id', $typeId))
+                    ->when($integrationId, fn ($query) => $query->whereKey($integrationId))
+                    ->get(['id', 'disable_integration_id_crm_prefix', 'crm_id_prefix'])
+                    ->map(fn (Integration $integration) => $integration->crmIdPrefix())
+                    ->filter()
+                    ->unique()
+                    ->values();
+
+                if ($prefixes->isEmpty()) {
+                    $query->whereRaw('1 = 0');
+                    return;
+                }
+
+                $query->where(function ($query) use ($prefixes) {
+                    foreach ($prefixes as $prefix) {
+                        $query->orWhere('id', 'like', $this->crmStatePrefixLike((string) $prefix));
+                    }
+                });
             })
             ->orderByDesc('id')
             ->paginate(15)
             ->withQueryString();
 
-        return view('crm_states.index', compact('crmstates', 'q'));
+        $integrations = Integration::with(['customer:id,name,id_Gads', 'integrationtype:id,name'])
+            ->orderBy('name')
+            ->get(['id', 'name', 'customer_id', 'integrationtype_id', 'disable_integration_id_crm_prefix', 'crm_id_prefix']);
+
+        $this->attachIntegrationContext($crmstates->getCollection(), $integrations);
+
+        $customers = Customer::orderBy('name')->get(['id', 'name']);
+        $types = Integrationtype::orderBy('name')->get(['id', 'name']);
+        $qualifications = Qualification::orderBy('name')->get(['id', 'name']);
+        $metaEvents = MetaEvent::orderBy('nombre')->get(['id', 'nombre']);
+
+        return view('crm_states.index', compact(
+            'crmstates',
+            'q',
+            'name',
+            'customerId',
+            'typeId',
+            'integrationId',
+            'unmanaged',
+            'qualificationId',
+            'metaEventId',
+            'googleAdsEnabled',
+            'customers',
+            'types',
+            'integrations',
+            'qualifications',
+            'metaEvents'
+        ));
     }
 
     public function create()
@@ -292,6 +363,45 @@ class CrmStateWebController extends Controller
             $externalId,
             Integration::with('customer:id,name,id_Gads')->find($integrationId),
         ];
+    }
+
+    private function attachIntegrationContext($crmstates, $integrations): void
+    {
+        $sortedIntegrations = $integrations->sortByDesc(fn (Integration $integration) => strlen($integration->crmIdPrefix()));
+
+        foreach ($crmstates as $crmstate) {
+            [$prefix, $externalId, $integration] = $this->resolveCrmStatePartsFromIntegrations($crmstate, $sortedIntegrations);
+
+            $crmstate->setAttribute('integration_prefix', $prefix);
+            $crmstate->setAttribute('external_id', $externalId);
+            $crmstate->setRelation('matchedIntegration', $integration);
+        }
+    }
+
+    private function resolveCrmStatePartsFromIntegrations(CrmState $crmstate, $integrations): array
+    {
+        $crmStateId = (string) $crmstate->id;
+
+        foreach ($integrations as $integration) {
+            $prefix = $integration->crmIdPrefix();
+
+            if ($prefix !== '' && str_starts_with($crmStateId, $prefix . '-')) {
+                return [
+                    $prefix,
+                    substr($crmStateId, strlen($prefix) + 1),
+                    $integration,
+                ];
+            }
+        }
+
+        [$integrationId, $externalId] = $this->splitId($crmStateId);
+
+        return [$integrationId, $externalId, null];
+    }
+
+    private function crmStatePrefixLike(string $prefix): string
+    {
+        return addcslashes($prefix, '\\%_') . '-%';
     }
 
     private function normalizeCurrency(?string $currency): string

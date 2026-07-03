@@ -124,6 +124,23 @@
                 <div class="mt-1">{{ $customer->id_Gads ?: '—' }}</div>
             </div>
 
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <div class="text-sm text-white/50">Divisa predeterminada</div>
+                    <div class="mt-1">
+                        {{ $customer->defaultCurrency?->code ?? 'COP' }}
+                        @if($customer->defaultCurrency?->name)
+                            - {{ $customer->defaultCurrency->name }}
+                        @endif
+                    </div>
+                </div>
+
+                <div>
+                    <div class="text-sm text-white/50">Valor minimo predeterminado</div>
+                    <div class="mt-1">{{ number_format((float) ($customer->default_lead_value ?? 100000), 2, '.', ',') }}</div>
+                </div>
+            </div>
+
             <div>
                 <div class="text-sm text-white/50">Token guardado en BD (hash)</div>
                 <div class="mt-2 text-sm break-all rounded-xl border border-white/10 bg-slate-900/60 p-3 font-mono">
@@ -141,6 +158,44 @@
                     @empty
                         <div class="text-sm break-all rounded-xl border border-white/10 bg-white/5 p-3 text-white/60">
                             Sin páginas asignadas.
+                        </div>
+                    @endforelse
+                </div>
+            </div>
+
+            <div>
+                <div class="flex items-center justify-between gap-3">
+                    <div class="text-sm text-white/50">Meta Ad Accounts asociadas</div>
+                    <a href="{{ route('meta.ad-accounts.create', ['customer_id' => $customer->id]) }}"
+                       class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs text-white">
+                        + Nueva cuenta
+                    </a>
+                </div>
+
+                <div class="mt-2 space-y-2">
+                    @forelse($customer->metaAdAccounts as $account)
+                        <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                <div class="min-w-0">
+                                    <div class="text-sm font-semibold text-white break-all">{{ $account->meta_account_id }}</div>
+                                    <div class="text-sm text-white/60">{{ $account->name ?: 'Sin nombre' }}</div>
+                                </div>
+
+                                <div class="flex items-center gap-2">
+                                    <span class="px-2 py-1 rounded-lg text-xs border {{ $account->status === 'active' ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
+                                        {{ $account->status }}
+                                    </span>
+
+                                    <a href="{{ route('meta.ad-accounts.edit', $account) }}"
+                                       class="px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-white/10 text-xs text-white">
+                                        Editar
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    @empty
+                        <div class="text-sm break-all rounded-xl border border-white/10 bg-white/5 p-3 text-white/60">
+                            Sin Meta Ad Accounts asociadas.
                         </div>
                     @endforelse
                 </div>

@@ -13,16 +13,59 @@
 @section('content')
     <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 space-y-4">
         <form method="GET" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-            <div class="md:col-span-10">
+            <div class="md:col-span-3">
                 <label class="block mb-1 text-white/70">Buscar</label>
                 <input name="q" value="{{ $q ?? request('q') }}"
                        class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
                        placeholder="Buscar por nombre, url o public_key..." />
             </div>
 
-            <div class="md:col-span-2 flex gap-2">
+            <div class="md:col-span-2">
+                <label class="block mb-1 text-white/70">Nombre</label>
+                <input name="name" value="{{ $name ?? request('name') }}"
+                       class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
+                       placeholder="Nombre..." />
+            </div>
+
+            <div class="md:col-span-2">
+                <label class="block mb-1 text-white/70">Cliente</label>
+                <select name="customer_id" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+                    <option value="">Todos</option>
+                    @foreach($customers as $customer)
+                        <option value="{{ $customer->id }}" @selected((string) ($customerId ?? request('customer_id')) === (string) $customer->id)>
+                            {{ $customer->name }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="md:col-span-2">
+                <label class="block mb-1 text-white/70">Tipo</label>
+                <select name="integrationtype_id" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+                    <option value="">Todos</option>
+                    @foreach($types as $type)
+                        <option value="{{ $type->id }}" @selected((string) ($typeId ?? request('integrationtype_id')) === (string) $type->id)>
+                            {{ $type->name }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            @if($hasPriorityColumn ?? false)
+                <div class="md:col-span-1">
+                    <label class="block mb-1 text-white/70">Prioridad</label>
+                    <input name="priority"
+                           type="number"
+                           min="0"
+                           step="1"
+                           value="{{ $priority ?? request('priority') }}"
+                           class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40" />
+                </div>
+            @endif
+
+            <div class="{{ ($hasPriorityColumn ?? false) ? 'md:col-span-2' : 'md:col-span-3' }} flex gap-2">
                 <button class="w-full px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">
-                    Buscar
+                    Filtrar
                 </button>
                 <a href="{{ route('integrations.index') }}"
                    class="w-full text-center px-4 py-2 rounded-xl bg-zinc-950/25 hover:bg-white/10 text-white border border-white/10">
@@ -38,6 +81,9 @@
                         <th class="text-left px-3 py-2">Nombre</th>
                         <th class="text-left px-3 py-2">Cliente</th>
                         <th class="text-left px-3 py-2">Tipo</th>
+                        @if($hasPriorityColumn ?? false)
+                            <th class="text-left px-3 py-2">Prioridad</th>
+                        @endif
                         <th class="text-left px-3 py-2">Status</th>
                         <th class="text-left px-3 py-2">Public Key</th>
                         <th class="text-left px-3 py-2 w-72">Acciones</th>
@@ -49,6 +95,13 @@
                             <td class="px-3 py-2">{{ $integration->name }}</td>
                             <td class="px-3 py-2">{{ $integration->customer->name ?? '—' }}</td>
                             <td class="px-3 py-2">{{ $integration->integrationtype->name ?? '—' }}</td>
+                            @if($hasPriorityColumn ?? false)
+                                <td class="px-3 py-2">
+                                    <span class="px-2 py-1 rounded-lg bg-indigo-500/10 border border-indigo-300/20 text-indigo-100 text-xs">
+                                        {{ $integration->priority ?? 100 }}
+                                    </span>
+                                </td>
+                            @endif
                             <td class="px-3 py-2">
                                 <span class="px-2 py-1 rounded-lg text-xs border {{ (int) $integration->status === 1 ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
                                     {{ (int) $integration->status === 1 ? 'Activo' : 'Inactivo' }}
@@ -84,7 +137,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td class="px-3 py-8 text-center text-white/60" colspan="6">No hay integraciones.</td>
+                            <td class="px-3 py-8 text-center text-white/60" colspan="{{ ($hasPriorityColumn ?? false) ? 7 : 6 }}">No hay integraciones.</td>
                         </tr>
                     @endforelse
                 </tbody>

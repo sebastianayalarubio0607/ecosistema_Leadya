@@ -49,6 +49,7 @@ class Lead extends Model
         'meta_id_ad',
         'g_ad',
         'g_clid',
+        'gclid',
         'gbraid',
         'wbraid',
         'gad_source',

@@ -9,13 +9,19 @@ use App\Models\GoogleAdsAdGroup;
 use App\Models\GoogleAdsCampaign;
 use \App\Models\MetaAdAccount;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Customer extends Model
 {
    use HasFactory;
     protected $table = 'customers'; // Nombre de la tabla
-    protected $fillable = ['name', 'description', 'token', 'status','fb_pixel_id','fb_access_token', 'id_Gads']; // Campos que se pueden asignar masivamente
+    protected $fillable = ['name', 'description', 'token', 'status','fb_pixel_id','fb_access_token', 'id_Gads', 'default_currency_id', 'default_lead_value']; // Campos que se pueden asignar masivamente
+
+    protected $casts = [
+        'status' => 'boolean',
+        'default_lead_value' => 'decimal:2',
+    ];
 
     // Método para generar un token hasheado
     public static function generateToken()
@@ -41,6 +47,11 @@ public function metaPages(): HasMany
 public function metaAccessTokens(): HasMany
 {
     return $this->hasMany(MetaAccessToken::class, 'customer_id');
+}
+
+public function defaultCurrency(): BelongsTo
+{
+    return $this->belongsTo(Currency::class, 'default_currency_id');
 }
 
 public function googleAdsCampaigns(): HasMany

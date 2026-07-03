@@ -4,6 +4,7 @@ namespace App\Http\Services\Meta;
 
 use App\Http\Services\Integration\IntegrationService;
 use App\Http\Services\Lead\LeadFunnelHistoryService;
+use App\Http\Services\Lead\LeadService;
 use App\Jobs\ProcessLeadIntegrationsJob;
 use App\Models\Lead;
 use App\Models\MetaAccessToken;
@@ -33,6 +34,7 @@ class MetaLeadAdsSyncService
         private readonly MetaGraphService $graphService,
         private readonly IntegrationService $integrationService,
         private readonly LeadFunnelHistoryService $leadFunnelHistoryService,
+        private readonly LeadService $leadService,
     ) {
     }
 
@@ -471,7 +473,7 @@ class MetaLeadAdsSyncService
             return ['created' => 0, 'updated' => 0];
         }
 
-        $lead = Lead::create($payload);
+        $lead = $this->leadService->createLead($payload);
         $this->leadFunnelHistoryService->recordIfFunnelChanged($lead);
         $this->dispatchLeadIntegrations($lead);
 

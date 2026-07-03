@@ -2,6 +2,7 @@
 
 namespace App\Http\Services\Integration;
 
+use App\Http\Services\Integration\Concerns\ResolvesIntegrationVariableMappings;
 use App\Models\Integration;
 use App\Models\Lead;
 use Illuminate\Support\Facades\Http;
@@ -10,6 +11,8 @@ use RuntimeException;
 
 class GohighlevelService
 {
+    use ResolvesIntegrationVariableMappings;
+
     private const DEFAULT_CONTACTS_UPSERT_URL = 'https://services.leadconnectorhq.com/contacts/upsert';
 
     public function sendToGohighlevel(Lead $lead, Integration $integration)
@@ -21,7 +24,7 @@ class GohighlevelService
             throw new RuntimeException('No existe token de autenticacion configurado para GoHighLevel.');
         }
 
-        $payload = $this->buildPayloadFromTemplate((string) $integration->body, $lead);
+        $payload = $this->buildPayloadFromTemplate((string) $integration->body, $lead, $integration);
 
         Log::info('GOHIGHLEVEL URL', ['url' => $url]);
         Log::info('GOHIGHLEVEL PAYLOAD JSON', [
@@ -77,7 +80,7 @@ class GohighlevelService
         return $url !== '' ? $url : self::DEFAULT_CONTACTS_UPSERT_URL;
     }
 
-    private function buildPayloadFromTemplate(string $template, $lead): array
+    private function buildPayloadFromTemplate(string $template, $lead, Integration $integration): array
     {
         $template = trim($template);
         if ($template === '') {
@@ -89,7 +92,7 @@ class GohighlevelService
             throw new RuntimeException('El campo body de GoHighLevel debe ser un JSON valido.');
         }
 
-        return $this->resolveLeadPlaceholders($decoded, $lead);
+        return $this->resolveLeadPlaceholders($decoded, $lead, $integration, $this->integrationVariableMappings($integration));
     }
 
     private function decodeJsonTemplate(string $template): ?array
@@ -126,24 +129,24 @@ class GohighlevelService
         }, $value);
     }
 
-    private function resolveLeadPlaceholders(array $payload, $lead): array
+    private function resolveLeadPlaceholders(array $payload, $lead, Integration $integration, $mappings): array
     {
         $resolved = [];
 
         foreach ($payload as $key => $value) {
-            $resolved[$key] = $this->resolveLeadValue($value, $lead);
+            $resolved[$key] = $this->resolveLeadValue($value, $lead, $integration, $mappings, (string) $key);
         }
 
         return $resolved;
     }
 
-    private function resolveLeadValue($value, $lead)
+    private function resolveLeadValue($value, $lead, Integration $integration, $mappings, ?string $targetVariable = null)
     {
         if (is_array($value)) {
             $resolved = [];
 
             foreach ($value as $key => $nestedValue) {
-                $resolved[$key] = $this->resolveLeadValue($nestedValue, $lead);
+                $resolved[$key] = $this->resolveLeadValue($nestedValue, $lead, $integration, $mappings, (string) $key);
             }
 
             return $resolved;
@@ -157,13 +160,15 @@ class GohighlevelService
             return $value;
         }
 
-        $resolved = data_get($lead, $matches[1]);
+        $leadField = $matches[1];
+        $resolved = data_get($lead, $leadField);
 
         if ($resolved === null) {
-            $resolved = data_get($lead, $this->leadFieldAlias($matches[1]), '');
+            $leadField = $this->leadFieldAlias($matches[1]);
+            $resolved = data_get($lead, $leadField, '');
         }
 
-        return $resolved ?? '';
+        return $this->resolveMappedIntegrationValue($mappings, $targetVariable, $leadField, $resolved, $resolved ?? '', 'GOHIGHLEVEL');
     }
 
     private function placeholderToken(string $field): string

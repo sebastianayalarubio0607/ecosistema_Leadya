@@ -84,7 +84,7 @@
                 </div>
 
                 <div class="ml-4 text-center text-sm text-white/60 sm:text-right sm:ml-0">
-                   Leads Quality v 1.3.3
+                   Leads Quality v 1.4.1
                 </div>
             </div>
         </div>
