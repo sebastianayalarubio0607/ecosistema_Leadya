@@ -15,7 +15,7 @@
         <form method="POST" action="{{ route('platforms.update', $platform) }}">
             @csrf
             @method('PUT')
-            @include('platforms._form', ['platform' => $platform])
+            @include('platforms._form', ['platform' => $platform, 'sources' => $sources])
         </form>
     </div>
 @endsection

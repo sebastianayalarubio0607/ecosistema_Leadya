@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Platform;
+use App\Models\Source;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -15,6 +16,7 @@ class PlatformController extends Controller
         $q = $request->get('q');
 
         $platforms = Platform::query()
+            ->with('sources')
             ->when($q, fn ($query) => $query->where(function ($innerQuery) use ($q) {
                 $innerQuery->where('name', 'like', "%{$q}%")
                     ->orWhere('code', 'like', "%{$q}%");
@@ -30,12 +32,18 @@ class PlatformController extends Controller
     {
         return view('platforms.create', [
             'platform' => new Platform(),
+            'sources' => $this->sourceOptions(),
         ]);
     }
 
     public function store(Request $request): RedirectResponse
     {
-        Platform::create($this->validateRequest($request));
+        $validated = $this->validateRequest($request);
+        $sourceIds = $validated['source_ids'];
+        unset($validated['source_ids']);
+
+        $platform = Platform::create($validated);
+        $platform->sources()->sync($sourceIds);
 
         return redirect()
             ->route('platforms.index')
@@ -44,17 +52,29 @@ class PlatformController extends Controller
 
     public function show(Platform $platform): View
     {
+        $platform->load('sources');
+
         return view('platforms.show', compact('platform'));
     }
 
     public function edit(Platform $platform): View
     {
-        return view('platforms.edit', compact('platform'));
+        $platform->load('sources');
+
+        return view('platforms.edit', [
+            'platform' => $platform,
+            'sources' => $this->sourceOptions(),
+        ]);
     }
 
     public function update(Request $request, Platform $platform): RedirectResponse
     {
-        $platform->update($this->validateRequest($request, $platform));
+        $validated = $this->validateRequest($request, $platform);
+        $sourceIds = $validated['source_ids'];
+        unset($validated['source_ids']);
+
+        $platform->update($validated);
+        $platform->sources()->sync($sourceIds);
 
         return redirect()
             ->route('platforms.index')
@@ -73,6 +93,8 @@ class PlatformController extends Controller
     private function validateRequest(Request $request, ?Platform $platform = null): array
     {
         return $request->validate([
+            'source_ids' => ['required', 'array', 'min:1'],
+            'source_ids.*' => ['required', 'exists:sources,id'],
             'code' => [
                 'required',
                 'string',
@@ -88,5 +110,13 @@ class PlatformController extends Controller
             ],
             'is_active' => ['required', 'boolean'],
         ]);
+    }
+
+    private function sourceOptions()
+    {
+        return Source::query()
+            ->where('is_active', true)
+            ->orderBy('name')
+            ->get();
     }
 }

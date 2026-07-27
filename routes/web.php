@@ -5,6 +5,7 @@ use App\Http\Controllers\GeoController;
 use App\Http\Controllers\LanguageController;
 use App\Http\Controllers\OriginController;
 use App\Http\Controllers\PlatformController;
+use App\Http\Controllers\SiteLinkController;
 use App\Http\Controllers\SourceController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\UrlGeneratorController;
@@ -30,6 +31,7 @@ Route::middleware(['auth'])->group(function () {
     Route::resource('geos', GeoController::class);
     Route::resource('languages', LanguageController::class);
     Route::resource('campaign_objectives', CampaignObjectiveController::class);
+    Route::resource('site-links', SiteLinkController::class);
 });
 
 require __DIR__.'/auth.php';

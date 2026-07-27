@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class Platform extends Model
 {
@@ -15,4 +16,9 @@ class Platform extends Model
     protected $casts = [
         'is_active' => 'boolean',
     ];
+
+    public function sources(): BelongsToMany
+    {
+        return $this->belongsToMany(Source::class)->withTimestamps();
+    }
 }

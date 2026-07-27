@@ -1,10 +1,10 @@
 @extends('meta.layout')
 
-@section('title', 'Platforms')
-@section('subtitle', 'Catálogo de plataformas para el generador de URLs')
+@section('title', 'Site Links')
+@section('subtitle', 'Catalogo de site links para el generador de URLs')
 
 @section('header_actions')
-    <a href="{{ route('platforms.create') }}"
+    <a href="{{ route('site-links.create') }}"
        class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10">
         + Nuevo
     </a>
@@ -17,14 +17,14 @@
                 <label class="block mb-1 text-white/70">Buscar</label>
                 <input name="q" value="{{ $q ?? request('q') }}"
                        class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
-                       placeholder="Buscar por código o nombre">
+                       placeholder="Buscar por codigo o valor">
             </div>
 
             <div class="md:col-span-2 flex gap-2">
                 <button class="w-full px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">
                     Buscar
                 </button>
-                <a href="{{ route('platforms.index') }}"
+                <a href="{{ route('site-links.index') }}"
                    class="w-full text-center px-4 py-2 rounded-xl bg-zinc-950/25 hover:bg-white/10 text-white border border-white/10">
                     Limpiar
                 </a>
@@ -36,9 +36,9 @@
                 <thead class="bg-white/5 text-white/70">
                     <tr>
                         <th class="text-left px-3 py-2">ID</th>
-                        <th class="text-left px-3 py-2">Código</th>
-                        <th class="text-left px-3 py-2">Nombre</th>
-                        <th class="text-left px-3 py-2">Sources</th>
+                        <th class="text-left px-3 py-2">Codigo</th>
+                        <th class="text-left px-3 py-2">Valor</th>
+                        <th class="text-left px-3 py-2">Source</th>
                         <th class="text-left px-3 py-2">Estado</th>
                         <th class="text-left px-3 py-2">Actualizado</th>
                         <th class="text-left px-3 py-2 w-56">Acciones</th>
@@ -46,33 +46,31 @@
                 </thead>
 
                 <tbody class="divide-y divide-white/10 text-white/80">
-                    @forelse($platforms as $platform)
+                    @forelse($siteLinks as $siteLink)
                         <tr class="hover:bg-white/5">
-                            <td class="px-3 py-2">{{ $platform->id }}</td>
+                            <td class="px-3 py-2">{{ $siteLink->id }}</td>
                             <td class="px-3 py-2">
-                                <span class="px-2 py-1 rounded-lg bg-white/10 border border-white/10 text-xs">{{ $platform->code }}</span>
+                                <span class="px-2 py-1 rounded-lg bg-white/10 border border-white/10 text-xs">{{ $siteLink->code }}</span>
                             </td>
-                            <td class="px-3 py-2">{{ $platform->name }}</td>
+                            <td class="px-3 py-2">{{ $siteLink->name }}</td>
+                            <td class="px-3 py-2">{{ optional($siteLink->source)->name ?? 'Sin source' }}</td>
                             <td class="px-3 py-2">
-                                {{ $platform->sources->pluck('name')->join(', ') ?: 'Sin source' }}
-                            </td>
-                            <td class="px-3 py-2">
-                                <span class="px-2 py-1 rounded-lg text-xs border {{ $platform->is_active ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
-                                    {{ $platform->is_active ? 'Activo' : 'Inactivo' }}
+                                <span class="px-2 py-1 rounded-lg text-xs border {{ $siteLink->is_active ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
+                                    {{ $siteLink->is_active ? 'Activo' : 'Inactivo' }}
                                 </span>
                             </td>
-                            <td class="px-3 py-2">{{ optional($platform->updated_at)->format('Y-m-d H:i') }}</td>
+                            <td class="px-3 py-2">{{ optional($siteLink->updated_at)->format('Y-m-d H:i') }}</td>
                             <td class="px-3 py-2">
                                 <div class="flex items-center gap-2">
                                     <a class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs"
-                                       href="{{ route('platforms.show', $platform) }}">Ver</a>
+                                       href="{{ route('site-links.show', $siteLink) }}">Ver</a>
                                     <a class="px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-white/10 text-xs"
-                                       href="{{ route('platforms.edit', $platform) }}">Editar</a>
-                                    <form action="{{ route('platforms.destroy', $platform) }}" method="POST">
+                                       href="{{ route('site-links.edit', $siteLink) }}">Editar</a>
+                                    <form action="{{ route('site-links.destroy', $siteLink) }}" method="POST">
                                         @csrf
                                         @method('DELETE')
                                         <button class="px-3 py-1.5 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-300/20 text-xs"
-                                                onclick="return confirm('¿Eliminar plataforma?')">
+                                                onclick="return confirm('Eliminar site link?')">
                                             Eliminar
                                         </button>
                                     </form>
@@ -81,13 +79,13 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="px-3 py-8 text-center text-white/60">No hay plataformas registradas.</td>
+                            <td colspan="7" class="px-3 py-8 text-center text-white/60">No hay site links registrados.</td>
                         </tr>
                     @endforelse
                 </tbody>
             </table>
         </div>
 
-        <div>{{ $platforms->links() }}</div>
+        <div>{{ $siteLinks->links() }}</div>
     </div>
 @endsection

@@ -1,5 +1,24 @@
 <div class="grid gap-4">
     <div>
+        <label class="block mb-1 text-white/70">Sources *</label>
+        @php($selectedSources = collect(old('source_ids', $platform->exists ? $platform->sources->pluck('id')->all() : []))->map(fn ($id) => (string) $id)->all())
+        <div class="grid gap-2 rounded-xl border border-white/10 bg-slate-900/60 p-3">
+            @foreach($sources as $source)
+                <label class="inline-flex items-center gap-2 text-white/80">
+                    <input
+                        type="checkbox"
+                        name="source_ids[]"
+                        value="{{ $source->id }}"
+                        class="rounded border-white/20 bg-slate-950/60 text-indigo-500"
+                        @checked(in_array((string) $source->id, $selectedSources, true))
+                    >
+                    <span>{{ $source->name }}</span>
+                </label>
+            @endforeach
+        </div>
+    </div>
+
+    <div>
         <label class="block mb-1 text-white/70">Código *</label>
         <input
             name="code"

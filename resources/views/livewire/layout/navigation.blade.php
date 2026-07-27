@@ -184,6 +184,12 @@ new class extends Component {
             'icon' => 'origins',
         ],
         [
+            'label' => 'site links',
+            'route' => 'site-links.index',
+            'active' => ['site-links.*'],
+            'icon' => 'link',
+        ],
+        [
             'label' => 'sources',
             'route' => 'sources.index',
             'active' => ['sources.*'],

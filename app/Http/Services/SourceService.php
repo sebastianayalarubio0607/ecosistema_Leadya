@@ -9,7 +9,10 @@ class SourceService
     public function list(?string $q = null)
     {
         return Source::query()
-            ->when($q, fn ($query) => $query->where('name', 'like', "%{$q}%"))
+            ->when($q, fn ($query) => $query->where(function ($innerQuery) use ($q) {
+                $innerQuery->where('name', 'like', "%{$q}%")
+                    ->orWhere('code', 'like', "%{$q}%");
+            }))
             ->orderBy('name')
             ->paginate(15)
             ->withQueryString();

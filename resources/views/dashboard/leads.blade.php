@@ -50,11 +50,11 @@
                     </div>
 
                     <div class="md:col-span-3">
-                        <label class="block mb-1 text-white/70">Fuente</label>
-                        <select name="campaign_origin"
+                        <label class="block mb-1 text-white/70">Source</label>
+                        <select name="source"
                             class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
                             <option value="">Todos</option>
-                            @foreach ($ui['filters']['channel_options'] as $option)
+                            @foreach ($ui['filters']['source_options'] as $option)
                                 <option value="{{ $option['value'] }}" @selected($option['selected'])>
                                     {{ $option['label'] }}
                                 </option>
@@ -63,11 +63,11 @@
                     </div>
 
                     <div class="md:col-span-3">
-                        <label class="block mb-1 text-white/70">Medio</label>
-                        <select name="plataforma"
+                        <label class="block mb-1 text-white/70">Origen</label>
+                        <select name="campaign_origin"
                             class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
                             <option value="">Todos</option>
-                            @foreach ($ui['filters']['platform_options'] as $option)
+                            @foreach ($ui['filters']['origin_options'] as $option)
                                 <option value="{{ $option['value'] }}" @selected($option['selected'])>
                                     {{ $option['label'] }}
                                 </option>

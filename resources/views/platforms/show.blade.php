@@ -30,6 +30,10 @@
                 <div class="mt-1">{{ $platform->name }}</div>
             </div>
             <div>
+                <div class="text-sm text-white/50">Sources</div>
+                <div class="mt-1">{{ $platform->sources->pluck('name')->join(', ') ?: 'Sin source' }}</div>
+            </div>
+            <div>
                 <div class="text-sm text-white/50">Estado</div>
                 <div class="mt-1">{{ $platform->is_active ? 'Activo' : 'Inactivo' }}</div>
             </div>

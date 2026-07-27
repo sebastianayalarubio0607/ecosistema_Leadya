@@ -29,6 +29,7 @@ class DashboardLeadsController extends Controller
     private const DONUT_MAX_ITEMS = 7;
 
     private const DASHBOARD_FILTER_KEYS = [
+        'source',
         'campaign_origin',
         'plataforma',
         'lenguaje',
@@ -38,6 +39,7 @@ class DashboardLeadsController extends Controller
     ];
 
     private const LIST_FILTER_KEYS = [
+        'source',
         'campaign_origin',
         'plataforma',
         'lenguaje',
@@ -507,7 +509,7 @@ class DashboardLeadsController extends Controller
                 $sourceTable = (new Source)->getTable();
 
                 $qSources = clone $base;
-                $qSources = $this->applyLeadDimensionFilters($qSources, $filters, $leadTable, true, true, true, true);
+                $qSources = $this->applyLeadDimensionFilters($qSources, $filters, $leadTable, true, true, true, true, false);
 
                 $sourceRows = (clone $qSources)
                     ->leftJoin("{$originTable} as ogsrc", 'ogsrc.code', '=', "{$leadTable}.campaign_origin")
@@ -851,8 +853,9 @@ class DashboardLeadsController extends Controller
         $applyPlatform = $groupType !== 'plataforma';
         $applyCrm = $groupType !== 'crm_state';
         $applyQual = $groupType !== 'qualification';
+        $applySource = $groupType !== 'source';
 
-        $q = $this->applyLeadDimensionFilters($q, $filters, $leadTable, $applyChannel, $applyPlatform, $applyCrm, $applyQual);
+        $q = $this->applyLeadDimensionFilters($q, $filters, $leadTable, $applyChannel, $applyPlatform, $applyCrm, $applyQual, $applySource);
 
         // Filtro por grupo (excepto funnel y funnel_history, que se filtran con joins)
         if ($groupType === 'campaign_origin') {
@@ -1295,7 +1298,7 @@ class DashboardLeadsController extends Controller
         $sourceTable = (new Source)->getTable();
 
         $q = clone $base;
-        $q = $this->applyLeadDimensionFilters($q, $filters, $leadTable, true, true, true, true);
+        $q = $this->applyLeadDimensionFilters($q, $filters, $leadTable, true, true, true, true, false);
 
         $q->leftJoin("{$originTable} as ogqb", 'ogqb.code', '=', "{$leadTable}.campaign_origin")
             ->leftJoin("{$sourceTable} as sqb", 'sqb.id', '=', 'ogqb.source_id')
@@ -1526,8 +1529,42 @@ class DashboardLeadsController extends Controller
         bool $applyChannel,
         bool $applyPlatform,
         bool $applyCrmState,
-        bool $applyQualification
+        bool $applyQualification,
+        bool $applySource = true
     ): Builder {
+        // Source (leads.campaign_origin -> origins.code -> sources.id)
+        if ($applySource && ! empty($filters['source'])) {
+            if (! Schema::hasTable((new Origin)->getTable()) || ! Schema::hasTable((new Source)->getTable())) {
+                return $q->whereRaw('1=0');
+            }
+
+            $originTable = (new Origin)->getTable();
+            $sourceTable = (new Source)->getTable();
+            $values = array_values((array) $filters['source']);
+            $wantNull = in_array('__NULL__', $values, true);
+            $real = array_values(array_filter($values, fn ($v) => $v !== '__NULL__' && $v !== null && $v !== ''));
+
+            $q->where(function ($qq) use ($leadTable, $originTable, $sourceTable, $wantNull, $real) {
+                if ($wantNull) {
+                    $qq->orWhereNull("{$leadTable}.campaign_origin")
+                        ->orWhere("{$leadTable}.campaign_origin", '')
+                        ->orWhereNotIn("{$leadTable}.campaign_origin", function ($sub) use ($originTable, $sourceTable) {
+                            $sub->from("{$originTable} as osrc_filter")
+                                ->join("{$sourceTable} as ssrc_filter", 'ssrc_filter.id', '=', 'osrc_filter.source_id')
+                                ->select('osrc_filter.code');
+                        });
+                }
+
+                if (! empty($real)) {
+                    $qq->orWhereIn("{$leadTable}.campaign_origin", function ($sub) use ($originTable, $real) {
+                        $sub->from($originTable)
+                            ->select('code')
+                            ->whereIn('source_id', $real);
+                    });
+                }
+            });
+        }
+
         // Fuente
         if ($applyChannel && ! empty($filters['campaign_origin'])) {
             $values = array_values((array) $filters['campaign_origin']);
@@ -1743,6 +1780,7 @@ class DashboardLeadsController extends Controller
     private function sanitizeDashboardFilters(array $filters): array
     {
         $allowed = Arr::only($filters, [
+            'source',
             'campaign_origin',
             'plataforma',
             'lenguaje',
@@ -1763,6 +1801,18 @@ class DashboardLeadsController extends Controller
                 unset($allowed['campaign_origin']);
             } else {
                 $allowed['campaign_origin'] = $arr;
+            }
+        }
+
+        if (array_key_exists('source', $allowed)) {
+            $arr = array_values((array) $allowed['source']);
+            $arr = array_filter($arr, fn ($v) => $v !== null && $v !== '');
+            sort($arr);
+
+            if (empty($arr)) {
+                unset($allowed['source']);
+            } else {
+                $allowed['source'] = count($arr) === 1 ? (string) $arr[0] : $arr;
             }
         }
 
@@ -2039,7 +2089,7 @@ class DashboardLeadsController extends Controller
         ]));
 
         $baseForSources = route('dashboard.leads.list', Arr::except($request->query(), [
-            'crm_state', 'qualification', 'group_type', 'group_id', 'page',
+            'source', 'crm_state', 'qualification', 'group_type', 'group_id', 'page',
         ]));
 
         $baseForPlatforms = route('dashboard.leads.list', Arr::except($request->query(), [
@@ -2047,15 +2097,25 @@ class DashboardLeadsController extends Controller
         ]));
 
         // Options selects (labels ya listos)
-        $selectedChannel = (string) $request->query('campaign_origin', '');
+        $selectedSource = (string) $request->query('source', '');
+        $selectedOrigin = (string) $request->query('campaign_origin', '');
         $selectedPlatform = (string) $request->query('plataforma', '');
 
-        $channelOptions = [];
-        foreach (array_keys($channels) as $k) {
-            $channelOptions[] = [
+        $sourceOptions = [];
+        foreach (array_keys($sources) as $k) {
+            $sourceOptions[] = [
                 'value' => $k,
-                'label' => $k === '__NULL__' ? 'Sin Fuente' : $k,
-                'selected' => ((string) $k === $selectedChannel),
+                'label' => $sourceLabels[$k] ?? ($k === '__NULL__' ? 'Sin Source' : $k),
+                'selected' => ((string) $k === $selectedSource),
+            ];
+        }
+
+        $originOptions = [];
+        foreach (array_keys($channels) as $k) {
+            $originOptions[] = [
+                'value' => $k,
+                'label' => $k === '__NULL__' ? 'Sin Origen' : $k,
+                'selected' => ((string) $k === $selectedOrigin),
             ];
         }
 
@@ -2167,7 +2227,8 @@ class DashboardLeadsController extends Controller
                 'to_value' => $toValue,
                 'now_max' => $nowMax,
                 'customer_options' => $customerOptions,
-                'channel_options' => $channelOptions,
+                'source_options' => $sourceOptions,
+                'origin_options' => $originOptions,
                 'platform_options' => $platformOptions,
             ],
             'summary' => [

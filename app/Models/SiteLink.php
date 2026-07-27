@@ -5,7 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-class Origin extends Model
+class SiteLink extends Model
 {
     protected $fillable = [
         'source_id',
@@ -22,5 +22,4 @@ class Origin extends Model
     {
         return $this->belongsTo(Source::class);
     }
-
 }

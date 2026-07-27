@@ -17,7 +17,7 @@
                 <label class="block mb-1 text-white/70">Buscar</label>
                 <input name="q" value="{{ $q ?? request('q') }}"
                        class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
-                       placeholder="Buscar por nombre">
+                       placeholder="Buscar por codigo o nombre">
             </div>
 
             <div class="md:col-span-2 flex gap-2">
@@ -36,6 +36,7 @@
                 <thead class="bg-white/5 text-white/70">
                     <tr>
                         <th class="text-left px-3 py-2">ID</th>
+                        <th class="text-left px-3 py-2">Codigo</th>
                         <th class="text-left px-3 py-2">Nombre</th>
                         <th class="text-left px-3 py-2">Estado</th>
                         <th class="text-left px-3 py-2">Actualizado</th>
@@ -47,6 +48,9 @@
                     @forelse($sources as $source)
                         <tr class="hover:bg-white/5">
                             <td class="px-3 py-2">{{ $source->id }}</td>
+                            <td class="px-3 py-2">
+                                <span class="px-2 py-1 rounded-lg bg-white/10 border border-white/10 text-xs">{{ $source->code }}</span>
+                            </td>
                             <td class="px-3 py-2">{{ $source->name }}</td>
                             <td class="px-3 py-2">
                                 <span class="px-2 py-1 rounded-lg text-xs border {{ $source->is_active ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
@@ -73,7 +77,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="px-3 py-8 text-center text-white/60">No hay sources registrados.</td>
+                            <td colspan="6" class="px-3 py-8 text-center text-white/60">No hay sources registrados.</td>
                         </tr>
                     @endforelse
                 </tbody>

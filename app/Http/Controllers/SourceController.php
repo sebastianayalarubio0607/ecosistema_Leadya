@@ -70,6 +70,13 @@ class SourceController extends Controller
     private function validateRequest(Request $request, ?Source $source = null): array
     {
         return $request->validate([
+            'code' => [
+                'required',
+                'string',
+                'max:20',
+                'alpha_dash',
+                Rule::unique('sources', 'code')->ignore($source?->id),
+            ],
             'name' => [
                 'required',
                 'string',
