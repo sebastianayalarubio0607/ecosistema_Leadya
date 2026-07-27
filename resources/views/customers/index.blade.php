@@ -38,6 +38,7 @@
                         <th class="text-left px-3 py-2">Nombre</th>
                         <th class="text-left px-3 py-2">Status</th>
                         <th class="text-left px-3 py-2">FB Pixel ID</th>
+                        <th class="text-left px-3 py-2">FB Test Event Code</th>
                         <th class="text-left px-3 py-2">ID Google Ads</th>
                         <th class="text-left px-3 py-2">Divisa</th>
                         <th class="text-left px-3 py-2">Valor minimo</th>
@@ -56,6 +57,7 @@
                                 </span>
                             </td>
                             <td class="px-3 py-2">{{ $customer->fb_pixel_id ?: '—' }}</td>
+                            <td class="px-3 py-2">{{ $customer->fb_test_event_code ?: '—' }}</td>
                             <td class="px-3 py-2">{{ $customer->id_Gads ?: '—' }}</td>
                             <td class="px-3 py-2 font-mono">{{ $customer->defaultCurrency?->code ?? 'COP' }}</td>
                             <td class="px-3 py-2">{{ number_format((float) ($customer->default_lead_value ?? 100000), 2, '.', ',') }}</td>
@@ -107,7 +109,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td class="px-3 py-8 text-center text-white/60" colspan="9">No hay customers.</td>
+                            <td class="px-3 py-8 text-center text-white/60" colspan="10">No hay customers.</td>
                         </tr>
                     @endforelse
                 </tbody>

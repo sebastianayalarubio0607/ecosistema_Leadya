@@ -120,6 +120,11 @@
             </div>
 
             <div>
+                <div class="text-sm text-white/50">FB Test Event Code</div>
+                <div class="mt-1">{{ $customer->fb_test_event_code ?: '—' }}</div>
+            </div>
+
+            <div>
                 <div class="text-sm text-white/50">ID Google Ads</div>
                 <div class="mt-1">{{ $customer->id_Gads ?: '—' }}</div>
             </div>

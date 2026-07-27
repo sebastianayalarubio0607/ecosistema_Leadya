@@ -16,7 +16,7 @@ class Customer extends Model
 {
    use HasFactory;
     protected $table = 'customers'; // Nombre de la tabla
-    protected $fillable = ['name', 'description', 'token', 'status','fb_pixel_id','fb_access_token', 'id_Gads', 'default_currency_id', 'default_lead_value']; // Campos que se pueden asignar masivamente
+    protected $fillable = ['name', 'description', 'token', 'status','fb_pixel_id','fb_access_token', 'fb_test_event_code', 'id_Gads', 'default_currency_id', 'default_lead_value']; // Campos que se pueden asignar masivamente
 
     protected $casts = [
         'status' => 'boolean',

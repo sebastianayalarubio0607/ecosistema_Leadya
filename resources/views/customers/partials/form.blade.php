@@ -4,6 +4,7 @@
     $status = old('status', isset($customer) ? (int) $customer->status : 1);
     $fbPixelId = old('fb_pixel_id', $customer?->fb_pixel_id);
     $fbAccessToken = old('fb_access_token', $customer?->fb_access_token);
+    $fbTestEventCode = old('fb_test_event_code', $customer?->fb_test_event_code);
     $idGads = old('id_Gads', $customer?->id_Gads);
     $selectedCurrencyId = old('default_currency_id', $customer?->default_currency_id ?? ($defaultCurrencyId ?? null));
     $defaultLeadValue = old('default_lead_value', $customer?->default_lead_value ?? 100000);
@@ -48,6 +49,15 @@
                value="{{ $fbAccessToken }}"
                class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40" />
         @error('fb_access_token') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+    </div>
+
+    <div>
+        <label class="block mb-1 text-white/70">FB Test Event Code</label>
+        <input name="fb_test_event_code"
+               value="{{ $fbTestEventCode }}"
+               class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
+               placeholder="Ej: TEST6189" />
+        @error('fb_test_event_code') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
     </div>
 
     <div>

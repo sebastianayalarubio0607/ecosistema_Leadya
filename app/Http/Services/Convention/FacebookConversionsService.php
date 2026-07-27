@@ -35,12 +35,7 @@ class FacebookConversionsService
             $testCode = null;
         }
 
-        if ($lead->meta_lead_id) {
-            $leadIdMeta = $lead->meta_lead_id;
-
-        } else {
-            $leadIdMeta = $lead->id;
-        }
+        $isInstantForm = $this->isMetaInstantForm($lead);
 
         /**
          * ✅ event_name según crmState/metaEvent/nombre
@@ -72,6 +67,25 @@ class FacebookConversionsService
             ];
         }
 
+        if ($isInstantForm && trim((string) $lead->meta_lead_id) === '') {
+            return [
+                'ok' => false,
+                'error' => 'El lead de Formulario Instantáneo no tiene meta_lead_id.',
+                'request' => null,
+                'pixel_id' => $pixelId,
+                'test_event_code' => $testCode,
+                'event_name' => $event_name,
+                'lead_id' => $lead->id,
+            ];
+        }
+
+        if ($lead->meta_lead_id) {
+            $leadIdMeta = $lead->meta_lead_id;
+
+        } else {
+            $leadIdMeta = $lead->id;
+        }
+
         [$userData, $customData] = $this->buildPayload($lead);
 
         $endpoint = "https://graph.facebook.com/v24.0/{$pixelId}/events?access_token={$accessToken}";
@@ -83,8 +97,7 @@ class FacebookConversionsService
             'event_name' => $event_name,
             'event_time' => $event_time,
             'event_id' => $event_id,
-            'action_source' => 'website',
-            'event_source_url' => 'https://app.leadsya.com/',
+            'action_source' => $isInstantForm ? 'system_generated' : 'website',
 
             'user_data' => $this->filterNulls([
                 'client_ip_address' => $customData['client_ip'] ?? null,
@@ -102,6 +115,7 @@ class FacebookConversionsService
                 'country' => $userData['country'] ?? null,
 
                 'external_id' => ! empty($userData['external_id']) ? [$userData['external_id']] : null,
+                'lead_id' => $isInstantForm ? (string) $lead->meta_lead_id : null,
             ]),
 
             'custom_data' => $this->filterNulls(array_merge(
@@ -126,6 +140,10 @@ class FacebookConversionsService
                 $this->extractStandardEventCustomData($lead)
             )),
         ];
+
+        if (! $isInstantForm) {
+            $event['event_source_url'] = $lead->page_url ?: 'https://app.leadsya.com/';
+        }
 
         $payload = [
             'data' => [$event],
@@ -224,6 +242,14 @@ class FacebookConversionsService
         ], fn ($v) => ! is_null($v) && $v !== '');
 
         return [$userData, $customData];
+    }
+
+    protected function isMetaInstantForm(Lead $lead): bool
+    {
+        $instantForm = 'formulario instantáneo meta';
+
+        return Str::lower(trim((string) $lead->plataforma)) === $instantForm
+            || Str::lower(trim((string) $lead->campaign_origin)) === $instantForm;
     }
 
     protected function currencyCode(Customer $customer): string
