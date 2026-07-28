@@ -246,10 +246,15 @@ class FacebookConversionsService
 
     protected function isMetaInstantForm(Lead $lead): bool
     {
-        $instantForm = 'formulario instantáneo meta';
+        $instantForm = 'formularioinstantaneometa';
 
-        return Str::lower(trim((string) $lead->plataforma)) === $instantForm
-            || Str::lower(trim((string) $lead->campaign_origin)) === $instantForm;
+        return $this->normalizeInstantFormSource($lead->plataforma) === $instantForm
+            || $this->normalizeInstantFormSource($lead->campaign_origin) === $instantForm;
+    }
+
+    protected function normalizeInstantFormSource(?string $value): string
+    {
+        return preg_replace('/[^a-z0-9]+/', '', Str::lower(Str::ascii(trim((string) $value))));
     }
 
     protected function currencyCode(Customer $customer): string

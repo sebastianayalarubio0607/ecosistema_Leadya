@@ -53,30 +53,33 @@ class SendLeadToFacebook implements ShouldQueue
          */
         // Usar el customerId del job, no el del lead
         $result = $svc->sendLeadEvent($lead, $this->customerId);
+        $requestPayload = $result['request'] ?? null;
+        $eventPayload = data_get($requestPayload, 'data.0', []);
+        $userData = data_get($eventPayload, 'user_data', []);
+        $customData = data_get($eventPayload, 'custom_data', []);
 /**
  * Registra el resultado del envío en la tabla de logs de Facebook Conversions
  */
         $baseLog = [
             'lead_id'       => $lead->id,
             'customer_id'   => $this->customerId, // 👈 corregido
-            'event_name'    => $lead->crmState?->metaEvent?->nombre ?: 'Lead',
-            'event_time'    => $lead->created_at->now()->timestamp,// 👈 corregido
-            'action_source' => 'website',
-            'event_source_url' => $lead->page_url,
-            'user_data'     => [
-                'client_ip_address' => $lead->remote_ip ?? null,
-                'client_user_agent' => $lead->agent ?? null,
-                'fbp'               => $lead->fbp,
-                'fbc'               => $lead->fbc,
-                'em'                => $lead->email ?? null,
-                'ph'                => $lead->phone ?? null,
-                'fn'                => $lead->name ?? null,
-                'ln'                => $lead->last_Name ?? null,
-            ],
-            'custom_data' => [
-                'content_name' => 'Lead desde LP',
-                'lead_source'  => 'Facebook Ads',
-            ],
+            'event_name'    => data_get($eventPayload, 'event_name', $lead->crmState?->metaEvent?->nombre ?: 'Lead'),
+            'pixel_id'      => $result['pixel_id'] ?? null,
+            'event_time'    => data_get($eventPayload, 'event_time'),
+            'action_source' => data_get($eventPayload, 'action_source'),
+            'event_source_url' => data_get($eventPayload, 'event_source_url'),
+            'fbp'           => data_get($userData, 'fbp'),
+            'fbc'           => data_get($userData, 'fbc'),
+            'client_ip'     => data_get($userData, 'client_ip_address'),
+            'client_user_agent' => data_get($userData, 'client_user_agent'),
+            'test_event_code' => $result['test_event_code'] ?? null,
+            'user_data'     => $userData,
+            'custom_data' => $customData,
+            'request_payload' => $requestPayload,
+            'response_status' => $result['status'] ?? null,
+            'response_body' => $result['ok'] ? ($result['data'] ?? null) : ($result['error'] ?? null),
+            'success'       => (bool) $result['ok'],
+            'attempt'       => $this->attempts(),
             'sent_at'       => now(),
             'error_message' => $result['ok']
                 ? null
