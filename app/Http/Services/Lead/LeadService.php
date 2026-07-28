@@ -59,6 +59,7 @@ class LeadService
             'remote_ip'       => 'sometimes|nullable|string|max:10000',
             'page'            => 'sometimes|nullable|string|max:255',
             'page_url'        => 'sometimes|nullable|string|max:10000',
+            'site_url'        => 'sometimes|nullable|string|max:10000',
             'campaign_origin' => 'sometimes|nullable|string|max:255',
             'campaign_objective' => 'sometimes|nullable|integer',
             'message'         => 'sometimes|nullable|string|max:10000',
@@ -101,6 +102,16 @@ class LeadService
             'campo_text_3'    => 'sometimes|nullable|string',
             'campo_text_4'    => 'sometimes|nullable|string',
             'campo_text_5'    => 'sometimes|nullable|string',
+            'campo_text_6'    => 'sometimes|nullable|string',
+            'campo_text_7'    => 'sometimes|nullable|string',
+            'campo_text_8'    => 'sometimes|nullable|string',
+            'campo_text_9'    => 'sometimes|nullable|string',
+            'campo_text_10'   => 'sometimes|nullable|string',
+            'campo_text_11'   => 'sometimes|nullable|string',
+            'campo_text_12'   => 'sometimes|nullable|string',
+            'campo_text_13'   => 'sometimes|nullable|string',
+            'campo_text_14'   => 'sometimes|nullable|string',
+            'campo_text_15'   => 'sometimes|nullable|string',
             
         ]);
 

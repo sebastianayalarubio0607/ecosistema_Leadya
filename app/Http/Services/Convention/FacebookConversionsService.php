@@ -129,6 +129,7 @@ class FacebookConversionsService
                     'status' => $lead->status ?? null,
                     'page' => $lead->page ?? null,
                     'page_url' => $lead->page_url ?? null,
+                    'site_url' => $lead->site_url ?? null,
 
                     'agent' => $lead->agent ?? null,
                     'client_ip' => $customData['client_ip'] ?? null,
@@ -142,7 +143,7 @@ class FacebookConversionsService
         ];
 
         if (! $isInstantForm) {
-            $event['event_source_url'] = $lead->page_url ?: 'https://app.leadsya.com/';
+            $event['event_source_url'] = $lead->site_url ?: ($lead->page_url ?: 'https://app.leadsya.com/');
         }
 
         $payload = [

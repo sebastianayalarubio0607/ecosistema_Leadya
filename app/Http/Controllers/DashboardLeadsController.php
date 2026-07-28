@@ -244,7 +244,7 @@ class DashboardLeadsController extends Controller
             $out = fopen('php://output', 'w');
             fwrite($out, "\xEF\xBB\xBF"); // BOM UTF-8 para Excel
 
-            fputcsv($out, ['Fecha', 'ID', 'Telefono', 'Nombre', 'Apellido', 'Fuente', 'Medio', 'Campaign Objective', 'Estado', 'Cualificacion', 'Integraciones', 'Valor', 'page_url']);
+            fputcsv($out, ['Fecha', 'ID', 'Telefono', 'Nombre', 'Apellido', 'Fuente', 'Medio', 'Campaign Objective', 'Estado', 'Cualificacion', 'Integraciones', 'Valor', 'page_url', 'site_url']);
 
             $query->chunk(500, function ($rows) use ($out) {
                 foreach ($rows as $lead) {
@@ -260,6 +260,7 @@ class DashboardLeadsController extends Controller
 
                     $value = is_numeric($lead->value ?? null) ? (float) $lead->value : 0.0;
                     $pageUrl = $lead->page_url ?? '';
+                    $siteUrl = $lead->site_url ?? '';
 
                     fputcsv($out, [
                         optional($lead->created_at)->format('Y-m-d H:i'),
@@ -275,6 +276,7 @@ class DashboardLeadsController extends Controller
                         $this->leadIntegrationStatusesText($lead),
                         $value,
                         $pageUrl,
+                        $siteUrl,
                     ]);
                 }
             });
@@ -3179,6 +3181,8 @@ class DashboardLeadsController extends Controller
 
             $pageUrl = $lead->page_url ?? '';
             $pageUrlLabel = ($pageUrl === null || $pageUrl === '') ? '-' : $pageUrl;
+            $siteUrl = $lead->site_url ?? '';
+            $siteUrlLabel = ($siteUrl === null || $siteUrl === '') ? '-' : $siteUrl;
 
             return [
                 'created_at' => optional($lead->created_at)->format('Y-m-d H:i'),
@@ -3195,6 +3199,7 @@ class DashboardLeadsController extends Controller
                 'value' => $value,
                 'value_formatted' => $valueFormatted,
                 'page_url' => $pageUrlLabel,
+                'site_url' => $siteUrlLabel,
             ];
         });
 

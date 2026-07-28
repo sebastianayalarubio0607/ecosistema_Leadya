@@ -36,6 +36,7 @@ class Lead extends Model
         'remote_ip',
         'page',
         'page_url',
+        'site_url',
         'campaign_origin',
         'campaign_objective',
         'message',
@@ -77,6 +78,16 @@ class Lead extends Model
         'campo_text_3',
         'campo_text_4',
         'campo_text_5',
+        'campo_text_6',
+        'campo_text_7',
+        'campo_text_8',
+        'campo_text_9',
+        'campo_text_10',
+        'campo_text_11',
+        'campo_text_12',
+        'campo_text_13',
+        'campo_text_14',
+        'campo_text_15',
     ];
 
     protected $casts = [

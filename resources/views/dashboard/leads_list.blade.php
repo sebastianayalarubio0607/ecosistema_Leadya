@@ -68,7 +68,8 @@
                             <th class="text-left px-3 py-2">Cualificación</th>
                             <th class="text-left px-3 py-2">Integraciones</th>
                             <th class="text-left px-3 py-2">valor</th>
-                            <th class="text-left px-3 py-2 max-w-2xs">URL</th>
+                            <th class="text-left px-3 py-2 max-w-2xs">Page URL</th>
+                            <th class="text-left px-3 py-2 max-w-2xs">Site URL</th>
                         </tr>
                     </thead>
 
@@ -111,10 +112,11 @@
                                 </td>
                                 <td class="px-3 py-2 whitespace-nowrap">{{ $row['value_formatted'] }}</td>
                                 <td class="px-3 py-2 whitespace-nowrap w-64 truncate">{{ $row['page_url'] }}</td>
+                                <td class="px-3 py-2 whitespace-nowrap w-64 truncate">{{ $row['site_url'] }}</td>
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="13" class="px-3 py-8 text-center text-white/60">
+                                <td colspan="14" class="px-3 py-8 text-center text-white/60">
                                     No hay leads para este grupo en la ventana seleccionada.
                                 </td>
                             </tr>
