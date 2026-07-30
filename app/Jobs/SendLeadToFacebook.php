@@ -25,14 +25,18 @@ class SendLeadToFacebook implements ShouldQueue
 
     public int $leadId;
     public int $customerId;
+    public ?string $eventNameOverride;
 
     public $tries = 4;
     public $backoff = [60, 120, 300, 600];
 
-    public function __construct(int $leadId, int $customerId)
+    public function __construct(int $leadId, int $customerId, $eventNameOverride = null)
     {
         $this->leadId = $leadId;
         $this->customerId = $customerId;
+        $this->eventNameOverride = is_string($eventNameOverride) && trim($eventNameOverride) !== ''
+            ? trim($eventNameOverride)
+            : null;
         $this->onQueue('tracking');
     }
 /**
@@ -52,7 +56,7 @@ class SendLeadToFacebook implements ShouldQueue
          * Envía el lead a Facebook Conversions API
          */
         // Usar el customerId del job, no el del lead
-        $result = $svc->sendLeadEvent($lead, $this->customerId);
+        $result = $svc->sendLeadEvent($lead, $this->customerId, $this->eventNameOverride);
         $requestPayload = $result['request'] ?? null;
         $eventPayload = data_get($requestPayload, 'data.0', []);
         $userData = data_get($eventPayload, 'user_data', []);

@@ -18,7 +18,7 @@ class FacebookConversionsService
     private const DEFAULT_CURRENCY = 'COP';
     private const DEFAULT_VALUE = 100000;
 
-    public function sendLeadEvent(Lead $lead, int $customerId): array
+    public function sendLeadEvent(Lead $lead, int $customerId, ?string $eventNameOverride = null): array
     {
         $customer = Customer::findOrFail($customerId);
 
@@ -45,7 +45,10 @@ class FacebookConversionsService
         $event_name = 'Lead';
         $usedFallbackLeadEvent = true;
 
-        if (! empty($lead->crm_state)) {
+        if (is_string($eventNameOverride) && trim($eventNameOverride) !== '') {
+            $event_name = trim($eventNameOverride);
+            $usedFallbackLeadEvent = false;
+        } elseif (! empty($lead->crm_state)) {
             $lead->loadMissing('crmState.metaEvent');
             $dbEventName = $lead->crmState?->metaEvent?->nombre;
 
@@ -88,9 +91,9 @@ class FacebookConversionsService
 
         [$userData, $customData] = $this->buildPayload($lead);
 
-        $endpoint = "https://graph.facebook.com/v24.0/{$pixelId}/events?access_token={$accessToken}";
+        $endpoint = "https://graph.facebook.com/v25.0/{$pixelId}/events?access_token={$accessToken}";
 
-        $event_time = $userData['created_at'];
+        $event_time = optional($lead->updated_at)->copy()->timezone('UTC')->timestamp ?? now()->timestamp;
         $event_id = "lead_{$leadIdMeta}_{$event_time}";
 
         $event = [
@@ -142,8 +145,13 @@ class FacebookConversionsService
             )),
         ];
 
+        if ($isInstantForm) {
+            $event['event_source'] = 'crm';
+            $event['lead_event_source'] = 'Lead Quality';
+        }
+
         if (! $isInstantForm) {
-            $event['event_source_url'] = $lead->site_url ?: ($lead->page_url ?: 'https://app.leadsya.com/');
+            $event['event_source_url'] =  'https://leadsquality.leadsya.com/';
         }
 
         $payload = [

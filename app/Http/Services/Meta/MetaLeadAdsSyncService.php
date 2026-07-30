@@ -5,6 +5,7 @@ namespace App\Http\Services\Meta;
 use App\Http\Services\Integration\IntegrationService;
 use App\Http\Services\Lead\LeadFunnelHistoryService;
 use App\Http\Services\Lead\LeadService;
+use App\Jobs\SendLeadToFacebook;
 use App\Jobs\ProcessLeadIntegrationsJob;
 use App\Models\Lead;
 use App\Models\MetaAccessToken;
@@ -474,6 +475,14 @@ class MetaLeadAdsSyncService
         }
 
         $lead = $this->leadService->createLead($payload);
+        $lead->loadMissing('crmState');
+
+        if (blank($lead->crm_state)) {
+            SendLeadToFacebook::dispatch($lead->id, (int) $lead->customer_id, 'Lead');
+        } elseif (! empty($lead->crmState?->meta_event_id)) {
+            SendLeadToFacebook::dispatch($lead->id, (int) $lead->customer_id);
+        }
+
         $this->leadFunnelHistoryService->recordIfFunnelChanged($lead);
         $this->dispatchLeadIntegrations($lead);
 

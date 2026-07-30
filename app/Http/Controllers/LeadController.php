@@ -110,7 +110,13 @@ class LeadController extends Controller
          */
         if ($adSource['is_meta_ads']) {
             try {
-                SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
+                $lead->loadMissing('crmState');
+
+                if (blank($lead->crm_state)) {
+                    SendLeadToFacebook::dispatch($lead->id, $lead->customer_id, 'Lead');
+                } elseif (! empty($lead->crmState?->meta_event_id)) {
+                    SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
+                }
             } catch (\Throwable $exception) {
                 Log::warning('No fue posible despachar SendLeadToFacebook.', [
                     'lead_id' => $lead->id,
