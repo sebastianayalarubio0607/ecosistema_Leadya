@@ -18,9 +18,21 @@ new class extends Component {
 @php
     $navItems = [
         [
-            'label' => 'Dashboard Leads',
-            'route' => 'dashboard.leads',
-            'active' => ['dashboard.leads'],
+            'label' => 'Dashboards',
+            'route' => 'dashboard',
+            'active' => ['dashboard'],
+            'icon' => 'chart',
+        ],
+        [
+            'label' => 'Dashboard Gerencial de Leads',
+            'route' => 'dashboard.gerencial-leads',
+            'active' => ['dashboard.gerencial-leads', 'dashboard.gerencial-leads.*'],
+            'icon' => 'chart',
+        ],
+        [
+            'label' => 'Dashboard General De Leads',
+            'route' => 'dashboard.general-leads',
+            'active' => ['dashboard.general-leads'],
             'icon' => 'chart',
         ],
 

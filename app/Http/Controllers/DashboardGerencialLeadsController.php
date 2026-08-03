@@ -24,7 +24,7 @@ use Illuminate\Support\Str;
 /**
  * Controlador para manejar las vistas y endpoints relacionados con los leads en el dashboard.
  */
-class DashboardLeadsController extends Controller
+class DashboardGerencialLeadsController extends Controller
 {
     private const DONUT_MAX_ITEMS = 7;
 
@@ -59,7 +59,7 @@ class DashboardLeadsController extends Controller
     /**
      * Muestra la vista principal del dashboard de leads, con mÃ©tricas y filtros.
      */
-    public function leads(Request $request)
+    public function dashboardGerencialLeads(Request $request)
     {
         [$customerId, $integrationId] = $this->resolveRequestScope($request);
         $filters = $this->extractDashboardFilters($request);
@@ -134,7 +134,7 @@ class DashboardLeadsController extends Controller
             $to
         );
 
-        return view('dashboard.leads', compact(
+        return view('dashboard.gerencial_leads', compact(
             'customers',
             'customerId',
             'integrationId',
@@ -157,7 +157,7 @@ class DashboardLeadsController extends Controller
     * Export CSV (Excel) del listado de leads por grupo (filtro aplicado)
      * Nota: el export se basa en el mismo query que el listado paginado, para mantener consistencia entre ambos.
     */
-    public function leadsList(Request $request)
+    public function dashboardGerencialLeadsList(Request $request)
     {
         [$customerId, $integrationId] = $this->resolveRequestScope($request);
         [$groupType, $groupId] = $this->resolveRequestedGroup($request);
@@ -190,14 +190,14 @@ class DashboardLeadsController extends Controller
 
         $leads = $this->transformLeadListRows($leads);
 
-        $backUrl = route('dashboard.leads', Arr::except($request->query(), [
+        $backUrl = route('dashboard.gerencial-leads', Arr::except($request->query(), [
             'group_type', 'group_id', 'page',
         ]));
 
-        $exportUrl = route('dashboard.leads.list.export', Arr::except($request->query(), ['page']));
+        $exportUrl = route('dashboard.gerencial-leads.list.export', Arr::except($request->query(), ['page']));
         $periodLabel = $from->format('Y-m-d H:i').' -> '.$to->format('Y-m-d H:i');
 
-        return view('dashboard.leads_list', compact(
+        return view('dashboard.gerencial_leads_list', compact(
             'customers',
             'customerId',
             'integrationId',
@@ -219,7 +219,7 @@ class DashboardLeadsController extends Controller
     /**
      * Export CSV (Excel) del listado de leads por grupo (filtro aplicado)
      */
-    public function leadsListExport(Request $request)
+    public function dashboardGerencialLeadsListExport(Request $request)
     {
         [$customerId, $integrationId] = $this->resolveRequestScope($request);
         [$groupType, $groupId] = $this->resolveRequestedGroup($request);
@@ -1931,7 +1931,7 @@ class DashboardLeadsController extends Controller
             return array_map(function ($card) use ($totalLeads, $groupType, $baseCardsQuery) {
                 $count = (int) ($card['count'] ?? 0);
                 $pct = $totalLeads > 0 ? (int) round(($count / $totalLeads) * 100) : 0;
-                $url = route('dashboard.leads.list', array_merge($baseCardsQuery, [
+                $url = route('dashboard.gerencial-leads.list', array_merge($baseCardsQuery, [
                     'group_type' => $groupType,
                     'group_id' => $card['id'],
                 ]));
@@ -2056,7 +2056,7 @@ class DashboardLeadsController extends Controller
 
         // Calificados / Ventas
         $baseClick = Arr::except($request->query(), ['crm_state', 'qualification', 'group_type', 'group_id', 'page']);
-        $pendingUrl = route('dashboard.leads.list', array_merge($baseClick, [
+        $pendingUrl = route('dashboard.gerencial-leads.list', array_merge($baseClick, [
             'group_type' => 'crm_state',
             'group_id' => '__NULL__',
         ]));
@@ -2064,17 +2064,17 @@ class DashboardLeadsController extends Controller
         $salesFunnelId = $metric['sales_funnel_id'] ?? null;
 
         $qualifiedUrl = $qualifiedFunnelId
-            ? route('dashboard.leads.list', array_merge($baseClick, ['group_type' => 'funnel', 'group_id' => $qualifiedFunnelId]))
+            ? route('dashboard.gerencial-leads.list', array_merge($baseClick, ['group_type' => 'funnel', 'group_id' => $qualifiedFunnelId]))
             : null;
 
         $salesUrl = $salesFunnelId
-            ? route('dashboard.leads.list', array_merge($baseClick, ['group_type' => 'funnel', 'group_id' => $salesFunnelId]))
+            ? route('dashboard.gerencial-leads.list', array_merge($baseClick, ['group_type' => 'funnel', 'group_id' => $salesFunnelId]))
             : null;
 
         // Ã¢Å“â€¦ Leads NO Efectivos (por Qualification)
         $notEffectiveFunnelId = $metric['not_effective_funnel_id'] ?? null;
         $notEffectiveUrl = $notEffectiveFunnelId
-            ? route('dashboard.leads.list', array_merge($baseClick, ['group_type' => 'funnel', 'group_id' => $notEffectiveFunnelId]))
+            ? route('dashboard.gerencial-leads.list', array_merge($baseClick, ['group_type' => 'funnel', 'group_id' => $notEffectiveFunnelId]))
             : null;
 
         // Ã¢Å“â€¦ Valor total ventas (suma de leads.value para funnel Ventas)
@@ -2086,15 +2086,15 @@ class DashboardLeadsController extends Controller
         $sourcesDonut = $this->buildDonutChartData($sources, 'source', $sourceLabels, $sourceQualificationBreakdown);
         $platformsDonut = $this->buildDonutChartData($platforms, 'plataforma', [], $platformQualificationBreakdown);
 
-        $baseForChannels = route('dashboard.leads.list', Arr::except($request->query(), [
+        $baseForChannels = route('dashboard.gerencial-leads.list', Arr::except($request->query(), [
             'campaign_origin', 'crm_state', 'qualification', 'group_type', 'group_id', 'page',
         ]));
 
-        $baseForSources = route('dashboard.leads.list', Arr::except($request->query(), [
+        $baseForSources = route('dashboard.gerencial-leads.list', Arr::except($request->query(), [
             'source', 'crm_state', 'qualification', 'group_type', 'group_id', 'page',
         ]));
 
-        $baseForPlatforms = route('dashboard.leads.list', Arr::except($request->query(), [
+        $baseForPlatforms = route('dashboard.gerencial-leads.list', Arr::except($request->query(), [
             'plataforma', 'crm_state', 'qualification', 'group_type', 'group_id', 'page',
         ]));
 
@@ -2222,7 +2222,7 @@ class DashboardLeadsController extends Controller
                 'selected_customer_id' => $selectedCustomer?->id,
             ],
             'filters' => [
-                'action' => route('dashboard.leads'),
+                'action' => route('dashboard.gerencial-leads'),
                 'integration_id' => $integrationId,
                 'customer_id' => $customerId,
                 'from_value' => $fromValue,

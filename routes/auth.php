@@ -4,8 +4,9 @@ use App\Http\Controllers\Auth\VerifyEmailController;
 use App\Http\Controllers\CrmState\CrmStateWebController;
 use App\Http\Controllers\CurrencyController;
 use App\Http\Controllers\CustomerController;
-use App\Http\Controllers\DashboardLeadsController;
+use App\Http\Controllers\DashboardGerencialLeadsController;
 use App\Http\Controllers\Funnel\FunnelWebController;
+use App\Http\Controllers\GeneralLeadsDashboardController;
 use App\Http\Controllers\Integration\IntegrationWebController;
 use App\Http\Controllers\Integration\MondayBoardController;
 use App\Http\Controllers\IntegrationtypeWebController;
@@ -45,11 +46,13 @@ Route::middleware('auth')->group(function () {
     Route::resource('crmstates', CrmStateWebController::class);
     Route::resource('funnels', FunnelWebController::class);
 /**
- * Dashboard routes for managing leads. These routes are defined for viewing the leads dashboard, listing leads, and exporting the leads list. The routes are grouped under the 'dashboard' prefix and use the DashboardLeadsController for handling the requests. Each route is named for easy reference in the application.
+ * Dashboard Gerencial de Leads routes for managing leads. These routes are defined for viewing the gerencial leads dashboard, listing leads, and exporting the leads list. The routes are grouped under the 'dashboard' prefix and use the DashboardGerencialLeadsController for handling the requests. Each route is named for easy reference in the application.
  */
-    Route::get('/dashboard/leads', [DashboardLeadsController::class, 'leads'])->name('dashboard.leads');
-    Route::get('/dashboard/leads/list', [DashboardLeadsController::class, 'leadsList'])->name('dashboard.leads.list');
-    Route::get('/dashboard/leads/list/export', [DashboardLeadsController::class, 'leadsListExport'])->name('dashboard.leads.list.export');
+    Route::get('/dashboard/gerencial-leads', [DashboardGerencialLeadsController::class, 'dashboardGerencialLeads'])->name('dashboard.gerencial-leads');
+    Route::get('/dashboard/gerencial-leads/list', [DashboardGerencialLeadsController::class, 'dashboardGerencialLeadsList'])->name('dashboard.gerencial-leads.list');
+    Route::get('/dashboard/gerencial-leads/list/export', [DashboardGerencialLeadsController::class, 'dashboardGerencialLeadsListExport'])->name('dashboard.gerencial-leads.list.export');
+    Route::get('/dashboard/general-leads', GeneralLeadsDashboardController::class)->name('dashboard.general-leads');
+    Route::get('/dashboard/general-leads/list', [GeneralLeadsDashboardController::class, 'list'])->name('dashboard.general-leads.list');
 
 
     Volt::route('verify-email', 'pages.auth.verify-email')->name('verification.notice');

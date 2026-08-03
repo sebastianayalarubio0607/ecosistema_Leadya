@@ -1,7 +1,7 @@
 <x-app-layout>
     <x-slot name="header">
         <div class="flex items-center justify-between">
-            <h2 class="font-semibold text-xl text-indigo-200">Dashboard Leads</h2>
+            <h2 class="font-semibold text-xl text-indigo-200">Dashboard Gerencial de Leads</h2>
         </div>
     </x-slot>
 
@@ -81,7 +81,7 @@
                             Aplicar
                         </button>
 
-                        <a href="{{ route('dashboard.leads') }}"
+                        <a href="{{ route('dashboard.gerencial-leads') }}"
                             class="w-full text-center px-4 py-2 rounded-xl bg-zinc-950/25 hover:bg-white/10 text-white border border-white/10">
                             Limpiar
                         </a>
