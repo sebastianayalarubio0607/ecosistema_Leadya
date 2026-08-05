@@ -27,6 +27,9 @@ class CustomerFactory extends Factory
             'fb_pixel_id' => $this->faker->optional()->regexify('[0-9]{15,16}'),
             'fb_access_token' => $this->faker->optional()->sha256(),
             'fb_test_event_code' => $this->faker->optional()->lexify('TEST????'),
+            'Meta_dataset' => false,
+            'Meta_dataset_id' => null,
+            'Meta_dataset_token' => null,
             'created_at' => now(),
             'updated_at' => now(),
         ];

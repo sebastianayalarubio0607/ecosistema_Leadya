@@ -107,15 +107,56 @@
                 <div class="mt-1">{{ $customer->description ?: '—' }}</div>
             </div>
 
-            <div>
-                <div class="text-sm text-white/50">FB Pixel ID</div>
-                <div class="mt-1">{{ $customer->fb_pixel_id ?: '—' }}</div>
-            </div>
+            <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <h3 class="text-base font-semibold text-white">Conjuntos de datos</h3>
 
-            <div>
-                <div class="text-sm text-white/50">FB Access Token</div>
-                <div class="mt-2 text-sm break-all rounded-xl border border-white/10 bg-slate-900/60 p-3">
-                    {{ $customer->fb_access_token ?: '—' }}
+                <div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <section class="rounded-xl border border-white/10 bg-slate-900/40 p-4 space-y-3">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Conjuntos de datos pixel</div>
+                            <div class="mt-1 text-sm text-white/60">Se pondra el pixel de las landing page o Web.</div>
+                        </div>
+
+                        <div>
+                            <div class="text-sm text-white/50">FB Pixel ID</div>
+                            <div class="mt-1 break-all">{{ $customer->fb_pixel_id ?: '—' }}</div>
+                        </div>
+
+                        <div>
+                            <div class="text-sm text-white/50">FB Access Token</div>
+                            <div class="mt-2 text-sm break-all rounded-xl border border-white/10 bg-slate-900/60 p-3">
+                                {{ $customer->fb_access_token ?: '—' }}
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="rounded-xl border border-white/10 bg-slate-900/40 p-4 space-y-3">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Conjuntos de datos formulario instantaneo</div>
+                            <div class="mt-1 text-sm text-white/60">Se pondra el conjunto de datos para medir por separado los formularios instantaneos de meta o de CRM.</div>
+                        </div>
+
+                        <div>
+                            <div class="text-sm text-white/50">Meta_dataset</div>
+                            <div class="mt-1">
+                                <span class="px-2 py-1 rounded-lg text-xs border {{ (int) $customer->Meta_dataset === 1 ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
+                                    {{ (int) $customer->Meta_dataset === 1 ? 'Activo' : 'Inactivo' }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="text-sm text-white/50">Meta_dataset_id</div>
+                            <div class="mt-1 break-all">{{ $customer->Meta_dataset_id ?: '—' }}</div>
+                        </div>
+
+                        <div>
+                            <div class="text-sm text-white/50">Meta_dataset_token</div>
+                            <div class="mt-2 text-sm break-all rounded-xl border border-white/10 bg-slate-900/60 p-3">
+                                {{ $customer->Meta_dataset_token ?: '—' }}
+                            </div>
+                        </div>
+                    </section>
                 </div>
             </div>
 

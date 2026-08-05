@@ -30,6 +30,7 @@ class CustomerController extends Controller
                 $query->where(function ($innerQuery) use ($q) {
                     $innerQuery->where('name', 'like', "%{$q}%")
                         ->orWhere('fb_pixel_id', 'like', "%{$q}%")
+                        ->orWhere('Meta_dataset_id', 'like', "%{$q}%")
                         ->orWhere('id_Gads', 'like', "%{$q}%")
                         ->orWhereHas('metaAdAccounts', function ($accountQuery) use ($q) {
                             $accountQuery->where('meta_account_id', 'like', "%{$q}%")
@@ -38,7 +39,7 @@ class CustomerController extends Controller
                 });
             })
             ->latest()
-            ->paginate(25)
+            ->paginate(50)
             ->withQueryString();
 
         return view('customers.index', compact('customers', 'q'));
@@ -63,6 +64,9 @@ class CustomerController extends Controller
             'fb_pixel_id' => ['nullable', 'string', 'max:255'],
             'fb_access_token' => ['nullable', 'string', 'max:255'],
             'fb_test_event_code' => ['nullable', 'string', 'max:255'],
+            'Meta_dataset' => ['nullable', 'boolean'],
+            'Meta_dataset_id' => ['nullable', 'string', 'max:255'],
+            'Meta_dataset_token' => ['nullable', 'string', 'max:500'],
             'id_Gads' => ['nullable', 'string', 'max:32', 'regex:/^[0-9]+$/'],
             'default_currency_id' => ['nullable', 'exists:currencies,id'],
             'default_lead_value' => ['nullable', 'numeric', 'min:0'],
@@ -78,6 +82,7 @@ class CustomerController extends Controller
         $newMetaAdAccount = $this->extractNewMetaAdAccountData($data['new_meta_ad_account'] ?? []);
         unset($data['meta_page_ids']);
         unset($data['new_meta_ad_account']);
+        $data['Meta_dataset'] = $request->boolean('Meta_dataset');
         $data = $this->applyDefaultCustomerSettings($data);
         $data['status'] = (int) $data['status'];
 
@@ -148,6 +153,9 @@ class CustomerController extends Controller
             'fb_pixel_id' => ['nullable', 'string', 'max:255'],
             'fb_access_token' => ['nullable', 'string', 'max:255'],
             'fb_test_event_code' => ['nullable', 'string', 'max:255'],
+            'Meta_dataset' => ['nullable', 'boolean'],
+            'Meta_dataset_id' => ['nullable', 'string', 'max:255'],
+            'Meta_dataset_token' => ['nullable', 'string', 'max:500'],
             'id_Gads' => ['nullable', 'string', 'max:32', 'regex:/^[0-9]+$/'],
             'default_currency_id' => ['nullable', 'exists:currencies,id'],
             'default_lead_value' => ['nullable', 'numeric', 'min:0'],
@@ -164,6 +172,7 @@ class CustomerController extends Controller
         $newMetaAdAccount = $this->extractNewMetaAdAccountData($data['new_meta_ad_account'] ?? []);
         unset($data['meta_page_ids']);
         unset($data['new_meta_ad_account']);
+        $data['Meta_dataset'] = $request->boolean('Meta_dataset');
         $data = $this->applyDefaultCustomerSettings($data);
         $data['status'] = (int) $data['status'];
 

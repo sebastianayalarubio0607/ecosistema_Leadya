@@ -21,9 +21,16 @@ class FacebookConversionsService
     public function sendLeadEvent(Lead $lead, int $customerId, ?string $eventNameOverride = null): array
     {
         $customer = Customer::findOrFail($customerId);
+        $isInstantForm = $this->isMetaInstantForm($lead);
+        $useMetaDataset = $isInstantForm && (bool) data_get($customer, 'Meta_dataset');
 
-        $pixelId = data_get($customer, 'fb_pixel_id');
-        $accessToken = data_get($customer, 'fb_access_token');
+        $pixelId = $useMetaDataset
+            ? data_get($customer, 'Meta_dataset_id')
+            : data_get($customer, 'fb_pixel_id');
+
+        $accessToken = $useMetaDataset
+            ? data_get($customer, 'Meta_dataset_token')
+            : data_get($customer, 'fb_access_token');
 
         // ✅ test_event_code: intenta desde Lead, luego Customer, luego constante
         $testCode = trim((string) (
@@ -34,8 +41,6 @@ class FacebookConversionsService
         if ($testCode === '') {
             $testCode = null;
         }
-
-        $isInstantForm = $this->isMetaInstantForm($lead);
 
         /**
          * ✅ event_name según crmState/metaEvent/nombre
@@ -61,7 +66,7 @@ class FacebookConversionsService
         if (! $pixelId || ! $accessToken) {
             return [
                 'ok' => false,
-                'error' => 'Faltan credenciales de Facebook (pixel o access token).',
+                'error' => 'Faltan credenciales de Meta (pixel/dataset o access token).',
                 'request' => null,
                 'pixel_id' => $pixelId,
                 'test_event_code' => $testCode,
@@ -128,6 +133,8 @@ class FacebookConversionsService
 
                     'lead_id' => $leadIdMeta,
                     'lead_key' => $this->buildLeadKey($lead),
+                    'event_source' => $isInstantForm ? 'crm' : null,
+                    'lead_event_source' => $isInstantForm ? 'Lead Quality' : null,
 
                     'status' => $lead->status ?? null,
                     'page' => $lead->page ?? null,
@@ -144,11 +151,6 @@ class FacebookConversionsService
                 $this->extractStandardEventCustomData($lead)
             )),
         ];
-
-        if ($isInstantForm) {
-            $event['event_source'] = 'crm';
-            $event['lead_event_source'] = 'Lead Quality';
-        }
 
         if (! $isInstantForm) {
             $event['event_source_url'] =  'https://leadsquality.leadsya.com/';

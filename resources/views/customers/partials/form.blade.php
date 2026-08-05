@@ -5,6 +5,9 @@
     $fbPixelId = old('fb_pixel_id', $customer?->fb_pixel_id);
     $fbAccessToken = old('fb_access_token', $customer?->fb_access_token);
     $fbTestEventCode = old('fb_test_event_code', $customer?->fb_test_event_code);
+    $metaDataset = old('Meta_dataset', isset($customer) ? (int) $customer->Meta_dataset : 0);
+    $metaDatasetId = old('Meta_dataset_id', $customer?->Meta_dataset_id);
+    $metaDatasetToken = old('Meta_dataset_token', $customer?->Meta_dataset_token);
     $idGads = old('id_Gads', $customer?->id_Gads);
     $selectedCurrencyId = old('default_currency_id', $customer?->default_currency_id ?? ($defaultCurrencyId ?? null));
     $defaultLeadValue = old('default_lead_value', $customer?->default_lead_value ?? 100000);
@@ -35,20 +38,71 @@
         @error('status') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
     </div>
 
-    <div>
-        <label class="block mb-1 text-white/70">FB Pixel ID</label>
-        <input class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
-               name="fb_pixel_id"
-               value="{{ $fbPixelId }}" />
-        @error('fb_pixel_id') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
-    </div>
+    <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
+        <div class="mb-4">
+            <h3 class="text-base font-semibold text-white">Conjuntos de datos</h3>
+        </div>
 
-    <div>
-        <label class="block mb-1 text-white/70">FB Access Token</label>
-        <input name="fb_access_token"
-               value="{{ $fbAccessToken }}"
-               class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40" />
-        @error('fb_access_token') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            <section class="rounded-xl border border-white/10 bg-slate-900/40 p-4 space-y-4">
+                <div>
+                    <h4 class="text-sm font-semibold text-white">Conjuntos de datos pixel</h4>
+                    <p class="mt-1 text-sm text-white/60">Se pondra el pixel de las landing page o Web.</p>
+                </div>
+
+                <div>
+                    <label class="block mb-1 text-white/70">FB Pixel ID</label>
+                    <input class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
+                           name="fb_pixel_id"
+                           value="{{ $fbPixelId }}" />
+                    @error('fb_pixel_id') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+                </div>
+
+                <div>
+                    <label class="block mb-1 text-white/70">FB Access Token</label>
+                    <input name="fb_access_token"
+                           value="{{ $fbAccessToken }}"
+                           class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40" />
+                    @error('fb_access_token') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+                </div>
+            </section>
+
+            <section class="rounded-xl border border-white/10 bg-slate-900/40 p-4 space-y-4">
+                <div>
+                    <h4 class="text-sm font-semibold text-white">Conjuntos de datos formulario instantaneo</h4>
+                    <p class="mt-1 text-sm text-white/60">Se pondra el conjunto de datos para medir por separado los formularios instantaneos de meta o de CRM.</p>
+                </div>
+
+                <div>
+                    <input type="hidden" name="Meta_dataset" value="0">
+                    <x-toggle-switch
+                        name="Meta_dataset"
+                        value="1"
+                        label="Meta_dataset"
+                        :checked="(string) $metaDataset === '1'"
+                    >
+                        Habilita el envio de conversiones de formularios instantaneos separados a los de landing page o web.
+                    </x-toggle-switch>
+                    @error('Meta_dataset') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+                </div>
+
+                <div>
+                    <label class="block mb-1 text-white/70">Meta_dataset_id</label>
+                    <input class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
+                           name="Meta_dataset_id"
+                           value="{{ $metaDatasetId }}" />
+                    @error('Meta_dataset_id') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+                </div>
+
+                <div>
+                    <label class="block mb-1 text-white/70">Meta_dataset_token</label>
+                    <input name="Meta_dataset_token"
+                           value="{{ $metaDatasetToken }}"
+                           class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40" />
+                    @error('Meta_dataset_token') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+                </div>
+            </section>
+        </div>
     </div>
 
     <div>

@@ -17,7 +17,7 @@
                 <label class="block mb-1 text-white/70">Buscar</label>
                 <input name="q" value="{{ $q }}"
                        class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
-                       placeholder="Buscar por nombre, pixel id, Google Ads id o Meta Account..." />
+                       placeholder="Buscar por nombre, pixel id, dataset CRM, Google Ads id o Meta Account..." />
             </div>
 
             <div class="md:col-span-2 flex gap-2">
@@ -31,34 +31,59 @@
             </div>
         </form>
 
-        <div class="overflow-x-auto rounded-xl border border-white/10">
-            <table class="min-w-full text-sm">
+        <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between text-sm text-white/60">
+            <div>
+                Mostrando {{ $customers->firstItem() ?? 0 }}-{{ $customers->lastItem() ?? 0 }} de {{ $customers->total() }} customers
+            </div>
+            <div>50 items por pagina</div>
+        </div>
+
+        <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]">
+            <table class="w-full min-w-[1800px] table-fixed text-sm">
                 <thead class="bg-white/5 text-white/70">
                     <tr>
-                        <th class="text-left px-3 py-2">Nombre</th>
-                        <th class="text-left px-3 py-2">Status</th>
-                        <th class="text-left px-3 py-2">FB Pixel ID</th>
-                        <th class="text-left px-3 py-2">FB Test Event Code</th>
-                        <th class="text-left px-3 py-2">ID Google Ads</th>
-                        <th class="text-left px-3 py-2">Divisa</th>
-                        <th class="text-left px-3 py-2">Valor minimo</th>
-                        <th class="text-left px-3 py-2">Meta Account ID</th>
-                        <th class="text-left px-3 py-2">Meta Pages asociadas</th>
-                        <th class="text-left px-3 py-2 w-72">Acciones</th>
+                        <th class="w-48 text-left px-3 py-2 whitespace-nowrap">Nombre</th>
+                        <th class="w-28 text-left px-3 py-2 whitespace-nowrap">Status</th>
+                        <th class="w-44 text-left px-3 py-2 whitespace-nowrap">FB Pixel ID</th>
+                        <th class="w-32 text-left px-3 py-2 whitespace-nowrap">Meta_dataset</th>
+                        <th class="w-48 text-left px-3 py-2 whitespace-nowrap">Meta_dataset_id</th>
+                        <th class="w-72 text-left px-3 py-2 whitespace-nowrap">Meta_dataset_token</th>
+                        <th class="w-44 text-left px-3 py-2 whitespace-nowrap">FB Test Event Code</th>
+                        <th class="w-40 text-left px-3 py-2 whitespace-nowrap">ID Google Ads</th>
+                        <th class="w-24 text-left px-3 py-2 whitespace-nowrap">Divisa</th>
+                        <th class="w-36 text-left px-3 py-2 whitespace-nowrap">Valor minimo</th>
+                        <th class="w-56 text-left px-3 py-2 whitespace-nowrap">Meta Account ID</th>
+                        <th class="w-72 text-left px-3 py-2 whitespace-nowrap">Meta Pages asociadas</th>
+                        <th class="w-72 text-left px-3 py-2 whitespace-nowrap">Acciones</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-white/10 text-white/80">
                     @forelse ($customers as $customer)
-                        <tr class="hover:bg-white/5">
-                            <td class="px-3 py-2">{{ $customer->name }}</td>
+                        <tr class="align-top hover:bg-white/5">
+                            <td class="px-3 py-2 font-medium text-white break-words">{{ $customer->name }}</td>
                             <td class="px-3 py-2">
                                 <span class="px-2 py-1 rounded-lg text-xs border {{ (int) $customer->status === 1 ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
                                     {{ (int) $customer->status === 1 ? 'Activo' : 'Inactivo' }}
                                 </span>
                             </td>
-                            <td class="px-3 py-2">{{ $customer->fb_pixel_id ?: '—' }}</td>
+                            <td class="px-3 py-2 break-all">{{ $customer->fb_pixel_id ?: '—' }}</td>
+                            <td class="px-3 py-2">
+                                <span class="inline-flex px-2 py-1 rounded-lg text-xs border {{ (int) $customer->Meta_dataset === 1 ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
+                                    {{ (int) $customer->Meta_dataset === 1 ? 'Activo' : 'Inactivo' }}
+                                </span>
+                            </td>
+                            <td class="px-3 py-2">
+                                <div class="text-xs break-all rounded-lg border border-white/10 bg-white/5 px-2 py-1">
+                                    {{ $customer->Meta_dataset_id ?: '—' }}
+                                </div>
+                            </td>
+                            <td class="px-3 py-2">
+                                <div class="text-xs break-all rounded-lg border border-white/10 bg-white/5 px-2 py-1">
+                                    {{ $customer->Meta_dataset_token ?: '—' }}
+                                </div>
+                            </td>
                             <td class="px-3 py-2">{{ $customer->fb_test_event_code ?: '—' }}</td>
-                            <td class="px-3 py-2">{{ $customer->id_Gads ?: '—' }}</td>
+                            <td class="px-3 py-2 break-all">{{ $customer->id_Gads ?: '—' }}</td>
                             <td class="px-3 py-2 font-mono">{{ $customer->defaultCurrency?->code ?? 'COP' }}</td>
                             <td class="px-3 py-2">{{ number_format((float) ($customer->default_lead_value ?? 100000), 2, '.', ',') }}</td>
                             <td class="px-3 py-2">
@@ -84,7 +109,7 @@
                                 </div>
                             </td>
                             <td class="px-3 py-2">
-                                <div class="flex items-center gap-2">
+                                <div class="flex flex-wrap items-center gap-2">
                                     <a class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs"
                                        href="{{ route('customers.show', $customer) }}">
                                         Ver
@@ -109,7 +134,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td class="px-3 py-8 text-center text-white/60" colspan="10">No hay customers.</td>
+                            <td class="px-3 py-8 text-center text-white/60" colspan="13">No hay customers.</td>
                         </tr>
                     @endforelse
                 </tbody>
