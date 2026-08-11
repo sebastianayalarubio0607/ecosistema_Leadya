@@ -23,7 +23,7 @@ class CustomerController extends Controller
         $customers = Customer::query()
             ->with([
                 'defaultCurrency:id,name,code',
-                'metaAdAccounts:id,customer_id,meta_account_id',
+                'metaAdAccounts:id,customer_id,meta_account_id,is_subscribed_to_meta_app',
                 'metaPages:id,customer_id,name,meta_page_id',
             ])
             ->when($q !== '', function ($query) use ($q) {
@@ -130,7 +130,7 @@ class CustomerController extends Controller
         $customer->load([
             'metaPages:id,customer_id,name,meta_page_id',
             'metaAdAccounts' => fn ($query) => $query
-                ->select('id', 'customer_id', 'meta_account_id', 'name', 'status')
+                ->select('id', 'customer_id', 'meta_account_id', 'name', 'status', 'is_subscribed_to_meta_app', 'token_can_view_account')
                 ->orderBy('name')
                 ->orderBy('meta_account_id'),
         ]);

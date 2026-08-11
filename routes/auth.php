@@ -17,6 +17,7 @@ use App\Http\Controllers\GoogleAds\GoogleAdsConversionController;
 use App\Http\Controllers\GoogleAds\GoogleAdsCredentialController;
 use App\Http\Controllers\GoogleAds\GoogleAdsSyncController;
 use App\Http\Controllers\Meta\MetaAccessTokenController;
+use App\Http\Controllers\Meta\MetaAdAccountSubscriptionJobController;
 use App\Http\Controllers\Meta\MetaAdAccountController;
 use App\Http\Controllers\Meta\MetaAdController;
 use App\Http\Controllers\Meta\MetaAdInsightController;
@@ -26,6 +27,7 @@ use App\Http\Controllers\Meta\MetaEventController;
 use App\Http\Controllers\Meta\MetaFormController;
 use App\Http\Controllers\Meta\MetaFormFieldMappingController;
 use App\Http\Controllers\Meta\MetaPageController;
+use App\Http\Controllers\Meta\MetaPageSubscriptionJobController;
 use App\Http\Controllers\Meta\MetaSyncController;
 use App\Http\Controllers\Qualification\QualificationWebController;
 use Illuminate\Support\Facades\Route;
@@ -77,6 +79,8 @@ Route::middleware('auth')->group(function () {
 
     
     Route::prefix('google-ads')->name('google-ads.')->group(function () {
+        Route::view('/', 'google_ads.index')->name('index');
+
         Route::resource('credentials', GoogleAdsCredentialController::class)
             ->parameters(['credentials' => 'credential']);
 
@@ -110,12 +114,27 @@ Route::middleware('auth')->group(function () {
         ->name('integrations.monday.boards.sync-details');
 
 
- /**
-  * Meta routes for managing ad accounts, campaigns, ad sets, ads, access tokens, pages, forms, insights, and events. These routes are grouped under the 'meta' prefix and use resource controllers for standard CRUD operations. Additional routes are defined for specific actions like refreshing access tokens, syncing pages and forms, and consulting insights. Throttle middleware is applied to certain routes to limit the number of requests.
-  */
+    /**
+     * Meta routes for managing ad accounts, campaigns, ad sets, ads, access tokens, pages, forms, insights, and events. These routes are grouped under the 'meta' prefix and use resource controllers for standard CRUD operations. Additional routes are defined for specific actions like refreshing access tokens, syncing pages and forms, and consulting insights. Throttle middleware is applied to certain routes to limit the number of requests.
+     */
     Route::prefix('meta')->name('meta.')->group(function () {
+        Route::view('/', 'meta.index')->name('index');
+
         Route::resource('ad-accounts', MetaAdAccountController::class)
             ->parameters(['ad-accounts' => 'ad_account']);
+
+        Route::get('ad-accounts-subscriptions/jobs', [MetaAdAccountSubscriptionJobController::class, 'index'])
+            ->name('ad-accounts.subscription-jobs.index');
+        Route::post('ad-accounts-subscriptions/scan', [MetaAdAccountSubscriptionJobController::class, 'scan'])
+            ->name('ad-accounts.subscription-jobs.scan');
+        Route::post('ad-accounts-subscriptions/queued/{jobId}/release', [MetaAdAccountSubscriptionJobController::class, 'releaseQueued'])
+            ->name('ad-accounts.subscription-jobs.queued.release');
+        Route::post('ad-accounts-subscriptions/queued/release-all', [MetaAdAccountSubscriptionJobController::class, 'releaseAllQueued'])
+            ->name('ad-accounts.subscription-jobs.queued.release-all');
+        Route::post('ad-accounts-subscriptions/failed/{failedJob}/retry', [MetaAdAccountSubscriptionJobController::class, 'retry'])
+            ->name('ad-accounts.subscription-jobs.failed.retry');
+        Route::post('ad-accounts-subscriptions/failed/retry-all', [MetaAdAccountSubscriptionJobController::class, 'retryAll'])
+            ->name('ad-accounts.subscription-jobs.failed.retry-all');
 
         Route::resource('campaigns', MetaCampaignController::class);
 
@@ -138,6 +157,19 @@ Route::middleware('auth')->group(function () {
 
         Route::post('pages/sync', [MetaPageController::class, 'syncAll'])
             ->name('pages.sync-all');
+
+        Route::get('pages-subscriptions/jobs', [MetaPageSubscriptionJobController::class, 'index'])
+            ->name('pages.subscription-jobs.index');
+        Route::post('pages-subscriptions/scan', [MetaPageSubscriptionJobController::class, 'scan'])
+            ->name('pages.subscription-jobs.scan');
+        Route::post('pages-subscriptions/queued/{jobId}/release', [MetaPageSubscriptionJobController::class, 'releaseQueued'])
+            ->name('pages.subscription-jobs.queued.release');
+        Route::post('pages-subscriptions/queued/release-all', [MetaPageSubscriptionJobController::class, 'releaseAllQueued'])
+            ->name('pages.subscription-jobs.queued.release-all');
+        Route::post('pages-subscriptions/failed/{failedJob}/retry', [MetaPageSubscriptionJobController::class, 'retry'])
+            ->name('pages.subscription-jobs.failed.retry');
+        Route::post('pages-subscriptions/failed/retry-all', [MetaPageSubscriptionJobController::class, 'retryAll'])
+            ->name('pages.subscription-jobs.failed.retry-all');
 
         Route::post('pages/{page}/sync-forms', [MetaPageController::class, 'syncForms'])
             ->name('pages.sync-forms');

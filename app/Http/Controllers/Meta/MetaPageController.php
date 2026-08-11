@@ -22,7 +22,21 @@ class MetaPageController extends Controller
             ->with(['customer:id,name'])
             ->withCount('forms')
             ->when($request->filled('customer_id'), fn ($query) => $query->where('customer_id', $request->integer('customer_id')))
+            ->when($request->filled('meta_page_id'), fn ($query) => $query->where('meta_page_id', 'like', '%'.$request->string('meta_page_id')->toString().'%'))
+            ->when($request->filled('name'), fn ($query) => $query->where('name', 'like', '%'.$request->string('name')->toString().'%'))
             ->when($request->filled('status'), fn ($query) => $query->where('status', (bool) $request->integer('status')))
+            ->when($request->filled('leadgen'), fn ($query) => $query->where('is_leadgen_subscribed', (bool) $request->integer('leadgen')))
+            ->when($request->filled('forms'), function ($query) use ($request) {
+                $formsFilter = $request->string('forms')->toString();
+
+                if ($formsFilter === 'with') {
+                    $query->has('forms');
+                }
+
+                if ($formsFilter === 'without') {
+                    $query->doesntHave('forms');
+                }
+            })
             ->when($request->filled('search'), function ($query) use ($request) {
                 $search = $request->string('search')->toString();
 

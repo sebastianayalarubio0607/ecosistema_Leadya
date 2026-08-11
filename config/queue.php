@@ -43,6 +43,24 @@ return [
             'after_commit' => false,
         ],
 
+        'meta_ad_account_subscriptions' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION'),
+            'table' => env('META_AD_ACCOUNT_SUBSCRIPTION_QUEUE_TABLE', 'meta_ad_account_subscription_jobs'),
+            'queue' => env('META_AD_ACCOUNT_SUBSCRIPTION_QUEUE', 'meta-ad-account-subscriptions'),
+            'retry_after' => (int) env('META_AD_ACCOUNT_SUBSCRIPTION_RETRY_AFTER', 3700),
+            'after_commit' => false,
+        ],
+
+        'meta_page_subscriptions' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION'),
+            'table' => env('META_PAGE_SUBSCRIPTION_QUEUE_TABLE', 'meta_page_subscription_jobs'),
+            'queue' => env('META_PAGE_SUBSCRIPTION_QUEUE', 'meta-page-subscriptions'),
+            'retry_after' => (int) env('META_PAGE_SUBSCRIPTION_RETRY_AFTER', 3700),
+            'after_commit' => false,
+        ],
+
         'beanstalkd' => [
             'driver' => 'beanstalkd',
             'host' => env('BEANSTALKD_QUEUE_HOST', 'localhost'),

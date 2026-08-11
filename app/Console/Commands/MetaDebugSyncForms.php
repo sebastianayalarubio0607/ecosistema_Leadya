@@ -69,7 +69,7 @@ class MetaDebugSyncForms extends Command
 
         $this->newLine();
         $this->info('Consulta simulada');
-        $this->line('GET https://graph.facebook.com/'.trim((string) config('services.meta.graph_version', 'v24.0'), '/').'/'.$page->meta_page_id.'/leadgen_forms');
+        $this->line('GET https://graph.facebook.com/'.trim((string) config('services.meta.graph_version', 'v26.0'), '/').'/'.$page->meta_page_id.'/leadgen_forms');
         $this->line('fields=id,name,status,locale,questions');
         $this->line('limit=100');
         $this->line('token_source: '.($this->option('use-option-token') ? '--token' : 'BD'));

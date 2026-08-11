@@ -71,7 +71,7 @@ class MetaGraphService
 
     private function url(string $path): string
     {
-        $version = trim((string) config('services.meta.graph_version', 'v24.0'), '/');
+        $version = trim((string) config('services.meta.graph_version', 'v26.0'), '/');
         $cleanPath = ltrim($path, '/');
 
         return "https://graph.facebook.com/{$version}/{$cleanPath}";

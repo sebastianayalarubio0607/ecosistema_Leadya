@@ -33,9 +33,36 @@
             </div>
 
             <div class="rounded-xl border border-white/10 bg-white/5 p-4">
+                <div class="text-white/60 text-xs">Suscripcion Meta</div>
+                <div class="mt-1">
+                    <span class="inline-flex rounded-lg border px-2 py-1 text-xs font-semibold {{ $ad_account->is_subscribed_to_meta_app ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200 shadow-sm shadow-emerald-950/30' : 'bg-rose-500/15 border-rose-300/30 text-rose-200 shadow-sm shadow-rose-950/30' }}">
+                        {{ $ad_account->is_subscribed_to_meta_app ? 'Suscrita' : 'No suscrita' }}
+                    </span>
+                </div>
+            </div>
+
+            <div class="rounded-xl border border-white/10 bg-white/5 p-4">
+                <div class="text-white/60 text-xs">Token puede consultar</div>
+                <div class="text-white font-semibold">
+                    {{ is_null($ad_account->token_can_view_account) ? 'Sin validar' : ($ad_account->token_can_view_account ? 'Si' : 'No') }}
+                </div>
+            </div>
+
+            <div class="rounded-xl border border-white/10 bg-white/5 p-4">
                 <div class="text-white/60 text-xs">Timestamps</div>
                 <div class="text-white/80 text-sm">Creado: {{ $ad_account->created_at }}</div>
                 <div class="text-white/80 text-sm">Actualizado: {{ $ad_account->updated_at }}</div>
+                <div class="text-white/80 text-sm">Revision suscripcion: {{ optional($ad_account->subscription_checked_at)->format('Y-m-d H:i') ?: 'Sin validar' }}</div>
+            </div>
+
+            <div class="rounded-xl border border-white/10 bg-white/5 p-4 md:col-span-2">
+                <div class="text-white/60 text-xs mb-2">subscribed_apps</div>
+                <pre class="text-white/80 text-xs whitespace-pre-wrap break-all">{{ $ad_account->subscribed_apps ? json_encode($ad_account->subscribed_apps, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) : 'Sin respuesta registrada' }}</pre>
+            </div>
+
+            <div class="rounded-xl border border-white/10 bg-white/5 p-4 md:col-span-2">
+                <div class="text-white/60 text-xs mb-2">Ultimo error de suscripcion</div>
+                <div class="text-white/80 text-sm break-all">{{ $ad_account->subscription_last_error ?: 'Sin errores registrados' }}</div>
             </div>
         </div>
     </div>

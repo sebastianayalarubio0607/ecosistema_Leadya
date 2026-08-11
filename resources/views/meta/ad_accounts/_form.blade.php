@@ -37,4 +37,24 @@
             <option value="inactive" @selected($val==='inactive')>inactive</option>
         </select>
     </div>
+
+    <div>
+        <label class="block mb-1 text-white/70">Suscripcion Meta</label>
+        <input value="{{ $ad_account->is_subscribed_to_meta_app ? 'Suscrita' : 'No suscrita' }}"
+               disabled
+               class="w-full rounded-xl border p-2 font-semibold {{ $ad_account->is_subscribed_to_meta_app ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200' : 'bg-rose-500/15 border-rose-300/30 text-rose-200' }}">
+    </div>
+
+    <div>
+        <label class="block mb-1 text-white/70">Token puede consultar</label>
+        <input value="{{ is_null($ad_account->token_can_view_account) ? 'Sin validar' : ($ad_account->token_can_view_account ? 'Si' : 'No') }}"
+               disabled
+               class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/40 text-white/70">
+    </div>
+
+    <div class="md:col-span-2">
+        <label class="block mb-1 text-white/70">subscribed_apps</label>
+        <textarea rows="4" disabled
+                  class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/40 text-white/70">{{ $ad_account->subscribed_apps ? json_encode($ad_account->subscribed_apps, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) : 'Sin respuesta registrada' }}</textarea>
+    </div>
 </div>

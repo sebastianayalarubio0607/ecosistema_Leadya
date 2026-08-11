@@ -26,7 +26,7 @@ use Illuminate\Support\Str;
  */
 class MetaInsightsSyncService
 {
-    private string $graphVersion = 'v24.0';
+    private string $graphVersion = 'v26.0';
 
     /** @var array<string, \App\Models\MetaAdAccount> */
     private array $accountCache = [];

@@ -18,6 +18,32 @@ class MetaAdAccountController extends Controller
             $q->where('customer_id', $request->integer('customer_id'));
         }
 
+        if ($request->filled('meta_account_id')) {
+            $q->where('meta_account_id', 'like', '%'.$request->string('meta_account_id')->toString().'%');
+        }
+
+        if ($request->filled('name')) {
+            $q->where('name', 'like', '%'.$request->string('name')->toString().'%');
+        }
+
+        if ($request->filled('status')) {
+            $q->where('status', $request->string('status')->toString());
+        }
+
+        if ($request->filled('subscription')) {
+            $q->where('is_subscribed_to_meta_app', $request->boolean('subscription'));
+        }
+
+        if ($request->filled('token_can_view_account')) {
+            $tokenCanView = $request->string('token_can_view_account')->toString();
+
+            if ($tokenCanView === 'unknown') {
+                $q->whereNull('token_can_view_account');
+            } else {
+                $q->where('token_can_view_account', $tokenCanView === '1');
+            }
+        }
+
         if ($request->filled('search')) {
             $s = $request->string('search')->toString();
             $q->where(function ($qq) use ($s) {

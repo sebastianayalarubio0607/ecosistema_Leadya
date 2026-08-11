@@ -17,12 +17,21 @@ class MetaPage extends Model
         'last_synced_at',
         'last_token_refresh_at',
         'last_error',
+        'leadgen',
+        'is_leadgen_subscribed',
+        'subscription_checked_at',
+        'subscription_updated_at',
+        'subscription_last_error',
     ];
 
     protected $casts = [
         'status' => 'boolean',
+        'leadgen' => 'array',
+        'is_leadgen_subscribed' => 'boolean',
         'last_synced_at' => 'datetime',
         'last_token_refresh_at' => 'datetime',
+        'subscription_checked_at' => 'datetime',
+        'subscription_updated_at' => 'datetime',
     ];
 
     public function customer(): BelongsTo

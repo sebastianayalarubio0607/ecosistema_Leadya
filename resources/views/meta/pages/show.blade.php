@@ -15,6 +15,13 @@
             <div><span class="text-white/50">Meta Page ID:</span> {{ $page->meta_page_id }}</div>
             <div><span class="text-white/50">Nombre:</span> {{ $page->name }}</div>
             <div><span class="text-white/50">Estado CRM:</span> {{ $page->status ? 'Activa' : 'Inactiva' }}</div>
+            <div>
+                <span class="text-white/50">Leadgen:</span>
+                <span class="inline-flex rounded-lg border px-2 py-1 text-xs font-semibold {{ $page->is_leadgen_subscribed ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200 shadow-sm shadow-emerald-950/30' : 'bg-rose-500/15 border-rose-300/30 text-rose-200 shadow-sm shadow-rose-950/30' }}">
+                    {{ $page->is_leadgen_subscribed ? 'Suscrita' : 'No suscrita' }}
+                </span>
+            </div>
+            <div><span class="text-white/50">Revision suscripcion:</span> {{ optional($page->subscription_checked_at)->format('Y-m-d H:i') ?: 'Sin validar' }}</div>
             <div><span class="text-white/50">Última sync:</span> {{ optional($page->last_synced_at)->format('Y-m-d H:i') ?: '—' }}</div>
             <div><span class="text-white/50">Último refresh token:</span> {{ optional($page->last_token_refresh_at)->format('Y-m-d H:i') ?: '—' }}</div>
             <div>
@@ -24,6 +31,14 @@
             <div>
                 <div class="text-white/50 mb-1">Último error</div>
                 <div class="rounded-xl border border-white/10 bg-slate-900/60 p-3 text-sm">{{ $page->last_error ?: 'Sin errores registrados' }}</div>
+            </div>
+            <div>
+                <div class="text-white/50 mb-1">leadgen</div>
+                <pre class="rounded-xl border border-white/10 bg-slate-900/60 p-3 break-all text-xs whitespace-pre-wrap">{{ $page->leadgen ? json_encode($page->leadgen, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) : 'Sin respuesta registrada' }}</pre>
+            </div>
+            <div>
+                <div class="text-white/50 mb-1">Ultimo error de suscripcion</div>
+                <div class="rounded-xl border border-white/10 bg-slate-900/60 p-3 text-sm break-all">{{ $page->subscription_last_error ?: 'Sin errores registrados' }}</div>
             </div>
         </div>
 

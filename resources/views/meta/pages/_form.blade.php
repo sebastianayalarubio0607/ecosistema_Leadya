@@ -38,4 +38,24 @@
             <option value="0" @selected($status === '0')>Inactiva</option>
         </select>
     </div>
+
+    <div>
+        <label class="block mb-1 text-white/70">Leadgen</label>
+        <input value="{{ $page->is_leadgen_subscribed ? 'Suscrita' : 'No suscrita' }}"
+               disabled
+               class="w-full rounded-xl border p-2 font-semibold {{ $page->is_leadgen_subscribed ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200' : 'bg-rose-500/15 border-rose-300/30 text-rose-200' }}">
+    </div>
+
+    <div>
+        <label class="block mb-1 text-white/70">Revision suscripcion</label>
+        <input value="{{ optional($page->subscription_checked_at)->format('Y-m-d H:i') ?: 'Sin validar' }}"
+               disabled
+               class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/40 text-white/70">
+    </div>
+
+    <div class="md:col-span-2">
+        <label class="block mb-1 text-white/70">leadgen</label>
+        <textarea rows="4" disabled
+                  class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/40 text-white/70">{{ $page->leadgen ? json_encode($page->leadgen, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) : 'Sin respuesta registrada' }}</textarea>
+    </div>
 </div>

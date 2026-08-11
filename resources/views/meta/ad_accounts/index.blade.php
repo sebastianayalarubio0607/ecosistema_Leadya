@@ -4,20 +4,18 @@
 @section('subtitle', 'Cuentas publicitarias asociadas a clientes')
 
 @section('header_actions')
+    <form method="POST" action="{{ route('meta.ad-accounts.subscription-jobs.scan') }}">
+        @csrf
+        <button class="px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-white border border-white/10">Revisar suscripciones</button>
+    </form>
+    <a href="{{ route('meta.ad-accounts.subscription-jobs.index') }}" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">Jobs</a>
     <a href="{{ route('meta.ad-accounts.create') }}" class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10">+ Nueva</a>
 @endsection
 
 @section('content')
     <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 space-y-4">
         <form method="GET" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
-            <div class="md:col-span-5">
-                <label class="block mb-1 text-white/70">Buscar</label>
-                <input name="search" value="{{ request('search') }}"
-                       class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
-                       placeholder="Buscar por ID o nombre">
-            </div>
-
-            <div class="md:col-span-5">
+            <div class="md:col-span-3">
                 <label class="block mb-1 text-white/70">Cliente</label>
                 <select name="customer_id"
                         class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
@@ -30,7 +28,56 @@
                 </select>
             </div>
 
-            <div class="md:col-span-2 flex gap-2">
+            <div class="md:col-span-3">
+                <label class="block mb-1 text-white/70">Meta Account ID</label>
+                <input name="meta_account_id" value="{{ request('meta_account_id') }}"
+                       class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
+                       placeholder="ID de cuenta">
+            </div>
+
+            <div class="md:col-span-3">
+                <label class="block mb-1 text-white/70">Nombre</label>
+                <input name="name" value="{{ request('name') }}"
+                       class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
+                       placeholder="Nombre">
+            </div>
+
+            <div class="md:col-span-3">
+                <label class="block mb-1 text-white/70">Estado</label>
+                <select name="status" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+                    <option value="">-- Todos --</option>
+                    <option value="active" @selected(request('status') === 'active')>active</option>
+                    <option value="inactive" @selected(request('status') === 'inactive')>inactive</option>
+                </select>
+            </div>
+
+            <div class="md:col-span-3">
+                <label class="block mb-1 text-white/70">Suscripcion</label>
+                <select name="subscription" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+                    <option value="">-- Todas --</option>
+                    <option value="1" @selected(request('subscription') === '1')>Suscrita</option>
+                    <option value="0" @selected(request('subscription') === '0')>No suscrita</option>
+                </select>
+            </div>
+
+            <div class="md:col-span-3">
+                <label class="block mb-1 text-white/70">Token ve cuenta</label>
+                <select name="token_can_view_account" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+                    <option value="">-- Todos --</option>
+                    <option value="1" @selected(request('token_can_view_account') === '1')>Si</option>
+                    <option value="0" @selected(request('token_can_view_account') === '0')>No</option>
+                    <option value="unknown" @selected(request('token_can_view_account') === 'unknown')>Sin validar</option>
+                </select>
+            </div>
+
+            <div class="md:col-span-3">
+                <label class="block mb-1 text-white/70">Buscar general</label>
+                <input name="search" value="{{ request('search') }}"
+                       class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
+                       placeholder="ID o nombre">
+            </div>
+
+            <div class="md:col-span-3 flex gap-2">
                 <button class="w-full px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">Filtrar</button>
                 <a href="{{ route('meta.ad-accounts.index') }}" class="w-full text-center px-4 py-2 rounded-xl bg-zinc-950/25 hover:bg-white/10 text-white border border-white/10">Limpiar</a>
             </div>
@@ -44,6 +91,8 @@
                         <th class="text-left px-3 py-2">Meta Account ID</th>
                         <th class="text-left px-3 py-2">Nombre</th>
                         <th class="text-left px-3 py-2">Estado</th>
+                        <th class="text-left px-3 py-2">Suscripcion</th>
+                        <th class="text-left px-3 py-2">Token ve cuenta</th>
                         <th class="text-left px-3 py-2 w-56">Acciones</th>
                     </tr>
                 </thead>
@@ -55,6 +104,18 @@
                             <td class="px-3 py-2 font-semibold">{{ $it->meta_account_id }}</td>
                             <td class="px-3 py-2">{{ $it->name }}</td>
                             <td class="px-3 py-2">{{ $it->status }}</td>
+                            <td class="px-3 py-2">
+                                <span class="inline-flex rounded-lg border px-2 py-1 text-xs font-semibold {{ $it->is_subscribed_to_meta_app ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200 shadow-sm shadow-emerald-950/30' : 'bg-rose-500/15 border-rose-300/30 text-rose-200 shadow-sm shadow-rose-950/30' }}">
+                                    {{ $it->is_subscribed_to_meta_app ? 'Suscrita' : 'No suscrita' }}
+                                </span>
+                            </td>
+                            <td class="px-3 py-2">
+                                @if(is_null($it->token_can_view_account))
+                                    Sin validar
+                                @else
+                                    {{ $it->token_can_view_account ? 'Si' : 'No' }}
+                                @endif
+                            </td>
                             <td class="px-3 py-2">
                                 <div class="flex items-center gap-2">
                                     <a class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs"
@@ -75,7 +136,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="5" class="px-3 py-8 text-center text-white/60">
+                            <td colspan="7" class="px-3 py-8 text-center text-white/60">
                                 No hay cuentas para mostrar.
                             </td>
                         </tr>

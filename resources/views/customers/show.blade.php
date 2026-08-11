@@ -225,6 +225,13 @@
                                 <div class="min-w-0">
                                     <div class="text-sm font-semibold text-white break-all">{{ $account->meta_account_id }}</div>
                                     <div class="text-sm text-white/60">{{ $account->name ?: 'Sin nombre' }}</div>
+                                    <div class="mt-1 text-xs text-white/50">
+                                        Suscripcion:
+                                        <span class="inline-flex rounded-lg border px-2 py-0.5 text-[11px] font-semibold {{ $account->is_subscribed_to_meta_app ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200' : 'bg-rose-500/15 border-rose-300/30 text-rose-200' }}">
+                                            {{ $account->is_subscribed_to_meta_app ? 'Suscrita' : 'No suscrita' }}
+                                        </span>
+                                        | Token: {{ is_null($account->token_can_view_account) ? 'Sin validar' : ($account->token_can_view_account ? 'Si' : 'No') }}
+                                    </div>
                                 </div>
 
                                 <div class="flex items-center gap-2">
