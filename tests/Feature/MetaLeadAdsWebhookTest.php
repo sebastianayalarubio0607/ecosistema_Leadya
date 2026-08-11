@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Jobs\SyncMetaLeadsJob;
+use App\Jobs\SyncMetaPageLeadsJob;
 use App\Models\MetaWebhookEvent;
 use App\Services\Meta\MetaWebhookStorageService;
 use Illuminate\Http\Request;
@@ -71,7 +72,11 @@ class MetaLeadAdsWebhookTest extends TestCase
 
         $response->assertOk();
         $response->assertExactJson(['received' => true]);
-        Queue::assertPushed(SyncMetaLeadsJob::class);
+        Queue::assertPushed(SyncMetaPageLeadsJob::class, function (SyncMetaPageLeadsJob $job): bool {
+            return $job->metaPageId === 'page-123'
+                && $job->metaEventTime === '1710000000';
+        });
+        Queue::assertNotPushed(SyncMetaLeadsJob::class);
 
         $event = MetaWebhookEvent::query()->firstOrFail();
 
@@ -133,6 +138,9 @@ class MetaLeadAdsWebhookTest extends TestCase
         ];
 
         $this->postJson('/api/webhooks/meta/lead-ads', $payload)->assertOk();
+
+        Queue::assertPushed(SyncMetaLeadsJob::class);
+        Queue::assertNotPushed(SyncMetaPageLeadsJob::class);
 
         $this->assertSame(3, MetaWebhookEvent::query()->count());
         $this->assertSame(2, MetaWebhookEvent::query()->where('entry_id', 'waba-1')->count());
@@ -212,7 +220,8 @@ class MetaLeadAdsWebhookTest extends TestCase
 
         $response->assertOk();
         $response->assertExactJson(['received' => true]);
-        Queue::assertPushed(SyncMetaLeadsJob::class);
+        Queue::assertPushed(SyncMetaPageLeadsJob::class);
+        Queue::assertNotPushed(SyncMetaLeadsJob::class);
     }
 
     private function leadgenPayload(): array
