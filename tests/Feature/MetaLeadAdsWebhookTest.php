@@ -70,6 +70,9 @@ class MetaLeadAdsWebhookTest extends TestCase
             'X-Request-Id' => 'request-123',
         ]);
 
+        /**
+         * el response de Meta Webhook debe ser siempre 200 OK con un JSON {"received": true} para que Meta considere que el webhook fue recibido correctamente, independientemente de si hubo errores internos al almacenar el evento en la base de datos.
+         */
         $response->assertOk();
         $response->assertExactJson(['received' => true]);
         Queue::assertPushed(SyncMetaPageLeadsJob::class, function (SyncMetaPageLeadsJob $job): bool {

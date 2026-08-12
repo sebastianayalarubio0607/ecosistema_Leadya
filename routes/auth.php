@@ -10,6 +10,7 @@ use App\Http\Controllers\GeneralLeadsDashboardController;
 use App\Http\Controllers\Integration\IntegrationWebController;
 use App\Http\Controllers\Integration\MondayBoardController;
 use App\Http\Controllers\IntegrationtypeWebController;
+use App\Http\Controllers\LeadManagementController;
 use App\Http\Controllers\GoogleAds\GoogleAdsAdController;
 use App\Http\Controllers\GoogleAds\GoogleAdsAdGroupController;
 use App\Http\Controllers\GoogleAds\GoogleAdsCampaignController as GoogleAdsMetricsCampaignController;
@@ -29,6 +30,8 @@ use App\Http\Controllers\Meta\MetaFormFieldMappingController;
 use App\Http\Controllers\Meta\MetaPageController;
 use App\Http\Controllers\Meta\MetaPageSubscriptionJobController;
 use App\Http\Controllers\Meta\MetaSyncController;
+use App\Http\Controllers\Meta\MetaWhatsappController;
+use App\Http\Controllers\Meta\MetaWhatsappSubscriptionJobController;
 use App\Http\Controllers\Qualification\QualificationWebController;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
@@ -50,6 +53,9 @@ Route::middleware('auth')->group(function () {
 /**
  * Dashboard Gerencial de Leads routes for managing leads. These routes are defined for viewing the gerencial leads dashboard, listing leads, and exporting the leads list. The routes are grouped under the 'dashboard' prefix and use the DashboardGerencialLeadsController for handling the requests. Each route is named for easy reference in the application.
  */
+    Route::get('/gestion-leads', [LeadManagementController::class, 'index'])->name('lead-management.index');
+    Route::patch('/gestion-leads/{lead}/crm-state', [LeadManagementController::class, 'updateCrmState'])->name('lead-management.crm-state');
+    Route::patch('/gestion-leads/{lead}/value', [LeadManagementController::class, 'updateValue'])->name('lead-management.value');
     Route::get('/dashboard/gerencial-leads', [DashboardGerencialLeadsController::class, 'dashboardGerencialLeads'])->name('dashboard.gerencial-leads');
     Route::get('/dashboard/gerencial-leads/list', [DashboardGerencialLeadsController::class, 'dashboardGerencialLeadsList'])->name('dashboard.gerencial-leads.list');
     Route::get('/dashboard/gerencial-leads/list/export', [DashboardGerencialLeadsController::class, 'dashboardGerencialLeadsListExport'])->name('dashboard.gerencial-leads.list.export');
@@ -135,6 +141,22 @@ Route::middleware('auth')->group(function () {
             ->name('ad-accounts.subscription-jobs.failed.retry');
         Route::post('ad-accounts-subscriptions/failed/retry-all', [MetaAdAccountSubscriptionJobController::class, 'retryAll'])
             ->name('ad-accounts.subscription-jobs.failed.retry-all');
+
+        Route::resource('whatsapps', MetaWhatsappController::class)
+            ->parameters(['whatsapps' => 'whatsapp']);
+
+        Route::get('whatsapps-subscriptions/jobs', [MetaWhatsappSubscriptionJobController::class, 'index'])
+            ->name('whatsapps.subscription-jobs.index');
+        Route::post('whatsapps-subscriptions/scan', [MetaWhatsappSubscriptionJobController::class, 'scan'])
+            ->name('whatsapps.subscription-jobs.scan');
+        Route::post('whatsapps-subscriptions/queued/{jobId}/release', [MetaWhatsappSubscriptionJobController::class, 'releaseQueued'])
+            ->name('whatsapps.subscription-jobs.queued.release');
+        Route::post('whatsapps-subscriptions/queued/release-all', [MetaWhatsappSubscriptionJobController::class, 'releaseAllQueued'])
+            ->name('whatsapps.subscription-jobs.queued.release-all');
+        Route::post('whatsapps-subscriptions/failed/{failedJob}/retry', [MetaWhatsappSubscriptionJobController::class, 'retry'])
+            ->name('whatsapps.subscription-jobs.failed.retry');
+        Route::post('whatsapps-subscriptions/failed/retry-all', [MetaWhatsappSubscriptionJobController::class, 'retryAll'])
+            ->name('whatsapps.subscription-jobs.failed.retry-all');
 
         Route::resource('campaigns', MetaCampaignController::class);
 

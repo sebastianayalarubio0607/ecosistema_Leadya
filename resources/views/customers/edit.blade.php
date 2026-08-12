@@ -17,7 +17,13 @@
                 @csrf
                 @method('PUT')
 
-                @include('customers.partials.form', ['customer' => $customer, 'metaPages' => $metaPages, 'selectedMetaPageIds' => $selectedMetaPageIds])
+                @include('customers.partials.form', [
+                    'customer' => $customer,
+                    'metaPages' => $metaPages,
+                    'selectedMetaPageIds' => $selectedMetaPageIds,
+                    'metaWhatsapps' => $metaWhatsapps,
+                    'selectedMetaWhatsappIds' => $selectedMetaWhatsappIds,
+                ])
 
                 <div class="rounded-2xl border border-white/10 bg-white/5 p-4 space-y-3 text-white/80">
                     <div>
