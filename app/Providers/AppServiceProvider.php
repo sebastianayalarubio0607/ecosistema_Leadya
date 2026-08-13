@@ -4,8 +4,10 @@ namespace App\Providers;
 
 use App\Models\MetaAdAccount;
 use App\Models\MetaPage;
+use App\Models\MetaWhatsapp;
 use App\Observers\MetaAdAccountObserver;
 use App\Observers\MetaPageObserver;
+use App\Observers\MetaWhatsappObserver;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -25,5 +27,6 @@ class AppServiceProvider extends ServiceProvider
     {
         MetaAdAccount::observe(MetaAdAccountObserver::class);
         MetaPage::observe(MetaPageObserver::class);
+        MetaWhatsapp::observe(MetaWhatsappObserver::class);
     }
 }

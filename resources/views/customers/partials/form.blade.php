@@ -12,6 +12,7 @@
     $selectedCurrencyId = old('default_currency_id', $customer?->default_currency_id ?? ($defaultCurrencyId ?? null));
     $defaultLeadValue = old('default_lead_value', $customer?->default_lead_value ?? 100000);
     $selectedMetaPageIds = old('meta_page_ids', $selectedMetaPageIds ?? []);
+    $selectedMetaWhatsappIds = old('meta_whatsapp_ids', $selectedMetaWhatsappIds ?? []);
 @endphp
 
 <div class="space-y-4 text-white/80">
@@ -151,6 +152,12 @@
 
     @include('customers.partials.meta-ad-accounts', ['customer' => $customer])
 
+    @include('customers.partials.meta-whatsapps', [
+        'customer' => $customer,
+        'metaWhatsappsOptions' => $metaWhatsapps ?? collect(),
+        'selectedMetaWhatsappIds' => $selectedMetaWhatsappIds,
+    ])
+
     <div>
         <label class="block mb-2 text-white/70">Meta Pages asociadas</label>
         <div class="rounded-2xl border border-white/10 bg-white/5 p-3 space-y-3">
@@ -160,8 +167,13 @@
                     value="{{ $metaPage->id }}"
                     :checked="in_array($metaPage->id, $selectedMetaPageIds, true)"
                 >
-                    <span class="block">
-                        {{ $metaPage->name }} ({{ $metaPage->meta_page_id }})
+                    <span class="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                        <span class="break-all">
+                            {{ $metaPage->name }} ({{ $metaPage->meta_page_id }})
+                        </span>
+                        <span class="inline-flex w-fit rounded-lg border px-2 py-0.5 text-[11px] font-semibold {{ $metaPage->is_leadgen_subscribed ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200' : 'bg-rose-500/15 border-rose-300/30 text-rose-200' }}">
+                            Leadgen: {{ $metaPage->is_leadgen_subscribed ? 'Suscrita' : 'No suscrita' }}
+                        </span>
                         @if($metaPage->customer_id && $metaPage->customer_id !== ($customer->id ?? null))
                             <span class="block text-xs text-amber-300">Actualmente asignada a otro customer</span>
                         @endif

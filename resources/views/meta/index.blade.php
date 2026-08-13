@@ -15,10 +15,10 @@
             ],
             [
                 'title' => 'WhatsApp',
-                'description' => 'Administra WABAs, suscripciones webhook y mensajes de anuncios.',
+                'description' => 'Administra WABAs, clientes, suscripciones webhook y jobs asociados.',
                 'route' => 'meta.whatsapps.index',
                 'label' => 'Abrir WhatsApp',
-                'icon' => 'whatsapp',
+                'icon' => 'messages',
             ],
             [
                 'title' => 'Campanas',
@@ -106,8 +106,8 @@
                                 @case('accounts')
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M13 7a3 3 0 11-6 0 3 3 0 016 0z" /><path fill-rule="evenodd" d="M5 14a4 4 0 018 0v1a1 1 0 11-2 0v-1a2 2 0 10-4 0v1a1 1 0 11-2 0v-1z" clip-rule="evenodd" /><path d="M16 7a2 2 0 11-4 0 2 2 0 014 0z" /></svg>
                                     @break
-                                @case('whatsapp')
-                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 5a3 3 0 013-3h10a3 3 0 013 3v6a3 3 0 01-3 3H8.4l-3.8 2.85A1 1 0 013 16.05V14a3 3 0 01-1-2.24V5zm4 1a1 1 0 100 2h8a1 1 0 100-2H6zm0 4a1 1 0 100 2h5a1 1 0 100-2H6z" clip-rule="evenodd" /></svg>
+                                @case('messages')
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M2 5a3 3 0 013-3h10a3 3 0 013 3v6a3 3 0 01-3 3H8.4l-3.7 2.78A1 1 0 013 15.98V14H5a1 1 0 100-2 1 1 0 01-1-1V5zm4 1a1 1 0 100 2h8a1 1 0 100-2H6zm0 4a1 1 0 100 2h5a1 1 0 100-2H6z" clip-rule="evenodd" /></svg>
                                     @break
                                 @case('campaigns')
                                     <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor"><path d="M3 4a1 1 0 011-1h1.6a7 7 0 014.1 1.33l.6.44A5 5 0 0013.23 5H16a1 1 0 011 1v7a1 1 0 01-1 1h-2.77a7 7 0 01-4.1-1.33l-.6-.44A5 5 0 005.6 11H5v5a1 1 0 11-2 0V4z" /></svg>

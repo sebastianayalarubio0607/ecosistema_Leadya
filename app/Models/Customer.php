@@ -10,6 +10,7 @@ use App\Models\GoogleAdsCampaign;
 use \App\Models\MetaAdAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 class Customer extends Model
@@ -48,6 +49,11 @@ public function metaPages(): HasMany
 public function metaAccessTokens(): HasMany
 {
     return $this->hasMany(MetaAccessToken::class, 'customer_id');
+}
+
+public function metaWhatsapps(): BelongsToMany
+{
+    return $this->belongsToMany(MetaWhatsapp::class, 'customer_meta_whatsapp')->withTimestamps();
 }
 
 public function defaultCurrency(): BelongsTo

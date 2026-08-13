@@ -15,7 +15,13 @@
         <form method="POST" action="{{ route('customers.store') }}" class="space-y-4">
             @csrf
 
-            @include('customers.partials.form', ['customer' => null, 'metaPages' => $metaPages, 'selectedMetaPageIds' => $selectedMetaPageIds])
+            @include('customers.partials.form', [
+                'customer' => null,
+                'metaPages' => $metaPages,
+                'selectedMetaPageIds' => $selectedMetaPageIds,
+                'metaWhatsapps' => $metaWhatsapps,
+                'selectedMetaWhatsappIds' => $selectedMetaWhatsappIds,
+            ])
         </form>
     </div>
 @endsection

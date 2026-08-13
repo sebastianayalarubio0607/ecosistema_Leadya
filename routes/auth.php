@@ -30,6 +30,8 @@ use App\Http\Controllers\Meta\MetaFormFieldMappingController;
 use App\Http\Controllers\Meta\MetaPageController;
 use App\Http\Controllers\Meta\MetaPageSubscriptionJobController;
 use App\Http\Controllers\Meta\MetaSyncController;
+use App\Http\Controllers\Meta\MetaWhatsappController;
+use App\Http\Controllers\Meta\MetaWhatsappSubscriptionJobController;
 use App\Http\Controllers\Qualification\QualificationWebController;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
@@ -141,8 +143,21 @@ Route::middleware('auth')->group(function () {
         Route::post('ad-accounts-subscriptions/failed/retry-all', [MetaAdAccountSubscriptionJobController::class, 'retryAll'])
             ->name('ad-accounts.subscription-jobs.failed.retry-all');
 
-        Route::view('whatsapps', 'meta.whatsapps.index')
-            ->name('whatsapps.index');
+        Route::resource('whatsapps', MetaWhatsappController::class)
+            ->parameters(['whatsapps' => 'whatsapp']);
+
+        Route::get('whatsapps-subscriptions/jobs', [MetaWhatsappSubscriptionJobController::class, 'index'])
+            ->name('whatsapps.subscription-jobs.index');
+        Route::post('whatsapps-subscriptions/scan', [MetaWhatsappSubscriptionJobController::class, 'scan'])
+            ->name('whatsapps.subscription-jobs.scan');
+        Route::post('whatsapps-subscriptions/queued/{jobId}/release', [MetaWhatsappSubscriptionJobController::class, 'releaseQueued'])
+            ->name('whatsapps.subscription-jobs.queued.release');
+        Route::post('whatsapps-subscriptions/queued/release-all', [MetaWhatsappSubscriptionJobController::class, 'releaseAllQueued'])
+            ->name('whatsapps.subscription-jobs.queued.release-all');
+        Route::post('whatsapps-subscriptions/failed/{failedJob}/retry', [MetaWhatsappSubscriptionJobController::class, 'retry'])
+            ->name('whatsapps.subscription-jobs.failed.retry');
+        Route::post('whatsapps-subscriptions/failed/retry-all', [MetaWhatsappSubscriptionJobController::class, 'retryAll'])
+            ->name('whatsapps.subscription-jobs.failed.retry-all');
 
         Route::resource('campaigns', MetaCampaignController::class);
 

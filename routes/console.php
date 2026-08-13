@@ -4,6 +4,7 @@ use App\Jobs\RefreshGoogleAdsAccessTokenJob;
 use App\Jobs\RefreshMetaLongLivedTokenJob;
 use App\Jobs\MetaAdAccountSubscriptionScanJob;
 use App\Jobs\MetaPageSubscriptionScanJob;
+use App\Jobs\MetaWhatsappSubscriptionScanJob;
 use App\Jobs\PruneMetaSubscriptionFailedJobs;
 use App\Jobs\SyncGoogleAdsDailyMetricsJob;
 use App\Jobs\SyncMetaFormsJob;
@@ -54,6 +55,11 @@ Schedule::job(new SyncGoogleAdsDailyMetricsJob())
     ->withoutOverlapping();
 
 Schedule::job(new MetaAdAccountSubscriptionScanJob())
+    ->dailyAt('03:00')
+    ->timezone('America/Bogota')
+    ->withoutOverlapping();
+
+Schedule::job(new MetaWhatsappSubscriptionScanJob())
     ->dailyAt('03:00')
     ->timezone('America/Bogota')
     ->withoutOverlapping();

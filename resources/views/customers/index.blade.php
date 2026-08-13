@@ -17,7 +17,7 @@
                 <label class="block mb-1 text-white/70">Buscar</label>
                 <input name="q" value="{{ $q }}"
                        class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
-                       placeholder="Buscar por nombre, pixel id, dataset CRM, Google Ads id o Meta Account..." />
+                       placeholder="Buscar por nombre, pixel id, dataset CRM, Google Ads id, Meta Account o WABA..." />
             </div>
 
             <div class="md:col-span-2 flex gap-2">
@@ -39,7 +39,7 @@
         </div>
 
         <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]">
-            <table class="w-full min-w-[1800px] table-fixed text-sm">
+            <table class="w-full min-w-[2000px] table-fixed text-sm">
                 <thead class="bg-white/5 text-white/70">
                     <tr>
                         <th class="w-48 text-left px-3 py-2 whitespace-nowrap">Nombre</th>
@@ -53,6 +53,7 @@
                         <th class="w-24 text-left px-3 py-2 whitespace-nowrap">Divisa</th>
                         <th class="w-36 text-left px-3 py-2 whitespace-nowrap">Valor minimo</th>
                         <th class="w-56 text-left px-3 py-2 whitespace-nowrap">Meta Account ID</th>
+                        <th class="w-72 text-left px-3 py-2 whitespace-nowrap">Meta WhatsApp</th>
                         <th class="w-72 text-left px-3 py-2 whitespace-nowrap">Meta Pages asociadas</th>
                         <th class="w-72 text-left px-3 py-2 whitespace-nowrap">Acciones</th>
                     </tr>
@@ -89,11 +90,30 @@
                             <td class="px-3 py-2">
                                 <div class="space-y-1">
                                     @forelse($customer->metaAdAccounts as $account)
-                                        <div class="text-xs break-all rounded-lg border border-white/10 bg-white/5 px-2 py-1">
-                                            <span>{{ $account->meta_account_id }}</span>
-                                            <span class="ml-1 inline-flex rounded-lg border px-2 py-0.5 text-[11px] font-semibold {{ $account->is_subscribed_to_meta_app ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200' : 'bg-rose-500/15 border-rose-300/30 text-rose-200' }}">
-                                                {{ $account->is_subscribed_to_meta_app ? 'Suscrita' : 'No suscrita' }}
-                                            </span>
+                                        <div class="rounded-lg border border-white/10 bg-white/5 px-2 py-1">
+                                            <div class="text-xs break-all font-mono text-white">{{ $account->meta_account_id }}</div>
+                                            <div class="mt-1">
+                                                <span class="inline-flex rounded-lg border px-2 py-0.5 text-[11px] font-semibold {{ $account->is_subscribed_to_meta_app ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200' : 'bg-rose-500/15 border-rose-300/30 text-rose-200' }}">
+                                                    Meta app: {{ $account->is_subscribed_to_meta_app ? 'Suscrita' : 'No suscrita' }}
+                                                </span>
+                                            </div>
+                                        </div>
+                                    @empty
+                                        <span class="text-white/50">-</span>
+                                    @endforelse
+                                </div>
+                            </td>
+                            <td class="px-3 py-2">
+                                <div class="space-y-1">
+                                    @forelse($customer->metaWhatsapps as $whatsapp)
+                                        <div class="rounded-lg border border-white/10 bg-white/5 px-2 py-1">
+                                            <div class="text-xs break-all font-mono text-white">{{ $whatsapp->waba_id }}</div>
+                                            <div class="text-[11px] break-all text-white/50">Phone: {{ $whatsapp->phone_number_id ?: '-' }}</div>
+                                            <div class="mt-1">
+                                                <span class="inline-flex rounded-lg border px-2 py-0.5 text-[11px] font-semibold {{ $whatsapp->is_subscribed_to_meta_app ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200' : 'bg-rose-500/15 border-rose-300/30 text-rose-200' }}">
+                                                    Meta app: {{ $whatsapp->is_subscribed_to_meta_app ? 'Suscrita' : 'No suscrita' }}
+                                                </span>
+                                            </div>
                                         </div>
                                     @empty
                                         <span class="text-white/50">-</span>
@@ -103,8 +123,15 @@
                             <td class="px-3 py-2">
                                 <div class="space-y-1">
                                     @forelse($customer->metaPages as $metaPage)
-                                        <div class="text-xs break-all rounded-lg border border-white/10 bg-white/5 px-2 py-1">
-                                            {{ $metaPage->name }} ({{ $metaPage->meta_page_id }})
+                                        <div class="rounded-lg border border-white/10 bg-white/5 px-2 py-1">
+                                            <div class="text-xs break-all text-white">
+                                                {{ $metaPage->name }} ({{ $metaPage->meta_page_id }})
+                                            </div>
+                                            <div class="mt-1">
+                                                <span class="inline-flex rounded-lg border px-2 py-0.5 text-[11px] font-semibold {{ $metaPage->is_leadgen_subscribed ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200' : 'bg-rose-500/15 border-rose-300/30 text-rose-200' }}">
+                                                    Leadgen: {{ $metaPage->is_leadgen_subscribed ? 'Suscrita' : 'No suscrita' }}
+                                                </span>
+                                            </div>
                                         </div>
                                     @empty
                                         <span class="text-white/50">-</span>
@@ -137,7 +164,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td class="px-3 py-8 text-center text-white/60" colspan="13">No hay customers.</td>
+                            <td class="px-3 py-8 text-center text-white/60" colspan="14">No hay customers.</td>
                         </tr>
                     @endforelse
                 </tbody>

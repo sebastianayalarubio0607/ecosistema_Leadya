@@ -199,7 +199,16 @@
                 <div class="mt-2 space-y-2">
                     @forelse($customer->metaPages as $metaPage)
                         <div class="text-sm break-all rounded-xl border border-white/10 bg-white/5 p-3">
-                            {{ $metaPage->name }} ({{ $metaPage->meta_page_id }})
+                            <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+                                <div class="min-w-0">
+                                    <div class="font-semibold text-white break-all">{{ $metaPage->name }}</div>
+                                    <div class="text-xs font-mono text-white/60 break-all">{{ $metaPage->meta_page_id }}</div>
+                                </div>
+
+                                <span class="inline-flex w-fit rounded-lg border px-2 py-1 text-xs font-semibold {{ $metaPage->is_leadgen_subscribed ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200' : 'bg-rose-500/15 border-rose-300/30 text-rose-200' }}">
+                                    Leadgen: {{ $metaPage->is_leadgen_subscribed ? 'Suscrita' : 'No suscrita' }}
+                                </span>
+                            </div>
                         </div>
                     @empty
                         <div class="text-sm break-all rounded-xl border border-white/10 bg-white/5 p-3 text-white/60">
@@ -226,15 +235,15 @@
                                     <div class="text-sm font-semibold text-white break-all">{{ $account->meta_account_id }}</div>
                                     <div class="text-sm text-white/60">{{ $account->name ?: 'Sin nombre' }}</div>
                                     <div class="mt-1 text-xs text-white/50">
-                                        Suscripcion:
-                                        <span class="inline-flex rounded-lg border px-2 py-0.5 text-[11px] font-semibold {{ $account->is_subscribed_to_meta_app ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200' : 'bg-rose-500/15 border-rose-300/30 text-rose-200' }}">
-                                            {{ $account->is_subscribed_to_meta_app ? 'Suscrita' : 'No suscrita' }}
-                                        </span>
-                                        | Token: {{ is_null($account->token_can_view_account) ? 'Sin validar' : ($account->token_can_view_account ? 'Si' : 'No') }}
+                                        Token: {{ is_null($account->token_can_view_account) ? 'Sin validar' : ($account->token_can_view_account ? 'Si' : 'No') }}
                                     </div>
                                 </div>
 
-                                <div class="flex items-center gap-2">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="inline-flex rounded-lg border px-2 py-1 text-xs font-semibold {{ $account->is_subscribed_to_meta_app ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200' : 'bg-rose-500/15 border-rose-300/30 text-rose-200' }}">
+                                        Meta app: {{ $account->is_subscribed_to_meta_app ? 'Suscrita' : 'No suscrita' }}
+                                    </span>
+
                                     <span class="px-2 py-1 rounded-lg text-xs border {{ $account->status === 'active' ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
                                         {{ $account->status }}
                                     </span>
@@ -249,6 +258,52 @@
                     @empty
                         <div class="text-sm break-all rounded-xl border border-white/10 bg-white/5 p-3 text-white/60">
                             Sin Meta Ad Accounts asociadas.
+                        </div>
+                    @endforelse
+                </div>
+            </div>
+
+            <div>
+                <div class="flex items-center justify-between gap-3">
+                    <div class="text-sm text-white/50">Meta WhatsApp asociadas</div>
+                    <a href="{{ route('meta.whatsapps.create', ['customer_id' => $customer->id]) }}"
+                       class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs text-white">
+                        + Nueva WhatsApp
+                    </a>
+                </div>
+
+                <div class="mt-2 space-y-2">
+                    @forelse($customer->metaWhatsapps as $whatsapp)
+                        <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                            <div class="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+                                <div class="min-w-0">
+                                    <div class="text-sm font-semibold text-white break-all">{{ $whatsapp->waba_id }}</div>
+                                    <div class="text-sm text-white/60 break-all">Phone: {{ $whatsapp->phone_number_id ?: '-' }}</div>
+                                    <div class="text-sm text-white/60 break-all">WA ID: {{ $whatsapp->wa_id ?: '-' }}</div>
+                                    <div class="mt-1 text-xs text-white/50">
+                                        Token: {{ is_null($whatsapp->token_can_view_account) ? 'Sin validar' : ($whatsapp->token_can_view_account ? 'Si' : 'No') }}
+                                    </div>
+                                </div>
+
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <span class="inline-flex rounded-lg border px-2 py-1 text-xs font-semibold {{ $whatsapp->is_subscribed_to_meta_app ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200' : 'bg-rose-500/15 border-rose-300/30 text-rose-200' }}">
+                                        Meta app: {{ $whatsapp->is_subscribed_to_meta_app ? 'Suscrita' : 'No suscrita' }}
+                                    </span>
+
+                                    <span class="px-2 py-1 rounded-lg text-xs border {{ $whatsapp->status ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
+                                        {{ $whatsapp->status ? 'Activo' : 'Inactivo' }}
+                                    </span>
+
+                                    <a href="{{ route('meta.whatsapps.edit', $whatsapp) }}"
+                                       class="px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-white/10 text-xs text-white">
+                                        Editar
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    @empty
+                        <div class="text-sm break-all rounded-xl border border-white/10 bg-white/5 p-3 text-white/60">
+                            Sin Meta WhatsApp asociadas.
                         </div>
                     @endforelse
                 </div>

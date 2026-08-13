@@ -10,6 +10,7 @@ use App\Http\Controllers\LeadIntegrationController;
 use App\Http\Middleware\ApiAuthMiddleware;
 use App\Http\Controllers\Api\LeadCrmStateController;
 use App\Http\Controllers\Webhooks\MetaLeadAdsWebhookController;
+use App\Http\Controllers\Webhooks\MetaWhatsAppWebhookController;
 use App\Models\Customer;
 use Illuminate\Http\Request;
 
@@ -47,12 +48,16 @@ Route::get('/prueba-sin-auth', function () {
 });
 
 
-
+/**
+ * Actualiza el estado de un lead en el CRM
+ */
 Route::post('/integrations/leads/crm-state/{public_key}', [LeadCrmStateController::class, 'update'])
     ->middleware(['throttle:460,1']); // 60 por minuto (ajusta)
 
 Route::get('/webhooks/meta/lead-ads', [MetaLeadAdsWebhookController::class, 'verify']);
 Route::post('/webhooks/meta/lead-ads', [MetaLeadAdsWebhookController::class, 'receive']);
+Route::get('/webhooks/meta/whatsapp', [MetaWhatsAppWebhookController::class, 'verify']);
+Route::post('/webhooks/meta/whatsapp', [MetaWhatsAppWebhookController::class, 'receive']);
 
 Route::match(['get', 'post'], '/meta/sync-leads', function (Request $request) {
     $authValue = $request->bearerToken()
