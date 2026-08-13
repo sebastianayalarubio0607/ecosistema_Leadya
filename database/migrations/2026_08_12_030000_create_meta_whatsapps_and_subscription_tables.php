@@ -63,11 +63,9 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::dropIfExists('meta_whatsapp_messages');
-        Schema::dropIfExists('meta_whatsapp_subscription_failed_jobs');
-        Schema::dropIfExists('meta_whatsapp_subscription_jobs');
-        Schema::dropIfExists('customer_meta_whatsapp');
-        Schema::dropIfExists('meta_whatsapps');
+        // Intentionally left without destructive operations.
+        // These tables can contain queued jobs, failed job logs, webhook messages,
+        // and customer associations that must not be removed by an accidental rollback.
     }
 
     private function createQueueTable(string $tableName, string $indexPrefix): void
