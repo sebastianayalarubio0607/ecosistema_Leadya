@@ -354,6 +354,23 @@ class LeadCrmStateController extends Controller
         $this->dispatchTrackingJobsForLead($lead, $newCrmState);
     }
 
+    public function changeLeadStateForLead(
+        Lead $lead,
+        string $newCrmState,
+        LeadFunnelHistoryService $historyService
+    ): bool {
+        $updated = 0;
+
+        $this->processLeadStateChangeForLead(
+            $lead,
+            $newCrmState,
+            $historyService,
+            $updated
+        );
+
+        return $updated > 0;
+    }
+
     private function dispatchTrackingJobsForLead(Lead $lead, string $newCrmState): void
     {
         $adSource = LeadAdSourceClassifier::classify($lead);

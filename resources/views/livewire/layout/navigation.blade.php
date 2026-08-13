@@ -18,6 +18,12 @@ new class extends Component {
 @php
     $navItems = [
         [
+            'label' => 'Gestion de leads',
+            'route' => 'lead-management.index',
+            'active' => ['lead-management.*'],
+            'icon' => 'crm-states',
+        ],
+        [
             'label' => 'Dashboards',
             'route' => 'dashboard',
             'active' => ['dashboard'],

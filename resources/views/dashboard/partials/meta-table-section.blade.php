@@ -38,7 +38,17 @@
                 </thead>
                 <tbody class="divide-y divide-white/10">
                     @foreach ($table['rows'] as $row)
-                        <tr class="hover:bg-white/5">
+                        @php($rowUrl = $row['url'] ?? null)
+                        <tr
+                            @if($rowUrl)
+                                role="link"
+                                tabindex="0"
+                                title="Ver leads relacionados"
+                                onclick="window.location.href = @js($rowUrl)"
+                                onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); window.location.href = @js($rowUrl); }"
+                            @endif
+                            class="hover:bg-white/5 {{ $rowUrl ? 'cursor-pointer focus:bg-white/5 focus:outline-none focus:ring-2 focus:ring-indigo-300/50' : '' }}"
+                        >
                             @foreach ($table['columns'] as $column)
                                 <td class="px-3 py-2 whitespace-nowrap text-white/80">
                                     {{ $row[$column['key']] ?? '-' }}

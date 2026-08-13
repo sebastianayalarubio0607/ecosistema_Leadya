@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Services\GeneralLeads\GeneralLeadsAdsLiveMetricsService;
+use App\Http\Services\GeneralLeads\GeneralLeadsFilters;
 use App\Models\Customer;
 use App\Models\GoogleAdsAd;
 use App\Models\GoogleAdsAdGroup;
@@ -56,10 +58,24 @@ class DashboardGerencialLeadsController extends Controller
         'funnel_history',
     ];
 
+    private const ALLOWED_AD_SECTIONS = [
+        'meta_campaigns',
+        'meta_ad_sets',
+        'meta_ads',
+        'google_campaigns',
+        'google_ad_groups',
+        'google_ads',
+    ];
+
     /**
      * Muestra la vista principal del dashboard de leads, con mÃ©tricas y filtros.
      */
     public function dashboardGerencialLeads(Request $request)
+    {
+        return view('dashboard.gerencial_leads');
+    }
+
+    public function livewireDashboardPayload(Request $request, bool $includeAdvertisingTables = true): array
     {
         [$customerId, $integrationId] = $this->resolveRequestScope($request);
         $filters = $this->extractDashboardFilters($request);
@@ -84,7 +100,8 @@ class DashboardGerencialLeadsController extends Controller
             $metric,
             $from,
             $to,
-            $nowMax
+            $nowMax,
+            $includeAdvertisingTables
         );
 
         $defaultCustomerName = $selectedCustomer?->name ?? 'Todos los clientes';
@@ -110,31 +127,37 @@ class DashboardGerencialLeadsController extends Controller
             true
         );
 
-        $googleCampaignSummary = $this->buildGoogleCampaignLeadSummary(
-            $customerId,
-            $integrationId,
-            $metric['filters'] ?? [],
-            $from,
-            $to
-        );
+        $googleCampaignSummary = $includeAdvertisingTables
+            ? $this->buildGoogleCampaignLeadSummary(
+                $customerId,
+                $integrationId,
+                $metric['filters'] ?? [],
+                $from,
+                $to
+            )
+            : $this->normalizeAdvertisingSection('Campañas Google', [], $defaultCustomerName);
 
-        $googleAdGroupSummary = $this->buildGoogleAdGroupLeadSummary(
-            $customerId,
-            $integrationId,
-            $metric['filters'] ?? [],
-            $from,
-            $to
-        );
+        $googleAdGroupSummary = $includeAdvertisingTables
+            ? $this->buildGoogleAdGroupLeadSummary(
+                $customerId,
+                $integrationId,
+                $metric['filters'] ?? [],
+                $from,
+                $to
+            )
+            : $this->normalizeAdvertisingSection('Grupos de anuncios Google', [], $defaultCustomerName);
 
-        $googleAdSummary = $this->buildGoogleAdLeadSummary(
-            $customerId,
-            $integrationId,
-            $metric['filters'] ?? [],
-            $from,
-            $to
-        );
+        $googleAdSummary = $includeAdvertisingTables
+            ? $this->buildGoogleAdLeadSummary(
+                $customerId,
+                $integrationId,
+                $metric['filters'] ?? [],
+                $from,
+                $to
+            )
+            : $this->normalizeAdvertisingSection('Anuncios Google', [], $defaultCustomerName);
 
-        return view('dashboard.gerencial_leads', compact(
+        return compact(
             'customers',
             'customerId',
             'integrationId',
@@ -150,7 +173,7 @@ class DashboardGerencialLeadsController extends Controller
             'googleCampaignSummary',
             'googleAdGroupSummary',
             'googleAdSummary'
-        ));
+        );
     }
 
     /*
@@ -165,9 +188,11 @@ class DashboardGerencialLeadsController extends Controller
         [$from, $to, $nowMax] = $this->resolveRequestedDateRange($request);
         [$customers, $selectedCustomer] = $this->resolveCustomerSelection($customerId);
 
-        $groupLabel = $this->resolveGroupDisplayLabel($groupType, $groupId);
+        $groupLabel = $groupType === 'advertising'
+            ? $this->resolveAdvertisingDisplayLabel($request)
+            : $this->resolveGroupDisplayLabel($groupType, $groupId);
 
-        $totalValueFormatted = $this->formatGroupedLeadsValue(
+        $query = $this->buildGroupedLeadsQuery(
             $customerId,
             $integrationId,
             $filters,
@@ -176,22 +201,17 @@ class DashboardGerencialLeadsController extends Controller
             $from,
             $to
         );
+        $this->applyAdvertisingEntityFilter($query, $request, $filters, $from, $to);
 
-        $leads = $this->paginateGroupedLeads(
-            $customerId,
-            $integrationId,
-            $filters,
-            $groupType,
-            $groupId,
-            20,
-            $from,
-            $to
-        )->withQueryString();
+        $totalValueFormatted = $this->formatLeadQueryValue($query, $groupType);
+
+        $leads = $query->paginate(20)->withQueryString();
 
         $leads = $this->transformLeadListRows($leads);
+        $tableColumns = $this->leadListColumns();
 
         $backUrl = route('dashboard.gerencial-leads', Arr::except($request->query(), [
-            'group_type', 'group_id', 'page',
+            'group_type', 'group_id', 'ad_section', 'ad_entity_id', 'ad_entity_name', 'page',
         ]));
 
         $exportUrl = route('dashboard.gerencial-leads.list.export', Arr::except($request->query(), ['page']));
@@ -206,6 +226,7 @@ class DashboardGerencialLeadsController extends Controller
             'groupType',
             'groupId',
             'groupLabel',
+            'tableColumns',
             'leads',
             'backUrl',
             'exportUrl',
@@ -226,7 +247,9 @@ class DashboardGerencialLeadsController extends Controller
         $filters = $this->extractListFilters($request);
         [$from, $to] = $this->resolveRequestedDateRange($request);
 
-        $groupLabel = $this->resolveGroupDisplayLabel($groupType, $groupId);
+        $groupLabel = $groupType === 'advertising'
+            ? $this->resolveAdvertisingDisplayLabel($request)
+            : $this->resolveGroupDisplayLabel($groupType, $groupId);
         $safeLabel = Str::slug($groupLabel ?: 'leads', '_');
         $filename = "leads_{$safeLabel}_".now()->format('Ymd_His').'.csv';
 
@@ -239,45 +262,19 @@ class DashboardGerencialLeadsController extends Controller
             $from,
             $to
         );
+        $this->applyAdvertisingEntityFilter($query, $request, $filters, $from, $to);
 
-        return response()->streamDownload(function () use ($query) {
+        $columns = $this->leadListColumns();
+
+        return response()->streamDownload(function () use ($query, $columns) {
             $out = fopen('php://output', 'w');
             fwrite($out, "\xEF\xBB\xBF"); // BOM UTF-8 para Excel
 
-            fputcsv($out, ['Fecha', 'ID', 'Telefono', 'Nombre', 'Apellido', 'Fuente', 'Medio', 'Campaign Objective', 'Estado', 'Cualificacion', 'Integraciones', 'Valor', 'page_url', 'site_url']);
+            fputcsv($out, array_column($columns, 'label'));
 
-            $query->chunk(500, function ($rows) use ($out) {
+            $query->chunk(500, function ($rows) use ($out, $columns) {
                 foreach ($rows as $lead) {
-                    $phone = $lead->telefono ?? $lead->phone ?? $lead->phone_number ?? $lead->celular ?? $lead->movil ?? null;
-                    $first = $lead->nombre ?? $lead->first_name ?? $lead->name ?? $lead->nombres ?? null;
-                    $last = $lead->apellido ?? $lead->last_name ?? $lead->lastname ?? $lead->apellidos ?? null;
-
-                    $fuente = $lead->campaign_origin;
-                    $medio = $lead->plataforma;
-
-                    $fuenteLabel = ($fuente === null || $fuente === '') ? 'Sin Fuente' : $fuente;
-                    $medioLabel = ($medio === null || $medio === '') ? 'Sin Medio' : $medio;
-
-                    $value = is_numeric($lead->value ?? null) ? (float) $lead->value : 0.0;
-                    $pageUrl = $lead->page_url ?? '';
-                    $siteUrl = $lead->site_url ?? '';
-
-                    fputcsv($out, [
-                        optional($lead->created_at)->format('Y-m-d H:i'),
-                        $lead->id,
-                        $phone ?? '',
-                        $first ?? '',
-                        $last ?? '',
-                        $fuenteLabel,
-                        $medioLabel,
-                        $lead->campaign_objective_name ?? 'Sin Campaign Objective',
-                        $lead->crm_state_name ?? 'Sin Estado',
-                        $lead->qualification_name ?? 'Sin CualificaciÃ³n',
-                        $this->leadIntegrationStatusesText($lead),
-                        $value,
-                        $pageUrl,
-                        $siteUrl,
-                    ]);
+                    fputcsv($out, $this->leadListExportRow($lead, $columns));
                 }
             });
 
@@ -329,12 +326,63 @@ class DashboardGerencialLeadsController extends Controller
     {
         $groupType = (string) $request->get('group_type', '');
         $groupId = (string) $request->get('group_id', '');
+        $adSection = (string) $request->get('ad_section', '');
+        $adEntityId = (string) $request->get('ad_entity_id', '');
+
+        if ($adSection !== '' || $adEntityId !== '') {
+            if (! in_array($adSection, self::ALLOWED_AD_SECTIONS, true) || $adEntityId === '') {
+                abort(404);
+            }
+
+            return ['advertising', $adEntityId];
+        }
 
         if (! in_array($groupType, self::ALLOWED_GROUP_TYPES, true) || $groupId === '') {
             abort(404);
         }
 
         return [$groupType, $groupId];
+    }
+
+    private function resolveAdvertisingDisplayLabel(Request $request): string
+    {
+        $section = (string) $request->get('ad_section', '');
+        $entityName = trim((string) $request->get('ad_entity_name', ''));
+        $entityId = (string) $request->get('ad_entity_id', '');
+
+        $label = match ($section) {
+            'meta_campaigns' => 'Campaña Meta',
+            'meta_ad_sets' => 'Grupo De Anuncios Meta',
+            'meta_ads' => 'Anuncio Meta',
+            'google_campaigns' => 'Campaña Google',
+            'google_ad_groups' => 'Grupo De Anuncios Google',
+            'google_ads' => 'Anuncio Google',
+            default => 'Pauta',
+        };
+
+        $name = $entityName !== '' ? $entityName : $entityId;
+
+        return $name !== '' ? "{$label}: {$name}" : $label;
+    }
+
+    private function formatLeadQueryValue(Builder $query, string $groupType): string
+    {
+        $leadTable = (new Lead)->getTable();
+
+        if (! Schema::hasColumn($leadTable, 'value')) {
+            return '$ 0';
+        }
+
+        if ($groupType === 'funnel_history') {
+            $leadIdsSubquery = (clone $query)->reorder()->select("{$leadTable}.id")->distinct();
+            $totalValue = (float) Lead::query()
+                ->whereIn("{$leadTable}.id", $leadIdsSubquery)
+                ->sum("{$leadTable}.value");
+        } else {
+            $totalValue = (float) (clone $query)->reorder()->sum("{$leadTable}.value");
+        }
+
+        return '$ '.number_format($totalValue, 0, ',', '.');
     }
 
     /**
@@ -1008,10 +1056,27 @@ class DashboardGerencialLeadsController extends Controller
             }
         }
 
+        $q->leftJoin('customers as clist', 'clist.id', '=', "{$leadTable}.customer_id")
+            ->leftJoin('origins as origin_list', 'origin_list.code', '=', "{$leadTable}.campaign_origin")
+            ->leftJoin('sources as source_list', 'source_list.id', '=', 'origin_list.source_id')
+            ->leftJoin('platforms as platform_list', 'platform_list.code', '=', "{$leadTable}.plataforma");
+
+        [$funnelTable, $qualFunnelFk] = $this->resolveFunnelJoinInfo();
+        $funnelNameSelect = "'Sin Funnel'";
+        if ($funnelTable && $qualFunnelFk && Schema::hasTable($funnelTable)) {
+            $q->leftJoin("{$funnelTable} as funnel_list", 'funnel_list.id', '=', "ql.{$qualFunnelFk}");
+            $funnelNameSelect = "COALESCE(NULLIF(funnel_list.name,''), 'Sin Funnel')";
+        }
+
         // Select final
         $q->select("{$leadTable}.*")
             ->selectRaw("COALESCE(NULLIF(cs.name,''), NULLIF({$leadTable}.crm_state,''), 'Sin Estado') as crm_state_name")
             ->selectRaw("COALESCE(NULLIF(co.nombre,''), 'Sin Campaign Objective') as campaign_objective_name")
+            ->selectRaw("COALESCE(NULLIF(clist.name,''), 'Sin Cliente') as customer_name")
+            ->selectRaw("COALESCE(NULLIF(origin_list.name,''), NULLIF({$leadTable}.campaign_origin,''), 'Sin Origen') as origin_name")
+            ->selectRaw("COALESCE(NULLIF(source_list.name,''), 'Sin Source') as source_name")
+            ->selectRaw("COALESCE(NULLIF(platform_list.name,''), NULLIF({$leadTable}.plataforma,''), 'Sin Medio') as type_name")
+            ->selectRaw("{$funnelNameSelect} as funnel_name")
             ->selectRaw("COALESCE(NULLIF(ql.name,''), 'Sin CualificaciÃ³n') as qualification_name");
 
         // Orden: para histÃƒÂ³rico prioriza el ÃƒÂºltimo paso por ese funnel dentro de la ventana
@@ -1034,6 +1099,91 @@ class DashboardGerencialLeadsController extends Controller
         $q->orderByDesc("{$leadTable}.created_at");
 
         return $q;
+    }
+
+    private function applyAdvertisingEntityFilter(
+        Builder $query,
+        Request $request,
+        array $filters,
+        Carbon $from,
+        Carbon $to
+    ): void {
+        $section = (string) $request->get('ad_section', '');
+        $entityId = (string) $request->get('ad_entity_id', '');
+
+        if ($section === '' || $entityId === '') {
+            return;
+        }
+
+        $leadTable = (new Lead)->getTable();
+
+        if ($section === 'meta_ads') {
+            Schema::hasColumn($leadTable, 'meta_id_ad')
+                ? $query->where("{$leadTable}.meta_id_ad", $entityId)
+                : $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        if (in_array($section, ['meta_campaigns', 'meta_ad_sets'], true)) {
+            if (! Schema::hasColumn($leadTable, 'meta_id_ad')) {
+                $query->whereRaw('1 = 0');
+
+                return;
+            }
+
+            $groupKey = $section === 'meta_campaigns' ? 'campaign_id' : 'adset_id';
+            $generalFilters = GeneralLeadsFilters::fromRequest($this->advertisingRequest($request, $filters, $from, $to));
+            $adIds = app(GeneralLeadsAdsLiveMetricsService::class)
+                ->metaAdMap($generalFilters)
+                ->filter(fn ($row) => (string) ($row->{$groupKey} ?? '') === $entityId)
+                ->pluck('entity_value')
+                ->filter()
+                ->unique()
+                ->values();
+
+            $adIds->isEmpty()
+                ? $query->whereRaw('1 = 0')
+                : $query->whereIn("{$leadTable}.meta_id_ad", $adIds->all());
+
+            return;
+        }
+
+        if ($section === 'google_campaigns') {
+            Schema::hasColumn($leadTable, 'google_campaign_id')
+                ? $query->where("{$leadTable}.google_campaign_id", $entityId)
+                : $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        if ($section === 'google_ad_groups') {
+            Schema::hasColumn($leadTable, 'google_adgroup_id')
+                ? $query->where("{$leadTable}.google_adgroup_id", $entityId)
+                : $query->whereRaw('1 = 0');
+
+            return;
+        }
+
+        if ($section === 'google_ads') {
+            $googleAdExpression = $this->buildGoogleLeadAdIdExpression($leadTable);
+            $googleAdExpression
+                ? $query->whereRaw("{$googleAdExpression} = ?", [$entityId])
+                : $query->whereRaw('1 = 0');
+        }
+    }
+
+    private function advertisingRequest(Request $request, array $filters, Carbon $from, Carbon $to): Request
+    {
+        return Request::create(route('dashboard.gerencial-leads', absolute: false), 'GET', array_filter(array_merge(
+            $filters,
+            [
+                'customer_id' => $request->integer('customer_id') ?: null,
+                'integration_id' => $request->integer('integration_id') ?: null,
+                'from' => $from->format('Y-m-d\TH:i'),
+                'to' => $to->format('Y-m-d\TH:i'),
+            ]
+        ), fn ($value) => $value !== null && $value !== ''));
     }
 
     /*
@@ -1406,11 +1556,11 @@ class DashboardGerencialLeadsController extends Controller
 
             $q->leftJoin("{$metaAdsTable} as {$metaAdsAlias}", "{$metaAdsAlias}.meta_ad_id", '=', "{$leadTable}.meta_id_ad")
                 ->leftJoin("{$metaAdSetsTable} as {$metaAdSetsAlias}", function ($join) use ($metaAdsAlias, $metaAdSetsAlias, $hasExternalId) {
-                $join->on("{$metaAdSetsAlias}.id", '=', "{$metaAdsAlias}.meta_ad_set_id");
-                if ($hasExternalId) {
-                    $join->orOn("{$metaAdSetsAlias}.meta_ad_set_id", '=', "{$metaAdsAlias}.meta_ad_set_id");
-                }
-            });
+                    $join->on("{$metaAdSetsAlias}.id", '=', "{$metaAdsAlias}.meta_ad_set_id");
+                    if ($hasExternalId) {
+                        $join->orOn("{$metaAdSetsAlias}.meta_ad_set_id", '=', "{$metaAdsAlias}.meta_ad_set_id");
+                    }
+                });
 
             $matchConditions[] = "{$metaAdSetsAlias}.id IS NOT NULL";
         }
@@ -1793,7 +1943,6 @@ class DashboardGerencialLeadsController extends Controller
         /**
          * Para 'campaign_origin', se permite un array de valores, pero se filtran los valores vacÃ­os o nulos, y si despuÃ©s de eso no queda ningÃºn valor, se elimina el filtro por completo. Esto asegura que no se apliquen filtros invÃ¡lidos que podrÃ­an afectar los resultados de las mÃ©tricas.
          */
-
         if (array_key_exists('campaign_origin', $allowed)) {
             $arr = array_values((array) $allowed['campaign_origin']);
             $arr = array_filter($arr, fn ($v) => $v !== null && $v !== '');
@@ -1829,10 +1978,10 @@ class DashboardGerencialLeadsController extends Controller
         return $allowed;
     }
 
- /**
-  * Construye la estructura de datos necesaria para renderizar la vista del dashboard, a partir de las mÃ©tricas calculadas y los parÃ¡metros de la consulta.
-  * Este mÃ©todo se encarga de transformar los datos crudos de las mÃ©tricas en la informaciÃ³n especÃ­fica que se muestra en cada secciÃ³n del dashboard, como los cards de canales/plataformas,
-  */
+    /**
+     * Construye la estructura de datos necesaria para renderizar la vista del dashboard, a partir de las mÃ©tricas calculadas y los parÃ¡metros de la consulta.
+     * Este mÃ©todo se encarga de transformar los datos crudos de las mÃ©tricas en la informaciÃ³n especÃ­fica que se muestra en cada secciÃ³n del dashboard, como los cards de canales/plataformas,
+     */
     private function buildDashboardViewData(
         Request $request,
         ?int $customerId,
@@ -1842,7 +1991,8 @@ class DashboardGerencialLeadsController extends Controller
         array $metric,
         Carbon $from,
         Carbon $to,
-        string $nowMax
+        string $nowMax,
+        bool $includeAdvertisingTables = true
     ): array {
         $fromValue = $from->format('Y-m-d\TH:i');
         $toValue = $to->format('Y-m-d\TH:i');
@@ -1879,12 +2029,12 @@ class DashboardGerencialLeadsController extends Controller
 
             if (! isset($funnelByName[$k])) {
                 $funnelByName[$k] = $f;
+
                 continue;
             }
 
             $funnelByName[$k]['count'] = (int) ($funnelByName[$k]['count'] ?? 0) + (int) ($f['count'] ?? 0);
         }
-
 
         // Ã¢Å“â€¦ Orden requerido: Leads, Respondidos, Oportunidades, Ventas
         $funnelRaw = [];
@@ -1968,6 +2118,7 @@ class DashboardGerencialLeadsController extends Controller
 
             if (! isset($historyByName[$k])) {
                 $historyByName[$k] = $f;
+
                 continue;
             }
 
@@ -2142,32 +2293,44 @@ class DashboardGerencialLeadsController extends Controller
         $spendValue = (float) ($metric['spend'] ?? 0);
         $spendFormatted = '$ '.number_format($spendValue, 2, ',', '.');
 
-        $metaCampaigns = $this->buildMetaCampaignsTableData(
-            $customerId,
-            $integrationId,
-            $metric['filters'] ?? [],
-            $from,
-            $to,
-            (string) $request->session()->getId()
-        );
+        $pendingAdvertisingTable = [
+            'enabled' => false,
+            'rows' => [],
+            'note' => 'La pauta se consulta directamente en Meta Ads y Google Ads.',
+        ];
 
-        $metaAdSets = $this->buildMetaAdSetsTableData(
-            $customerId,
-            $integrationId,
-            $metric['filters'] ?? [],
-            $from,
-            $to,
-            (string) $request->session()->getId()
-        );
+        $metaCampaigns = $includeAdvertisingTables
+            ? $this->buildMetaCampaignsTableData(
+                $customerId,
+                $integrationId,
+                $metric['filters'] ?? [],
+                $from,
+                $to,
+                (string) $request->session()->getId()
+            )
+            : $pendingAdvertisingTable;
 
-        $metaAds = $this->buildMetaAdsTableData(
-            $customerId,
-            $integrationId,
-            $metric['filters'] ?? [],
-            $from,
-            $to,
-            (string) $request->session()->getId()
-        );
+        $metaAdSets = $includeAdvertisingTables
+            ? $this->buildMetaAdSetsTableData(
+                $customerId,
+                $integrationId,
+                $metric['filters'] ?? [],
+                $from,
+                $to,
+                (string) $request->session()->getId()
+            )
+            : $pendingAdvertisingTable;
+
+        $metaAds = $includeAdvertisingTables
+            ? $this->buildMetaAdsTableData(
+                $customerId,
+                $integrationId,
+                $metric['filters'] ?? [],
+                $from,
+                $to,
+                (string) $request->session()->getId()
+            )
+            : $pendingAdvertisingTable;
 
         $summaryCards = [
             [
@@ -3121,7 +3284,7 @@ class DashboardGerencialLeadsController extends Controller
                     ['key' => 'leads_anuncio',        'label' => 'Leads anuncio'],
                     ['key' => 'leads_calificados',    'label' => 'Leads calificados Anuncio'],
                     ['key' => 'leads_no_calificados', 'label' => 'Leads no calificados Anuncio'],
-                     ['key' => 'roas',                 'label' => 'ROAS'],
+                    ['key' => 'roas',                 'label' => 'ROAS'],
                     ['key' => 'CPL',                 'label' => 'CPL Anuncio'],
                 ];
 
@@ -3166,44 +3329,149 @@ class DashboardGerencialLeadsController extends Controller
     /**
      * Transforma el paginator de leads a filas listas para renderizar sin lÃƒÂ³gica en el Blade.
      */
+    private function leadListColumns(): array
+    {
+        return [
+            ['key' => 'created_at', 'label' => 'Created At'],
+            ['key' => 'customer_id', 'label' => 'Customer Id'],
+            ['key' => 'customer_name', 'label' => 'Cliente'],
+            ['key' => 'origin_name', 'label' => 'Origen Nombre'],
+            ['key' => 'id', 'label' => 'Id'],
+            ['key' => 'crm_id', 'label' => 'Crm Id'],
+            ['key' => 'name', 'label' => 'Name'],
+            ['key' => 'last_name', 'label' => 'Last Name'],
+            ['key' => 'email', 'label' => 'Email'],
+            ['key' => 'phone', 'label' => 'Phone'],
+            ['key' => 'crm_state_name', 'label' => 'Crm State/Estado CRM'],
+            ['key' => 'integration_statuses_text', 'label' => 'Integracion'],
+            ['key' => 'qualification_name', 'label' => 'Calificacion'],
+            ['key' => 'funnel_name', 'label' => 'Funnel'],
+            ['key' => 'campaign_objective_name', 'label' => 'Campaign Objective'],
+            ['key' => 'source_name', 'label' => 'Source Nombre'],
+            ['key' => 'type_name', 'label' => 'Medio Nombre'],
+            ['key' => 'position', 'label' => 'Position'],
+            ['key' => 'city', 'label' => 'City'],
+            ['key' => 'company', 'label' => 'Company'],
+            ['key' => 'country', 'label' => 'Country'],
+            ['key' => 'service_city', 'label' => 'Service City'],
+            ['key' => 'children', 'label' => 'Children'],
+            ['key' => 'opening_hours', 'label' => 'Opening Hours'],
+            ['key' => 'effective_lead', 'label' => 'Effective Lead'],
+            ['key' => 'reference', 'label' => 'Reference'],
+            ['key' => 'service', 'label' => 'Service'],
+            ['key' => 'remote_ip', 'label' => 'Remote Ip'],
+            ['key' => 'page', 'label' => 'Page'],
+            ['key' => 'page_url', 'label' => 'Page Url'],
+            ['key' => 'site_url', 'label' => 'Site Url'],
+            ['key' => 'campaign_origin', 'label' => 'Campaign Origin'],
+            ['key' => 'campaign_objective', 'label' => 'Campaign Objective'],
+            ['key' => 'meta_id_ad', 'label' => 'Meta Id Ad'],
+            ['key' => 'g_clid', 'label' => 'G Clid'],
+            ['key' => 'gclid', 'label' => 'Gclid'],
+            ['key' => 'gbraid', 'label' => 'Gbraid'],
+            ['key' => 'wbraid', 'label' => 'Wbraid'],
+            ['key' => 'gad_source', 'label' => 'Gad Source'],
+            ['key' => 'gad_campaignid', 'label' => 'Gad Campaignid'],
+            ['key' => 'google_ad_id', 'label' => 'Google Ad Id'],
+            ['key' => 'google_adgroup_id', 'label' => 'Google Adgroup Id'],
+            ['key' => 'google_campaign_id', 'label' => 'Google Campaign Id'],
+            ['key' => 'matchtype', 'label' => 'Matchtype'],
+            ['key' => 'device', 'label' => 'Device'],
+            ['key' => 'g_ad', 'label' => 'G Ad'],
+            ['key' => 'meta_lead_id', 'label' => 'Meta Lead Id'],
+            ['key' => 'meta_page_id', 'label' => 'Meta Page Id'],
+            ['key' => 'meta_form_id', 'label' => 'Meta Form Id'],
+            ['key' => 'meta_created_time', 'label' => 'Meta Created Time'],
+            ['key' => 'meta_payload', 'label' => 'Meta Payload'],
+            ['key' => 'value', 'label' => 'Value'],
+            ['key' => 'fbp', 'label' => 'Fbp'],
+            ['key' => 'fbc', 'label' => 'Fbc'],
+            ['key' => 'updated_at', 'label' => 'Updated At'],
+            ['key' => 'plataforma', 'label' => 'Plataforma'],
+            ['key' => 'lenguaje', 'label' => 'Lenguaje'],
+            ['key' => 'geo', 'label' => 'Geo'],
+            ['key' => 'number_workers', 'label' => 'Number Workers'],
+            ['key' => 'number_locations', 'label' => 'Number Locations'],
+            ['key' => 'campo_numero_1', 'label' => 'Campo Numero 1'],
+            ['key' => 'campo_numero_2', 'label' => 'Campo Numero 2'],
+            ['key' => 'campo_numero_3', 'label' => 'Campo Numero 3'],
+            ['key' => 'campo_numero_4', 'label' => 'Campo Numero 4'],
+            ['key' => 'campo_numero_5', 'label' => 'Campo Numero 5'],
+            ['key' => 'campo_text_1', 'label' => 'Campo Text 1'],
+            ['key' => 'campo_text_2', 'label' => 'Campo Text 2'],
+            ['key' => 'campo_text_3', 'label' => 'Campo Text 3'],
+            ['key' => 'campo_text_4', 'label' => 'Campo Text 4'],
+            ['key' => 'campo_text_5', 'label' => 'Campo Text 5'],
+            ['key' => 'campo_text_6', 'label' => 'Campo Text 6'],
+            ['key' => 'campo_text_7', 'label' => 'Campo Text 7'],
+            ['key' => 'campo_text_8', 'label' => 'Campo Text 8'],
+            ['key' => 'campo_text_9', 'label' => 'Campo Text 9'],
+            ['key' => 'campo_text_10', 'label' => 'Campo Text 10'],
+            ['key' => 'campo_text_11', 'label' => 'Campo Text 11'],
+            ['key' => 'campo_text_12', 'label' => 'Campo Text 12'],
+            ['key' => 'campo_text_13', 'label' => 'Campo Text 13'],
+            ['key' => 'campo_text_14', 'label' => 'Campo Text 14'],
+            ['key' => 'campo_text_15', 'label' => 'Campo Text 15'],
+        ];
+    }
+
     private function transformLeadListRows($paginator)
     {
-        $paginator->getCollection()->transform(function ($lead) {
-            $phone = $this->firstFilledFieldValue($lead, ['telefono', 'phone', 'phone_number', 'celular', 'movil']);
-            $first = $this->firstFilledFieldValue($lead, ['nombre', 'first_name', 'name', 'nombres']);
-            $last = $this->firstFilledFieldValue($lead, ['apellido', 'last_name', 'lastname', 'apellidos']);
+        $columns = $this->leadListColumns();
 
-            $fuente = $lead->campaign_origin;
-            $medio = $lead->plataforma;
-
-            $value = is_numeric($lead->value ?? null) ? (float) $lead->value : 0.0;
-            $valueFormatted = '$ '.number_format($value, 0, ',', '.');
-
-            $pageUrl = $lead->page_url ?? '';
-            $pageUrlLabel = ($pageUrl === null || $pageUrl === '') ? '-' : $pageUrl;
-            $siteUrl = $lead->site_url ?? '';
-            $siteUrlLabel = ($siteUrl === null || $siteUrl === '') ? '-' : $siteUrl;
-
-            return [
-                'created_at' => optional($lead->created_at)->format('Y-m-d H:i'),
-                'id' => $lead->id,
-                'phone' => $phone ?: '-',
-                'first_name' => $first ?: '-',
-                'last_name' => $last ?: '-',
-                'fuente' => ($fuente === null || $fuente === '') ? 'Sin Fuente' : $fuente,
-                'medio' => ($medio === null || $medio === '') ? 'Sin Medio' : $medio,
-                'campaign_objective' => $lead->campaign_objective_name ?? 'Sin Campaign Objective',
-                'crm_state' => $lead->crm_state_name ?? 'Sin Estado',
-                'qualification' => $lead->qualification_name ?? 'Sin CualificaciÃ³n',
-                'integration_statuses' => $this->formatLeadIntegrationStatuses($lead),
-                'value' => $value,
-                'value_formatted' => $valueFormatted,
-                'page_url' => $pageUrlLabel,
-                'site_url' => $siteUrlLabel,
-            ];
+        $paginator->getCollection()->transform(function (Lead $lead) use ($columns) {
+            return collect($columns)
+                ->mapWithKeys(fn (array $column) => [
+                    $column['key'] => $this->leadListColumnValue($lead, $column['key']),
+                ])
+                ->all();
         });
 
         return $paginator;
+    }
+
+    private function leadListExportRow(Lead $lead, array $columns): array
+    {
+        return array_map(
+            fn (array $column) => $this->leadListColumnValue($lead, $column['key']),
+            $columns
+        );
+    }
+
+    private function leadListColumnValue(Lead $lead, string $key): string
+    {
+        $value = match ($key) {
+            'created_at', 'updated_at', 'meta_created_time' => optional($lead->{$key})->format('Y-m-d H:i:s'),
+            'name' => $this->firstFilledFieldValue($lead, ['nombre', 'first_name', 'name', 'nombres']),
+            'last_name' => $this->firstFilledFieldValue($lead, ['apellido', 'last_name', 'lastname', 'apellidos']),
+            'phone' => $this->firstFilledFieldValue($lead, ['telefono', 'phone', 'phone_number', 'celular', 'movil']),
+            'integration_statuses_text' => $this->leadIntegrationStatusesText($lead),
+            'meta_payload' => $this->stringifyLeadListValue($lead->meta_payload ?? null),
+            default => data_get($lead, $key),
+        };
+
+        return $this->stringifyLeadListValue($value);
+    }
+
+    private function stringifyLeadListValue(mixed $value): string
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d H:i:s');
+        }
+
+        if (is_bool($value)) {
+            return $value ? 'Si' : 'No';
+        }
+
+        if (is_array($value) || is_object($value)) {
+            return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
+        }
+
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        return (string) $value;
     }
 
     private function formatLeadIntegrationStatuses(Lead $lead): array
@@ -3473,7 +3741,7 @@ class DashboardGerencialLeadsController extends Controller
         Carbon $from,
         Carbon $to
     ): array {
-        $model = new $modelClass();
+        $model = new $modelClass;
         $table = $model->getTable();
         $leadTable = (new Lead)->getTable();
         $googleAdsTable = (new GoogleAdsAd)->getTable();
@@ -3510,7 +3778,7 @@ class DashboardGerencialLeadsController extends Controller
         $leadRows = (clone $base)
             ->join($customerTable, "{$customerTable}.id", '=', "{$leadTable}.customer_id")
             ->leftJoin("{$googleAdsTable} as gads", function ($join) use ($leadTable, $googleAdLeadIdExpression) {
-                $join->on("gads.customer_id", '=', "{$leadTable}.customer_id")
+                $join->on('gads.customer_id', '=', "{$leadTable}.customer_id")
                     ->whereRaw("gads.google_ad_id = {$googleAdLeadIdExpression}");
             })
             ->leftJoin('crm_state as cs', 'cs.id', '=', "{$leadTable}.crm_state")
@@ -3710,7 +3978,7 @@ class DashboardGerencialLeadsController extends Controller
         $leadRows = (clone $base)
             ->join($customerTable, "{$customerTable}.id", '=', "{$leadTable}.customer_id")
             ->leftJoin("{$googleAdsTable} as gads", function ($join) use ($leadTable, $googleAdLeadIdExpression) {
-                $join->on("gads.customer_id", '=', "{$leadTable}.customer_id")
+                $join->on('gads.customer_id', '=', "{$leadTable}.customer_id")
                     ->whereRaw("gads.google_ad_id = {$googleAdLeadIdExpression}");
             })
             ->leftJoin('crm_state as cs', 'cs.id', '=', "{$leadTable}.crm_state")

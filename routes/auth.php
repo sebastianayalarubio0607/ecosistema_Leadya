@@ -10,6 +10,7 @@ use App\Http\Controllers\GeneralLeadsDashboardController;
 use App\Http\Controllers\Integration\IntegrationWebController;
 use App\Http\Controllers\Integration\MondayBoardController;
 use App\Http\Controllers\IntegrationtypeWebController;
+use App\Http\Controllers\LeadManagementController;
 use App\Http\Controllers\GoogleAds\GoogleAdsAdController;
 use App\Http\Controllers\GoogleAds\GoogleAdsAdGroupController;
 use App\Http\Controllers\GoogleAds\GoogleAdsCampaignController as GoogleAdsMetricsCampaignController;
@@ -50,11 +51,15 @@ Route::middleware('auth')->group(function () {
 /**
  * Dashboard Gerencial de Leads routes for managing leads. These routes are defined for viewing the gerencial leads dashboard, listing leads, and exporting the leads list. The routes are grouped under the 'dashboard' prefix and use the DashboardGerencialLeadsController for handling the requests. Each route is named for easy reference in the application.
  */
+    Route::get('/gestion-leads', [LeadManagementController::class, 'index'])->name('lead-management.index');
+    Route::patch('/gestion-leads/{lead}/crm-state', [LeadManagementController::class, 'updateCrmState'])->name('lead-management.crm-state');
+    Route::patch('/gestion-leads/{lead}/value', [LeadManagementController::class, 'updateValue'])->name('lead-management.value');
     Route::get('/dashboard/gerencial-leads', [DashboardGerencialLeadsController::class, 'dashboardGerencialLeads'])->name('dashboard.gerencial-leads');
     Route::get('/dashboard/gerencial-leads/list', [DashboardGerencialLeadsController::class, 'dashboardGerencialLeadsList'])->name('dashboard.gerencial-leads.list');
     Route::get('/dashboard/gerencial-leads/list/export', [DashboardGerencialLeadsController::class, 'dashboardGerencialLeadsListExport'])->name('dashboard.gerencial-leads.list.export');
     Route::get('/dashboard/general-leads', GeneralLeadsDashboardController::class)->name('dashboard.general-leads');
     Route::get('/dashboard/general-leads/list', [GeneralLeadsDashboardController::class, 'list'])->name('dashboard.general-leads.list');
+    Route::get('/dashboard/general-leads/list/export', [GeneralLeadsDashboardController::class, 'exportList'])->name('dashboard.general-leads.list.export');
 
 
     Volt::route('verify-email', 'pages.auth.verify-email')->name('verification.notice');
@@ -135,6 +140,9 @@ Route::middleware('auth')->group(function () {
             ->name('ad-accounts.subscription-jobs.failed.retry');
         Route::post('ad-accounts-subscriptions/failed/retry-all', [MetaAdAccountSubscriptionJobController::class, 'retryAll'])
             ->name('ad-accounts.subscription-jobs.failed.retry-all');
+
+        Route::view('whatsapps', 'meta.whatsapps.index')
+            ->name('whatsapps.index');
 
         Route::resource('campaigns', MetaCampaignController::class);
 

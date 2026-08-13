@@ -9,18 +9,12 @@ use Illuminate\Http\Response;
 
 class GeneralLeadsDashboardController extends Controller
 {
-    public function __construct(private readonly GeneralLeadsDashboardService $service)
-    {
-    }
+    public function __construct(private readonly GeneralLeadsDashboardService $service) {}
 
     public function __invoke(GeneralLeadsDashboardFilterRequest $request): Response
     {
-        $filters = GeneralLeadsFilters::fromRequest($request);
-
         return response()
-            ->view('dashboard.general-leads.index', [
-                'dashboard' => $this->service->build($request, $filters),
-            ])
+            ->view('dashboard.general-leads.index')
             ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
             ->header('Pragma', 'no-cache')
             ->header('Expires', '0');
@@ -37,5 +31,12 @@ class GeneralLeadsDashboardController extends Controller
             ->header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
             ->header('Pragma', 'no-cache')
             ->header('Expires', '0');
+    }
+
+    public function exportList(GeneralLeadsDashboardFilterRequest $request)
+    {
+        $filters = GeneralLeadsFilters::fromRequest($request);
+
+        return $this->service->exportList($request, $filters);
     }
 }

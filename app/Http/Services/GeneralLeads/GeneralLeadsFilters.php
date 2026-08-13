@@ -19,19 +19,24 @@ class GeneralLeadsFilters
         public readonly ?int $qualification,
         public readonly ?string $language,
         public readonly ?string $geo,
-    ) {
-    }
+    ) {}
 
     public static function fromRequest(Request $request): self
     {
         $timezone = config('app.timezone');
         $now = now($timezone);
+        $from = ($request->filled('from') ? Carbon::parse((string) $request->input('from'), $timezone) : $now->copy()->subDays(7))->startOfMinute();
+        $to = ($request->filled('to') ? Carbon::parse((string) $request->input('to'), $timezone) : $now->copy())->endOfMinute();
+
+        if ($from->gt($to)) {
+            [$from, $to] = [$to->copy()->startOfMinute(), $from->copy()->endOfMinute()];
+        }
 
         return new self(
             customerId: $request->integer('customer_id') ?: null,
             integrationId: $request->integer('integration_id') ?: null,
-            from: ($request->filled('from') ? Carbon::parse((string) $request->input('from'), $timezone) : $now->copy()->subDays(7))->startOfMinute(),
-            to: ($request->filled('to') ? Carbon::parse((string) $request->input('to'), $timezone) : $now->copy())->endOfMinute(),
+            from: $from,
+            to: $to,
             source: self::str($request->input('source')),
             campaignOrigin: self::str($request->input('campaign_origin')),
             platform: self::str($request->input('plataforma')),

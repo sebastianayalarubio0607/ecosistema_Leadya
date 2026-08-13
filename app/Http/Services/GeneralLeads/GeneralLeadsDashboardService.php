@@ -5,11 +5,8 @@ namespace App\Http\Services\GeneralLeads;
 use App\Models\CrmState;
 use App\Models\Customer;
 use App\Models\Funnel;
-use App\Models\GoogleAdsAd;
-use App\Models\GoogleAdsAdGroup;
-use App\Models\GoogleAdsCampaign;
 use App\Models\Integration;
-use App\Models\MetaAdInsight;
+use App\Models\Lead;
 use App\Models\Origin;
 use App\Models\Platform;
 use App\Models\Qualification;
@@ -18,15 +15,20 @@ use Illuminate\Database\Query\Builder as QueryBuilder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Str;
 
 class GeneralLeadsDashboardService
 {
     private const UNQUALIFIED = ['lead no efectivo', 'sin gestionar', 'sin respuesta', 'n/a', 'no efectivo', 'duplicado', 'spam'];
+
     private const SORTS = [
         'name' => 'name_value',
         'cost' => 'cost_value',
         'impressions' => 'impressions_value',
+        'clicks' => 'clicks_value',
+        'ctr' => 'ctr_value',
+        'cpc' => 'cpc_value',
+        'cpm' => 'cpm_value',
         'conversions' => 'conversions_value',
         'roas' => 'roas_value',
         'leads' => 'leads_value',
@@ -35,19 +37,15 @@ class GeneralLeadsDashboardService
         'cpl' => 'cpl_value',
     ];
 
-    public function __construct(private readonly GeneralLeadsLeadQuery $leads)
-    {
-    }
+    public function __construct(
+        private readonly GeneralLeadsLeadQuery $leads,
+        private ?GeneralLeadsAdsLiveMetricsService $liveMetrics = null,
+    ) {}
 
-    public function build(Request $request, GeneralLeadsFilters $filters): array
+    public function shell(GeneralLeadsFilters $filters): array
     {
         $customers = Customer::query()->orderBy('name')->get(['id', 'name']);
         $selectedCustomer = $filters->customerId ? $customers->firstWhere('id', $filters->customerId) : null;
-        $breakdowns = [
-            'source' => $this->sourceBreakdown($filters),
-            'origin' => $this->breakdown($filters, 'origin'),
-            'type' => $this->breakdown($filters, 'type'),
-        ];
 
         return [
             'header' => [
@@ -69,18 +67,22 @@ class GeneralLeadsDashboardService
                 'geos' => $this->leadValueOptions($filters, 'geo', $filters->geo, 'Todos Los Geos'),
                 'clear_url' => route('dashboard.general-leads'),
             ],
+        ];
+    }
+
+    public function build(Request $request, GeneralLeadsFilters $filters, bool $includeAds = true, bool $includeLiveCosts = true): array
+    {
+        $breakdowns = [
+            'source' => $this->sourceBreakdown($filters),
+            'origin' => $this->breakdown($filters, 'origin'),
+            'type' => $this->breakdown($filters, 'type'),
+        ];
+
+        $dashboard = array_merge($this->shell($filters), [
             'summary' => $this->summary($filters),
-            'costs' => $this->costs($filters),
+            'costs' => $includeLiveCosts ? $this->costs($filters) : $this->pendingCosts(),
             'breakdowns' => $breakdowns,
             'funnels' => $this->funnels($filters),
-            'ads' => [
-                'meta_campaigns' => $this->metaTable($filters, $request, 'meta_campaigns'),
-                'meta_ad_sets' => $this->metaTable($filters, $request, 'meta_ad_sets'),
-                'meta_ads' => $this->metaTable($filters, $request, 'meta_ads'),
-                'google_campaigns' => $this->googleTable($filters, $request, GoogleAdsCampaign::class, 'google_campaigns', 'google_campaign_id', 'campaign_name'),
-                'google_ad_groups' => $this->googleTable($filters, $request, GoogleAdsAdGroup::class, 'google_ad_groups', 'google_ad_group_id', 'ad_group_name'),
-                'google_ads' => $this->googleTable($filters, $request, GoogleAdsAd::class, 'google_ads', 'google_ad_id', 'google_ad_id'),
-            ],
             'charts' => [
                 'donuts' => [
                     'source' => $this->donut($breakdowns['source']['rows']),
@@ -97,13 +99,97 @@ class GeneralLeadsDashboardService
                 'costs' => 'Los costos se filtran por cliente y fecha. Los filtros propios de leads solo afectan leads atribuidos por IDs verificables, nunca por coincidencia de nombres.',
                 'history' => 'El histórico diario filtra movimientos y leads creados dentro del periodo seleccionado.',
             ],
-        ];
+        ]);
+
+        if ($includeAds) {
+            $dashboard['ads'] = [
+                'meta_campaigns' => $this->adTable($filters, $request, 'meta_campaigns'),
+                'meta_ad_sets' => $this->adTable($filters, $request, 'meta_ad_sets'),
+                'meta_ads' => $this->adTable($filters, $request, 'meta_ads'),
+                'google_campaigns' => $this->adTable($filters, $request, 'google_campaigns'),
+                'google_ad_groups' => $this->adTable($filters, $request, 'google_ad_groups'),
+                'google_ads' => $this->adTable($filters, $request, 'google_ads'),
+            ];
+        }
+
+        return $dashboard;
+    }
+
+    public function adTable(GeneralLeadsFilters $filters, Request $request, string $section): array
+    {
+        return str_starts_with($section, 'meta_')
+            ? $this->metaTable($filters, $request, $section)
+            : $this->googleTable($filters, $request, $section);
+    }
+
+    public function costSummary(GeneralLeadsFilters $filters): array
+    {
+        return $this->costs($filters);
     }
 
     public function list(Request $request, GeneralLeadsFilters $filters): array
     {
+        $columns = $this->listColumns();
+        $leads = $this->listQuery($request, $filters)
+            ->orderByDesc('leads.created_at')
+            ->paginate(25)
+            ->withQueryString();
+
+        $leads->getCollection()->transform(function (Lead $lead) use ($columns) {
+            return collect($columns)
+                ->mapWithKeys(fn (array $column) => [
+                    $column['key'] => $this->listColumnValue($lead, $column['key']),
+                ])
+                ->all();
+        });
+
+        return [
+            'title' => $this->listTitle($request),
+            'period' => $filters->from->format('Y-m-d H:i').' A '.$filters->to->format('Y-m-d H:i'),
+            'back_url' => route('dashboard.general-leads', $filters->query()),
+            'export_url' => route('dashboard.general-leads.list.export', $request->except('page')),
+            'columns' => $columns,
+            'leads' => $leads,
+        ];
+    }
+
+    public function exportList(Request $request, GeneralLeadsFilters $filters)
+    {
+        $query = $this->listQuery($request, $filters)
+            ->orderByDesc('leads.created_at');
+        $columns = $this->listColumns();
+        $filename = 'general_leads_'.now()->format('Ymd_His').'.csv';
+
+        return response()->streamDownload(function () use ($query, $columns) {
+            $out = fopen('php://output', 'w');
+            fwrite($out, "\xEF\xBB\xBF");
+
+            fputcsv($out, array_column($columns, 'label'));
+
+            $query->chunk(500, function ($rows) use ($out, $columns) {
+                foreach ($rows as $lead) {
+                    fputcsv($out, $this->listExportRow($lead, $columns));
+                }
+            });
+
+            fclose($out);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    private function listQuery(Request $request, GeneralLeadsFilters $filters)
+    {
         $query = $this->leads->base($filters)
-            ->with(['customer:id,name', 'integration:id,name'])
+            ->with([
+                'customer:id,name',
+                'integration:id,name',
+                'leadIntegrations' => function ($query) {
+                    $query->select('id', 'lead_id', 'integration_id', 'status', 'answer_code', 'updated_at')
+                        ->with('integration:id,name')
+                        ->orderBy('id');
+                },
+            ])
             ->leftJoin('customers as c_list', 'c_list.id', '=', 'leads.customer_id')
             ->leftJoin('integrations as i_list', 'i_list.id', '=', 'leads.integration_id')
             ->leftJoin('crm_state as cs_list', 'cs_list.id', '=', 'leads.crm_state')
@@ -154,14 +240,9 @@ class GeneralLeadsDashboardService
                 ->distinct();
         }
 
-        return [
-            'title' => $this->listTitle($request),
-            'period' => $filters->from->format('Y-m-d H:i').' A '.$filters->to->format('Y-m-d H:i'),
-            'back_url' => route('dashboard.general-leads', $filters->query()),
-            'relation_columns' => $this->relationColumns(),
-            'lead_columns' => $this->leadColumns(),
-            'leads' => $query->orderByDesc('leads.created_at')->paginate(25)->withQueryString(),
-        ];
+        $this->applyAdvertisingEntityFilter($query, $request, $filters);
+
+        return $query;
     }
 
     private function summary(GeneralLeadsFilters $filters): array
@@ -296,21 +377,15 @@ class GeneralLeadsDashboardService
 
     private function costs(GeneralLeadsFilters $filters): array
     {
-        $meta = (float) MetaAdInsight::query()
-            ->join('meta_ads as ma_c', 'ma_c.id', '=', 'meta_ad_insights.meta_ad_id')
-            ->join('meta_ad_sets as mas_c', 'mas_c.id', '=', 'ma_c.meta_ad_set_id')
-            ->join('meta_campaigns as mc_c', 'mc_c.id', '=', 'mas_c.meta_campaign_id')
-            ->join('meta_ad_accounts as maa_c', 'maa_c.id', '=', 'mc_c.meta_ad_account_id')
-            ->whereBetween('meta_ad_insights.date_start', [$filters->from->toDateString(), $filters->to->toDateString()])
-            ->when($filters->customerId, fn ($q) => $q->where('maa_c.customer_id', $filters->customerId))
-            ->sum('meta_ad_insights.spend');
-
-        $google = (float) GoogleAdsCampaign::query()
-            ->whereBetween('report_date', [$filters->from->toDateString(), $filters->to->toDateString()])
-            ->when($filters->customerId, fn ($q) => $q->where('customer_id', $filters->customerId))
-            ->sum('cost');
+        $meta = (float) $this->liveMetrics()->metaRows($filters, 'meta_campaigns')->sum('cost_value');
+        $google = (float) $this->liveMetrics()->googleRows($filters, 'google_campaigns')->sum('cost_value');
 
         return ['meta' => GeneralLeadsPresentation::money($meta), 'google' => GeneralLeadsPresentation::money($google), 'total' => GeneralLeadsPresentation::money($meta + $google)];
+    }
+
+    private function pendingCosts(): array
+    {
+        return ['meta' => 'Consultando...', 'google' => 'Consultando...', 'total' => 'Consultando...'];
     }
 
     private function funnels(GeneralLeadsFilters $filters): array
@@ -376,63 +451,64 @@ class GeneralLeadsDashboardService
 
     private function metaTable(GeneralLeadsFilters $filters, Request $request, string $section): array
     {
-        $config = match ($section) {
-            'meta_campaigns' => ['title' => 'Campañas Meta', 'id' => 'mc.id', 'name' => 'mc.name'],
-            'meta_ad_sets' => ['title' => 'Grupos De Anuncios Meta', 'id' => 'mas.id', 'name' => 'mas.name'],
-            default => ['title' => 'Anuncios Meta', 'id' => 'ma.id', 'name' => 'ma.name'],
+        $title = match ($section) {
+            'meta_campaigns' => 'Campañas Meta',
+            'meta_ad_sets' => 'Grupos De Anuncios Meta',
+            default => 'Anuncios Meta',
         };
-        $costs = MetaAdInsight::query()
-            ->join('meta_ads as ma', 'ma.id', '=', 'meta_ad_insights.meta_ad_id')
-            ->join('meta_ad_sets as mas', 'mas.id', '=', 'ma.meta_ad_set_id')
-            ->join('meta_campaigns as mc', 'mc.id', '=', 'mas.meta_campaign_id')
-            ->join('meta_ad_accounts as maa', 'maa.id', '=', 'mc.meta_ad_account_id')
-            ->whereBetween('meta_ad_insights.date_start', [$filters->from->toDateString(), $filters->to->toDateString()])
-            ->when($filters->customerId, fn ($q) => $q->where('maa.customer_id', $filters->customerId))
-            ->selectRaw("{$config['id']} as entity_id, COALESCE(NULLIF({$config['name']}, ''), 'Sin Nombre') as name_value, SUM(COALESCE(meta_ad_insights.spend, 0)) as cost_value, SUM(COALESCE(meta_ad_insights.impressions, 0)) as impressions_value, 0 as conversions_value, AVG(meta_ad_insights.purchase_roas) as roas_value")
-            ->groupByRaw("{$config['id']}, {$config['name']}")
-            ->get()
-            ->keyBy('entity_id');
+        $costs = $this->liveMetrics()->metaRows($filters, $section);
 
-        return $this->formatAds($request, $section, $config['title'], $costs, $this->metaLeadRows($filters, $section));
+        return $this->formatAds($request, $filters, $section, $title, $costs, $this->metaLeadRows($filters, $section, $costs));
     }
 
-    private function metaLeadRows(GeneralLeadsFilters $filters, string $section): Collection
+    private function metaLeadRows(GeneralLeadsFilters $filters, string $section, Collection $costs): Collection
     {
-        $id = match ($section) {
-            'meta_campaigns' => 'mc_l.id',
-            'meta_ad_sets' => 'mas_l.id',
-            default => 'ma_l.id',
-        };
+        $adIdsByEntity = $this->metaAdIdsByEntity($filters, $section, $costs);
+        $adIds = collect($adIdsByEntity)->flatten()->filter()->unique()->values();
 
-        return $this->leads->base($filters)
-            ->join('meta_ads as ma_l', 'ma_l.meta_ad_id', '=', 'leads.meta_id_ad')
-            ->join('meta_ad_sets as mas_l', 'mas_l.id', '=', 'ma_l.meta_ad_set_id')
-            ->join('meta_campaigns as mc_l', 'mc_l.id', '=', 'mas_l.meta_campaign_id')
+        if ($adIds->isEmpty()) {
+            return new Collection;
+        }
+
+        $leadRows = $this->leads->base($filters)
             ->leftJoin('crm_state as cs_a', 'cs_a.id', '=', 'leads.crm_state')
             ->leftJoin('qualification as q_a', 'q_a.id', '=', 'cs_a.qualification')
-            ->selectRaw("{$id} as entity_id, COUNT(DISTINCT leads.id) as leads_value, COUNT(DISTINCT CASE WHEN q_a.name IS NOT NULL AND LOWER(TRIM(q_a.name)) NOT IN ({$this->excludedSql()}) THEN leads.id END) as qualified_value")
-            ->groupByRaw($id)
+            ->whereIn('leads.meta_id_ad', $adIds->all())
+            ->selectRaw("leads.meta_id_ad as ad_id, COUNT(DISTINCT leads.id) as leads_value, COUNT(DISTINCT CASE WHEN q_a.name IS NOT NULL AND LOWER(TRIM(q_a.name)) NOT IN ({$this->excludedSql()}) THEN leads.id END) as qualified_value")
+            ->groupBy('leads.meta_id_ad')
             ->get()
+            ->keyBy('ad_id');
+
+        return collect($adIdsByEntity)
+            ->map(function (array $entityAdIds, string $entityId) use ($leadRows) {
+                $leads = 0;
+                $qualified = 0;
+
+                foreach ($entityAdIds as $adId) {
+                    $row = $leadRows->get($adId);
+                    $leads += (int) ($row?->leads_value ?? 0);
+                    $qualified += (int) ($row?->qualified_value ?? 0);
+                }
+
+                return (object) [
+                    'entity_id' => $entityId,
+                    'leads_value' => $leads,
+                    'qualified_value' => $qualified,
+                ];
+            })
             ->keyBy('entity_id');
     }
 
-    private function googleTable(GeneralLeadsFilters $filters, Request $request, string $model, string $section, string $idColumn, string $nameColumn): array
+    private function googleTable(GeneralLeadsFilters $filters, Request $request, string $section): array
     {
-        $table = (new $model())->getTable();
         $title = match ($section) {
             'google_campaigns' => 'Campañas Google',
             'google_ad_groups' => 'Grupos De Anuncios Google',
             default => 'Anuncios Google',
         };
-        $costs = $model::query()
-            ->whereBetween("{$table}.report_date", [$filters->from->toDateString(), $filters->to->toDateString()])
-            ->when($filters->customerId, fn ($q) => $q->where("{$table}.customer_id", $filters->customerId))
-            ->selectRaw("{$table}.{$idColumn} as entity_id, COALESCE(NULLIF({$table}.{$nameColumn}, ''), 'Sin Nombre') as name_value, SUM(COALESCE({$table}.cost, 0)) as cost_value, SUM(COALESCE({$table}.impressions, 0)) as impressions_value, SUM(COALESCE({$table}.conversions, 0)) as conversions_value, AVG({$table}.roas) as roas_value")
-            ->groupByRaw("{$table}.{$idColumn}, {$table}.{$nameColumn}")
-            ->get()
-            ->keyBy('entity_id');
+        $costs = $this->liveMetrics()->googleRows($filters, $section);
 
-        return $this->formatAds($request, $section, $title, $costs, $this->googleLeadRows($filters, $section));
+        return $this->formatAds($request, $filters, $section, $title, $costs, $this->googleLeadRows($filters, $section));
     }
 
     private function googleLeadRows(GeneralLeadsFilters $filters, string $section): Collection
@@ -454,34 +530,61 @@ class GeneralLeadsDashboardService
             ->keyBy('entity_id');
     }
 
-    private function formatAds(Request $request, string $section, string $title, Collection $costs, Collection $leads): array
+    private function metaAdIdsByEntity(GeneralLeadsFilters $filters, string $section, Collection $costs): array
+    {
+        if ($section === 'meta_ads') {
+            return $costs
+                ->mapWithKeys(fn ($row, $entityId) => [(string) $entityId => [(string) $entityId]])
+                ->all();
+        }
+
+        $groupKey = $section === 'meta_campaigns' ? 'campaign_id' : 'adset_id';
+
+        return $this->liveMetrics()
+            ->metaAdMap($filters)
+            ->groupBy(fn ($row) => (string) ($row->{$groupKey} ?? ''))
+            ->filter(fn ($rows, $entityId) => $entityId !== '' && $costs->has($entityId))
+            ->map(fn ($rows) => $rows->pluck('entity_value')->filter()->unique()->values()->all())
+            ->all();
+    }
+
+    private function formatAds(Request $request, GeneralLeadsFilters $filters, string $section, string $title, Collection $costs, Collection $leads): array
     {
         $rows = [];
         foreach ($costs as $id => $cost) {
+            $name = (string) $cost->name_value;
             $lead = $leads->get($id);
             $count = (int) ($lead?->leads_value ?? 0);
             $qualified = (int) ($lead?->qualified_value ?? 0);
             $costValue = (float) ($cost->cost_value ?? 0);
             $rows[] = [
-                'name_value' => (string) $cost->name_value,
+                'entity_value' => (string) $id,
+                'name_value' => $name,
                 'cost_value' => $costValue,
                 'impressions_value' => (int) ($cost->impressions_value ?? 0),
+                'clicks_value' => (int) ($cost->clicks_value ?? 0),
+                'ctr_value' => (float) ($cost->ctr_value ?? 0),
+                'cpc_value' => (float) ($cost->cpc_value ?? 0),
+                'cpm_value' => (float) ($cost->cpm_value ?? 0),
                 'conversions_value' => (float) ($cost->conversions_value ?? 0),
                 'roas_value' => $cost->roas_value !== null ? (float) $cost->roas_value : null,
                 'leads_value' => $count,
                 'qualified_value' => $qualified,
                 'unqualified_value' => max(0, $count - $qualified),
                 'cpl_value' => $count > 0 ? $costValue / $count : 0,
+                'url' => $this->adListUrl($filters, $section, (string) $id, $name),
             ];
         }
         $sort = $request->input("sort.{$section}", 'cost');
         $dir = $request->input("dir.{$section}", 'desc') === 'asc' ? 'asc' : 'desc';
         $sortKey = self::SORTS[$sort] ?? 'cost_value';
-        usort($rows, fn ($a, $b) => ($dir === 'asc' ? 1 : -1) * ($sortKey === 'name_value' ? strcasecmp($a[$sortKey], $b[$sortKey]) : ($a[$sortKey] <=> $b[$sortKey])));
+        usort($rows, fn ($a, $b) => $this->compareAdRows($a, $b, $sortKey, $dir));
         $rows = array_slice($rows, 0, 100);
         $validRoas = array_values(array_filter(array_column($rows, 'roas_value'), fn ($v) => $v !== null));
         $totalLeads = array_sum(array_column($rows, 'leads_value'));
         $totalCost = array_sum(array_column($rows, 'cost_value'));
+        $totalImpressions = array_sum(array_column($rows, 'impressions_value'));
+        $totalClicks = array_sum(array_column($rows, 'clicks_value'));
 
         return [
             'title' => $title,
@@ -492,7 +595,11 @@ class GeneralLeadsDashboardService
             'totals' => $this->adRow([
                 'name_value' => 'Totales',
                 'cost_value' => $totalCost,
-                'impressions_value' => array_sum(array_column($rows, 'impressions_value')),
+                'impressions_value' => $totalImpressions,
+                'clicks_value' => $totalClicks,
+                'ctr_value' => $totalImpressions > 0 ? ($totalClicks / $totalImpressions) * 100 : 0,
+                'cpc_value' => $totalClicks > 0 ? $totalCost / $totalClicks : 0,
+                'cpm_value' => $totalImpressions > 0 ? ($totalCost / $totalImpressions) * 1000 : 0,
                 'conversions_value' => array_sum(array_column($rows, 'conversions_value')),
                 'roas_value' => $validRoas === [] ? null : array_sum($validRoas) / count($validRoas),
                 'leads_value' => $totalLeads,
@@ -503,12 +610,35 @@ class GeneralLeadsDashboardService
         ];
     }
 
+    private function compareAdRows(array $a, array $b, string $sortKey, string $dir): int
+    {
+        $primary = $sortKey === 'name_value'
+            ? strcasecmp((string) $a[$sortKey], (string) $b[$sortKey])
+            : ($a[$sortKey] <=> $b[$sortKey]);
+
+        if ($primary !== 0) {
+            return ($dir === 'asc' ? 1 : -1) * $primary;
+        }
+
+        $name = strcasecmp((string) $a['name_value'], (string) $b['name_value']);
+        if ($name !== 0) {
+            return $name;
+        }
+
+        return strcasecmp((string) $a['entity_value'], (string) $b['entity_value']);
+    }
+
     private function adRow(array $row): array
     {
-        return [
+        $formatted = [
+            'entity_value' => (string) ($row['entity_value'] ?? ''),
             'name' => GeneralLeadsPresentation::title($row['name_value']),
             'cost' => GeneralLeadsPresentation::money($row['cost_value']),
             'impressions' => number_format((float) $row['impressions_value'], 0, ',', '.'),
+            'clicks' => number_format((float) $row['clicks_value'], 0, ',', '.'),
+            'ctr' => number_format((float) $row['ctr_value'], 2, ',', '.').'%',
+            'cpc' => GeneralLeadsPresentation::money($row['cpc_value']),
+            'cpm' => GeneralLeadsPresentation::money($row['cpm_value']),
             'conversions' => number_format((float) $row['conversions_value'], 2, ',', '.'),
             'roas' => $row['roas_value'] === null ? 'Sin Dato' : number_format((float) $row['roas_value'], 2, ',', '.'),
             'leads' => number_format((float) $row['leads_value'], 0, ',', '.'),
@@ -516,6 +646,12 @@ class GeneralLeadsDashboardService
             'unqualified_leads' => number_format((float) $row['unqualified_value'], 0, ',', '.'),
             'cpl' => GeneralLeadsPresentation::money($row['cpl_value']),
         ];
+
+        if (! empty($row['url'])) {
+            $formatted['url'] = $row['url'];
+        }
+
+        return $formatted;
     }
 
     private function catalogOptions(GeneralLeadsFilters $filters, string $dimension): array
@@ -682,8 +818,82 @@ class GeneralLeadsDashboardService
         return route('dashboard.general-leads.list', $filters->query($overrides));
     }
 
+    private function adListUrl(GeneralLeadsFilters $filters, string $section, string $entityId, string $entityName): string
+    {
+        return $this->listUrl($filters, [
+            'ad_section' => $section,
+            'ad_entity_id' => $entityId,
+            'ad_entity_name' => mb_substr($entityName, 0, 120),
+        ]);
+    }
+
+    private function applyAdvertisingEntityFilter($query, Request $request, GeneralLeadsFilters $filters): void
+    {
+        $section = (string) $request->query('ad_section', '');
+        $entityId = (string) $request->query('ad_entity_id', '');
+
+        if ($section === '' || $entityId === '') {
+            return;
+        }
+
+        $googleField = match ($section) {
+            'google_campaigns' => 'google_campaign_id',
+            'google_ad_groups' => 'google_adgroup_id',
+            'google_ads' => 'google_ad_id',
+            default => null,
+        };
+
+        if ($googleField) {
+            $query->where("leads.{$googleField}", $entityId);
+
+            return;
+        }
+
+        if ($section === 'meta_ads') {
+            $query->where('leads.meta_id_ad', $entityId);
+
+            return;
+        }
+
+        if (! in_array($section, ['meta_campaigns', 'meta_ad_sets'], true)) {
+            return;
+        }
+
+        $groupKey = $section === 'meta_campaigns' ? 'campaign_id' : 'adset_id';
+        $adIds = $this->liveMetrics()
+            ->metaAdMap($filters)
+            ->filter(fn ($row) => (string) ($row->{$groupKey} ?? '') === $entityId)
+            ->pluck('entity_value')
+            ->filter()
+            ->unique()
+            ->values();
+
+        $adIds->isEmpty()
+            ? $query->whereRaw('1 = 0')
+            : $query->whereIn('leads.meta_id_ad', $adIds->all());
+    }
+
     private function listTitle(Request $request): string
     {
+        $adSection = (string) $request->query('ad_section', '');
+        $adEntityName = trim((string) $request->query('ad_entity_name', ''));
+
+        if ($adSection !== '') {
+            $label = match ($adSection) {
+                'meta_campaigns' => 'Campaña Meta',
+                'meta_ad_sets' => 'Grupo De Anuncios Meta',
+                'meta_ads' => 'Anuncio Meta',
+                'google_campaigns' => 'Campaña Google',
+                'google_ad_groups' => 'Grupo De Anuncios Google',
+                'google_ads' => 'Anuncio Google',
+                default => 'Pauta',
+            };
+
+            return $adEntityName !== ''
+                ? "Leads Por {$label}: {$adEntityName}"
+                : "Leads Por {$label}";
+        }
+
         $scope = (string) $request->query('scope', 'total');
         if ($scope === 'managed') {
             return 'Leads Gestionados';
@@ -701,25 +911,183 @@ class GeneralLeadsDashboardService
         return 'Leads En El Periodo';
     }
 
-    private function relationColumns(): array
+    private function liveMetrics(): GeneralLeadsAdsLiveMetricsService
+    {
+        return $this->liveMetrics ??= app(GeneralLeadsAdsLiveMetricsService::class);
+    }
+
+    private function listColumns(): array
     {
         return [
-            'customer_name' => 'Cliente',
-            'integration_name' => 'Integracion',
-            'crm_state_name' => 'Estado CRM',
-            'qualification_name' => 'Calificacion',
-            'funnel_name' => 'Funnel',
-            'campaign_objective_name' => 'Campaign Objective',
-            'source_name' => 'Source Nombre',
-            'origin_name' => 'Origen Nombre',
-            'type_name' => 'Medio Nombre',
+            ['key' => 'created_at', 'label' => 'Created At'],
+            ['key' => 'customer_id', 'label' => 'Customer Id'],
+            ['key' => 'customer_name', 'label' => 'Cliente'],
+            ['key' => 'origin_name', 'label' => 'Origen Nombre'],
+            ['key' => 'id', 'label' => 'Id'],
+            ['key' => 'crm_id', 'label' => 'Crm Id'],
+            ['key' => 'name', 'label' => 'Name'],
+            ['key' => 'last_name', 'label' => 'Last Name'],
+            ['key' => 'email', 'label' => 'Email'],
+            ['key' => 'phone', 'label' => 'Phone'],
+            ['key' => 'crm_state_name', 'label' => 'Crm State/Estado CRM'],
+            ['key' => 'integration_statuses_text', 'label' => 'Integracion'],
+            ['key' => 'qualification_name', 'label' => 'Calificacion'],
+            ['key' => 'funnel_name', 'label' => 'Funnel'],
+            ['key' => 'campaign_objective_name', 'label' => 'Campaign Objective'],
+            ['key' => 'source_name', 'label' => 'Source Nombre'],
+            ['key' => 'type_name', 'label' => 'Medio Nombre'],
+            ['key' => 'position', 'label' => 'Position'],
+            ['key' => 'city', 'label' => 'City'],
+            ['key' => 'company', 'label' => 'Company'],
+            ['key' => 'country', 'label' => 'Country'],
+            ['key' => 'service_city', 'label' => 'Service City'],
+            ['key' => 'children', 'label' => 'Children'],
+            ['key' => 'opening_hours', 'label' => 'Opening Hours'],
+            ['key' => 'effective_lead', 'label' => 'Effective Lead'],
+            ['key' => 'reference', 'label' => 'Reference'],
+            ['key' => 'service', 'label' => 'Service'],
+            ['key' => 'remote_ip', 'label' => 'Remote Ip'],
+            ['key' => 'page', 'label' => 'Page'],
+            ['key' => 'page_url', 'label' => 'Page Url'],
+            ['key' => 'site_url', 'label' => 'Site Url'],
+            ['key' => 'campaign_origin', 'label' => 'Campaign Origin'],
+            ['key' => 'campaign_objective', 'label' => 'Campaign Objective'],
+            ['key' => 'meta_id_ad', 'label' => 'Meta Id Ad'],
+            ['key' => 'g_clid', 'label' => 'G Clid'],
+            ['key' => 'gclid', 'label' => 'Gclid'],
+            ['key' => 'gbraid', 'label' => 'Gbraid'],
+            ['key' => 'wbraid', 'label' => 'Wbraid'],
+            ['key' => 'gad_source', 'label' => 'Gad Source'],
+            ['key' => 'gad_campaignid', 'label' => 'Gad Campaignid'],
+            ['key' => 'google_ad_id', 'label' => 'Google Ad Id'],
+            ['key' => 'google_adgroup_id', 'label' => 'Google Adgroup Id'],
+            ['key' => 'google_campaign_id', 'label' => 'Google Campaign Id'],
+            ['key' => 'matchtype', 'label' => 'Matchtype'],
+            ['key' => 'device', 'label' => 'Device'],
+            ['key' => 'g_ad', 'label' => 'G Ad'],
+            ['key' => 'meta_lead_id', 'label' => 'Meta Lead Id'],
+            ['key' => 'meta_page_id', 'label' => 'Meta Page Id'],
+            ['key' => 'meta_form_id', 'label' => 'Meta Form Id'],
+            ['key' => 'meta_created_time', 'label' => 'Meta Created Time'],
+            ['key' => 'meta_payload', 'label' => 'Meta Payload'],
+            ['key' => 'value', 'label' => 'Value'],
+            ['key' => 'fbp', 'label' => 'Fbp'],
+            ['key' => 'fbc', 'label' => 'Fbc'],
+            ['key' => 'updated_at', 'label' => 'Updated At'],
+            ['key' => 'plataforma', 'label' => 'Plataforma'],
+            ['key' => 'lenguaje', 'label' => 'Lenguaje'],
+            ['key' => 'geo', 'label' => 'Geo'],
+            ['key' => 'number_workers', 'label' => 'Number Workers'],
+            ['key' => 'number_locations', 'label' => 'Number Locations'],
+            ['key' => 'campo_numero_1', 'label' => 'Campo Numero 1'],
+            ['key' => 'campo_numero_2', 'label' => 'Campo Numero 2'],
+            ['key' => 'campo_numero_3', 'label' => 'Campo Numero 3'],
+            ['key' => 'campo_numero_4', 'label' => 'Campo Numero 4'],
+            ['key' => 'campo_numero_5', 'label' => 'Campo Numero 5'],
+            ['key' => 'campo_text_1', 'label' => 'Campo Text 1'],
+            ['key' => 'campo_text_2', 'label' => 'Campo Text 2'],
+            ['key' => 'campo_text_3', 'label' => 'Campo Text 3'],
+            ['key' => 'campo_text_4', 'label' => 'Campo Text 4'],
+            ['key' => 'campo_text_5', 'label' => 'Campo Text 5'],
+            ['key' => 'campo_text_6', 'label' => 'Campo Text 6'],
+            ['key' => 'campo_text_7', 'label' => 'Campo Text 7'],
+            ['key' => 'campo_text_8', 'label' => 'Campo Text 8'],
+            ['key' => 'campo_text_9', 'label' => 'Campo Text 9'],
+            ['key' => 'campo_text_10', 'label' => 'Campo Text 10'],
+            ['key' => 'campo_text_11', 'label' => 'Campo Text 11'],
+            ['key' => 'campo_text_12', 'label' => 'Campo Text 12'],
+            ['key' => 'campo_text_13', 'label' => 'Campo Text 13'],
+            ['key' => 'campo_text_14', 'label' => 'Campo Text 14'],
+            ['key' => 'campo_text_15', 'label' => 'Campo Text 15'],
         ];
     }
 
-    private function leadColumns(): array
+    private function listExportRow(Lead $lead, array $columns): array
     {
-        return collect(Schema::getColumnListing('leads'))
-            ->mapWithKeys(fn (string $column) => [$column => GeneralLeadsPresentation::title(str_replace('_', ' ', $column))])
-            ->all();
+        return array_map(
+            fn (array $column) => $this->listColumnValue($lead, $column['key']),
+            $columns
+        );
+    }
+
+    private function listColumnValue(Lead $lead, string $key): string
+    {
+        $value = match ($key) {
+            'created_at', 'updated_at', 'meta_created_time' => optional($lead->{$key})->format('Y-m-d H:i:s'),
+            'name' => $this->firstFilledFieldValue($lead, ['nombre', 'first_name', 'name', 'nombres']),
+            'last_name' => $this->firstFilledFieldValue($lead, ['apellido', 'last_name', 'lastname', 'apellidos']),
+            'phone' => $this->firstFilledFieldValue($lead, ['telefono', 'phone', 'phone_number', 'celular', 'movil']),
+            'integration_statuses_text' => $this->leadIntegrationStatusesText($lead),
+            'meta_payload' => $this->stringifyListValue($lead->meta_payload ?? null),
+            default => data_get($lead, $key),
+        };
+
+        return $this->stringifyListValue($value);
+    }
+
+    private function stringifyListValue(mixed $value): string
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d H:i:s');
+        }
+
+        if (is_bool($value)) {
+            return $value ? 'Si' : 'No';
+        }
+
+        if (is_array($value) || is_object($value)) {
+            return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
+        }
+
+        if ($value === null || $value === '') {
+            return '';
+        }
+
+        return (string) $value;
+    }
+
+    private function leadIntegrationStatusesText(Lead $lead): string
+    {
+        $leadIntegrations = $lead->relationLoaded('leadIntegrations')
+            ? $lead->leadIntegrations
+            : $lead->leadIntegrations()->with('integration:id,name')->orderBy('id')->get();
+
+        if ($leadIntegrations->isEmpty()) {
+            return 'Sin integraciones';
+        }
+
+        return $leadIntegrations
+            ->map(function ($leadIntegration) {
+                $status = strtolower(trim((string) ($leadIntegration->status ?? '')));
+                $integration = $leadIntegration->integration?->name
+                    ?: ($leadIntegration->integration_id ? 'Integracion #'.$leadIntegration->integration_id : 'Integracion');
+                $answerCode = $leadIntegration->answer_code ? ' ('.$leadIntegration->answer_code.')' : '';
+
+                return $integration.': '.$this->leadIntegrationStatusLabel($status).$answerCode;
+            })
+            ->implode(' | ');
+    }
+
+    private function leadIntegrationStatusLabel(string $status): string
+    {
+        return match ($status) {
+            'completed' => 'Completada',
+            'failed' => 'Fallida',
+            'pending' => 'Pendiente',
+            default => $status !== '' ? Str::headline($status) : 'Sin estado',
+        };
+    }
+
+    private function firstFilledFieldValue($obj, array $fields): ?string
+    {
+        foreach ($fields as $field) {
+            $value = data_get($obj, $field);
+
+            if ($value !== null && $value !== '') {
+                return (string) $value;
+            }
+        }
+
+        return null;
     }
 }

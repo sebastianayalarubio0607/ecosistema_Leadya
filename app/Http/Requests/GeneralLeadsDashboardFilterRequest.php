@@ -7,7 +7,7 @@ use Illuminate\Validation\Validator;
 
 class GeneralLeadsDashboardFilterRequest extends FormRequest
 {
-    private const SORTABLE = ['name', 'cost', 'impressions', 'conversions', 'roas', 'leads', 'qualified_leads', 'unqualified_leads', 'cpl'];
+    private const SORTABLE = ['name', 'cost', 'impressions', 'clicks', 'ctr', 'cpc', 'cpm', 'conversions', 'roas', 'leads', 'qualified_leads', 'unqualified_leads', 'cpl'];
 
     public function authorize(): bool
     {
@@ -28,6 +28,9 @@ class GeneralLeadsDashboardFilterRequest extends FormRequest
             'qualification' => ['nullable', 'integer', 'exists:qualification,id'],
             'lenguaje' => ['nullable', 'string', 'max:255'],
             'geo' => ['nullable', 'string', 'max:255'],
+            'ad_section' => ['nullable', 'string', 'in:meta_campaigns,meta_ad_sets,meta_ads,google_campaigns,google_ad_groups,google_ads'],
+            'ad_entity_id' => ['nullable', 'string', 'max:255'],
+            'ad_entity_name' => ['nullable', 'string', 'max:255'],
             'sort' => ['nullable', 'array'],
             'sort.*' => ['nullable', 'string', 'in:'.implode(',', self::SORTABLE)],
             'dir' => ['nullable', 'array'],
@@ -51,7 +54,7 @@ class GeneralLeadsDashboardFilterRequest extends FormRequest
 
     protected function prepareForValidation(): void
     {
-        foreach (['customer_id', 'integration_id', 'from', 'to', 'source', 'campaign_origin', 'plataforma', 'crm_state', 'qualification', 'lenguaje', 'geo'] as $key) {
+        foreach (['customer_id', 'integration_id', 'from', 'to', 'source', 'campaign_origin', 'plataforma', 'crm_state', 'qualification', 'lenguaje', 'geo', 'ad_section', 'ad_entity_id', 'ad_entity_name'] as $key) {
             $value = $this->input($key);
             $this->merge([$key => is_string($value) && trim($value) === '' ? null : $value]);
         }

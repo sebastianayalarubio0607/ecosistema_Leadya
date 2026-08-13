@@ -35,6 +35,13 @@ const stacked = (payload, stack = 'stack') => ({
 });
 
 const mountCharts = () => {
+    charts.forEach((chart, element) => {
+        if (!element.isConnected) {
+            chart.dispose();
+            charts.delete(element);
+        }
+    });
+
     document.querySelectorAll('[data-general-chart]').forEach((element) => {
         charts.get(element)?.dispose();
         const chart = echarts.init(element);
@@ -48,3 +55,6 @@ const mountCharts = () => {
 window.addEventListener('resize', () => charts.forEach((chart) => chart.resize()));
 document.addEventListener('DOMContentLoaded', mountCharts);
 document.addEventListener('livewire:navigated', mountCharts);
+document.addEventListener('livewire:init', () => {
+    Livewire.hook('morphed', () => requestAnimationFrame(mountCharts));
+});

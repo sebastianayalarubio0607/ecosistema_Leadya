@@ -9,6 +9,13 @@ use Illuminate\Support\Facades\Log;
 
 class GoogleAdsAuthService
 {
+    private ?string $lastRefreshError = null;
+
+    public function lastRefreshError(): ?string
+    {
+        return $this->lastRefreshError;
+    }
+
     public function getActiveCredential(): ?GoogleAdsCredential
     {
         $credential = GoogleAdsCredential::query()
@@ -64,11 +71,15 @@ class GoogleAdsAuthService
 
     public function refreshAccessToken(GoogleAdsCredential $credential): ?GoogleAdsCredential
     {
+        $this->lastRefreshError = null;
+
         if (
             ! $credential->client_id
             || ! $credential->client_secret
             || ! $credential->refresh_token
         ) {
+            $this->lastRefreshError = 'Las credenciales de Google Ads estan incompletas.';
+
             Log::warning('Google Ads token refresh skipped because required credentials are incomplete.', [
                 'credential_id' => $credential->id,
                 'customer_id_masked' => SensitiveValue::redact($credential->customer_id),
@@ -95,6 +106,8 @@ class GoogleAdsAuthService
                 ]);
 
             if (! $response->successful()) {
+                $this->lastRefreshError = 'Google OAuth respondio con estado '.$response->status().'.';
+
                 Log::error('Google Ads token refresh failed.', [
                     'credential_id' => $credential->id,
                     'status' => $response->status(),
@@ -110,6 +123,8 @@ class GoogleAdsAuthService
             $expiresIn = (int) $response->json('expires_in', 0);
 
             if ($accessToken === '' || $expiresIn <= 0) {
+                $this->lastRefreshError = 'Google OAuth no devolvio un access token valido.';
+
                 Log::error('Google Ads token refresh returned an incomplete payload.', [
                     'credential_id' => $credential->id,
                     'customer_id_masked' => SensitiveValue::redact($credential->customer_id),
@@ -131,6 +146,8 @@ class GoogleAdsAuthService
 
             return $credential->fresh();
         } catch (\Throwable $exception) {
+            $this->lastRefreshError = $exception->getMessage();
+
             Log::error('Google Ads token refresh threw an exception.', [
                 'credential_id' => $credential->id,
                 'customer_id_masked' => SensitiveValue::redact($credential->customer_id),

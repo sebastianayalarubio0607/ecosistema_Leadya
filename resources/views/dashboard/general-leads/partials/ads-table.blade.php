@@ -1,5 +1,6 @@
 @php
-    $columns = ['name' => 'Nombre', 'cost' => 'Costo', 'impressions' => 'Impresiones', 'conversions' => 'Conversiones Totales', 'roas' => 'ROAS', 'leads' => 'Leads', 'qualified_leads' => 'Leads Calificados', 'unqualified_leads' => 'Leads No Calificados', 'cpl' => 'CPL'];
+    $columns = ['name' => 'Nombre', 'cost' => 'Costo', 'impressions' => 'Impresiones', 'clicks' => 'Clicks', 'ctr' => 'CTR', 'cpc' => 'CPC', 'cpm' => 'CPM', 'conversions' => 'Conversiones Totales', 'roas' => 'ROAS', 'leads' => 'Leads', 'qualified_leads' => 'Leads Calificados', 'unqualified_leads' => 'Leads No Calificados', 'cpl' => 'CPL'];
+    $livewireSort = $livewireSort ?? false;
 @endphp
 
 <section class="rounded-2xl border border-white/10 bg-zinc-950/25 p-4 backdrop-blur">
@@ -16,16 +17,32 @@
                             $nextDir = ($table['sort'] === $key && $table['dir'] === 'asc') ? 'desc' : 'asc';
                         @endphp
                         <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">
-                            <a href="{{ request()->fullUrlWithQuery(["sort[{$table['section']}]" => $key, "dir[{$table['section']}]" => $nextDir]) }}" class="inline-flex items-center gap-1 hover:text-white">
-                                <span>{{ $label }}</span><span class="text-[10px] text-white/35">{{ $table['sort'] === $key ? strtoupper($table['dir']) : 'SORT' }}</span>
-                            </a>
+                            @if($livewireSort)
+                                <button type="button" wire:click="sortBy('{{ $table['section'] }}', '{{ $key }}')" class="inline-flex items-center gap-1 hover:text-white">
+                                    <span>{{ $label }}</span><span class="text-[10px] text-white/35">{{ $table['sort'] === $key ? strtoupper($table['dir']) : 'SORT' }}</span>
+                                </button>
+                            @else
+                                <a href="{{ request()->fullUrlWithQuery(["sort[{$table['section']}]" => $key, "dir[{$table['section']}]" => $nextDir]) }}" class="inline-flex items-center gap-1 hover:text-white">
+                                    <span>{{ $label }}</span><span class="text-[10px] text-white/35">{{ $table['sort'] === $key ? strtoupper($table['dir']) : 'SORT' }}</span>
+                                </a>
+                            @endif
                         </th>
                     @endforeach
                 </tr>
             </thead>
             <tbody class="divide-y divide-white/10">
                 @forelse($table['rows'] as $row)
-                    <tr class="text-white/80 hover:bg-white/5">
+                    @php($rowUrl = $row['url'] ?? null)
+                    <tr
+                        @if($rowUrl)
+                            role="link"
+                            tabindex="0"
+                            title="Ver leads relacionados"
+                            onclick="window.location.href = @js($rowUrl)"
+                            onkeydown="if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); window.location.href = @js($rowUrl); }"
+                        @endif
+                        class="text-white/80 hover:bg-white/5 {{ $rowUrl ? 'cursor-pointer focus:bg-white/5 focus:outline-none focus:ring-2 focus:ring-indigo-300/50' : '' }}"
+                    >
                         @foreach(array_keys($columns) as $key)
                             <td class="px-3 py-2 whitespace-nowrap">{{ $row[$key] }}</td>
                         @endforeach
