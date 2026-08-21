@@ -2,7 +2,7 @@
 
 namespace App\Livewire;
 
-use App\Http\Services\GeneralLeads\GeneralLeadsDashboardService;
+use App\Http\Services\GeneralLeads\GeneralLeadsAdsTableCacheService;
 use App\Http\Services\GeneralLeads\GeneralLeadsFilters;
 use App\Http\Services\GeneralLeads\GeneralLeadsPlatformRateLimiter;
 use Illuminate\Http\Request;
@@ -11,9 +11,29 @@ use Livewire\Component;
 
 class GerencialLeadsAdsTable extends Component
 {
+    private const SORTABLE_COLUMNS = [
+        'name',
+        'cost',
+        'impressions',
+        'clicks',
+        'ctr',
+        'cpc',
+        'cpm',
+        'conversions',
+        'roas',
+        'leads',
+        'qualified_leads',
+        'unqualified_leads',
+        'cpl',
+    ];
+
     public string $section;
 
     public array $query = [];
+
+    public array $sort = [];
+
+    public array $dir = [];
 
     public string $customerName = '';
 
@@ -37,6 +57,8 @@ class GerencialLeadsAdsTable extends Component
         $this->query = $query;
         $this->customerName = $customerName;
         $this->periodLabel = $periodLabel;
+        $this->sort = (array) ($query['sort'] ?? []);
+        $this->dir = (array) ($query['dir'] ?? []);
         $this->table = $this->placeholderTable();
     }
 
@@ -48,21 +70,24 @@ class GerencialLeadsAdsTable extends Component
         $this->waitingPlatform = null;
 
         try {
-            $limit = app(GeneralLeadsPlatformRateLimiter::class)->hit($this->platform());
-            if (! $limit['allowed']) {
-                $this->waiting = true;
-                $this->waitSeconds = (int) $limit['retry_after'];
-                $this->waitingPlatform = $this->platformLabel();
-                $this->loaded = true;
+            $request = $this->requestFromState();
+            $filters = GeneralLeadsFilters::fromRequest($request);
+            $cache = app(GeneralLeadsAdsTableCacheService::class);
 
-                return;
+            if (! $cache->has($filters, $this->section)) {
+                $limit = app(GeneralLeadsPlatformRateLimiter::class)->hit($this->platform());
+                if (! $limit['allowed']) {
+                    $this->waiting = true;
+                    $this->waitSeconds = (int) $limit['retry_after'];
+                    $this->waitingPlatform = $this->platformLabel();
+                    $this->table = $this->placeholderTable();
+                    $this->loaded = true;
+
+                    return;
+                }
             }
 
-            $request = Request::create(route('dashboard.gerencial-leads', absolute: false), 'GET', array_filter(array_merge($this->query, [
-                '_live_ads' => now()->timestamp,
-            ]), fn ($value) => $value !== null && $value !== '' && $value !== []));
-            $filters = GeneralLeadsFilters::fromRequest($request);
-            $this->table = app(GeneralLeadsDashboardService::class)->adTable($filters, $request, $this->section);
+            $this->table = $cache->table($filters, $request, $this->section);
             $this->loaded = true;
         } catch (\Throwable $exception) {
             report($exception);
@@ -76,6 +101,20 @@ class GerencialLeadsAdsTable extends Component
     {
         $this->loaded = false;
         $this->waiting = false;
+        $this->load();
+    }
+
+    public function sortBy(string $section, string $column): void
+    {
+        if ($section !== $this->section || ! in_array($column, self::SORTABLE_COLUMNS, true)) {
+            return;
+        }
+
+        $currentSort = $this->sort[$section] ?? '';
+        $currentDir = $this->dir[$section] ?? 'desc';
+
+        $this->sort[$section] = $column;
+        $this->dir[$section] = $currentSort === $column && $currentDir === 'asc' ? 'desc' : 'asc';
         $this->load();
     }
 
@@ -98,9 +137,9 @@ class GerencialLeadsAdsTable extends Component
             'cpm' => 'CPM',
             'conversions' => 'Conversiones Totales',
             'roas' => 'ROAS',
-            'leads' => 'Leads',
-            'qualified_leads' => 'Leads calificados',
-            'unqualified_leads' => 'Leads no calificados',
+            'leads' => 'Leads en LQ',
+            'qualified_leads' => 'Leads en LQ calificados',
+            'unqualified_leads' => 'Leads en LQ no calificados',
             'cpl' => 'CPL',
         ])->map(fn ($label, $key) => ['key' => $key, 'label' => $label])->values()->all();
 
@@ -118,6 +157,9 @@ class GerencialLeadsAdsTable extends Component
             'table' => [
                 'enabled' => ! empty($rows),
                 'note' => empty($rows) ? 'No hay datos disponibles para los filtros seleccionados.' : null,
+                'section' => $this->section,
+                'sort' => $this->sort[$this->section] ?? 'cost',
+                'dir' => $this->dir[$this->section] ?? 'desc',
                 'columns' => $columns,
                 'rows' => $rows,
             ],
@@ -143,10 +185,22 @@ class GerencialLeadsAdsTable extends Component
         ), fn ($value) => $value !== null && $value !== '' && $value !== []));
     }
 
+    private function requestFromState(): Request
+    {
+        return Request::create(route('dashboard.gerencial-leads', absolute: false), 'GET', array_filter(array_merge($this->query, [
+            'sort' => $this->sort,
+            'dir' => $this->dir,
+            '_live_ads' => now()->timestamp,
+        ]), fn ($value) => $value !== null && $value !== '' && $value !== []));
+    }
+
     private function placeholderTable(): array
     {
         return [
             'title' => $this->title(),
+            'section' => $this->section,
+            'sort' => $this->sort[$this->section] ?? 'cost',
+            'dir' => $this->dir[$this->section] ?? 'desc',
             'rows' => [],
         ];
     }

@@ -50,6 +50,7 @@
             'section' => $displaySection,
             'customerName' => $customerName,
             'periodLabel' => $periodLabel,
+            'livewireSort' => true,
         ])
     @endif
 </div>

@@ -24,6 +24,7 @@ class Integration extends Model
         'integrationtype_id',
         'customer_id',
         'url',
+        'urldestino',
         'tokent',
         'status',
         'priority',

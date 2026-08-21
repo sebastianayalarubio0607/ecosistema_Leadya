@@ -154,6 +154,7 @@ class IntegrationController extends Controller
             'description' => 'nullable|string',
             'integrationtype_id' => 'required|exists:integrationtypes,id',
             'url' => ($typeName === 'gohighlevel' ? 'nullable' : 'required').'|url',
+            'urldestino' => ['nullable', 'url', 'max:2048'],
             'status' => 'required|boolean',
             'priority' => ['nullable', 'integer', 'min:0'],
             'tokent' => 'nullable|string',

@@ -1,7 +1,7 @@
 <x-app-layout>
     <x-slot name="header">
         <div class="flex items-center justify-between">
-            <h2 class="font-semibold text-xl text-indigo-200">Dashboard Gerencial de Leads</h2>
+            <h2 class="font-semibold text-xl text-indigo-200">Dashboard Gerencial de Leads en LQ</h2>
         </div>
     </x-slot>
 
@@ -56,7 +56,7 @@
                         Object.prototype.hasOwnProperty.call(item, "dimension_total") && item.dimension_total !== null
                     );
                     const metricHeaders = hasDimensionTotal
-                        ? [`Total ${dimensionTitle}`, "Leads calificados", "Leads no calificados"]
+                        ? [`Total ${dimensionTitle}`, "Leads en LQ calificados", "Leads en LQ no calificados"]
                         : ["Total", "Calif.", "No calif."];
                     [dimensionTitle, ...metricHeaders].forEach((title, index) => {
                         const th = document.createElement("th");
@@ -234,7 +234,7 @@
                 thead.className = "text-white/50";
                 const headerRow = document.createElement("tr");
 
-                [`Total ${dimensionTitle}`, "Leads calificados", "Leads no calificados"].forEach((title) => {
+                [`Total ${dimensionTitle}`, "Leads en LQ calificados", "Leads en LQ no calificados"].forEach((title) => {
                     const th = document.createElement("th");
                     th.className = "px-2 py-1 font-medium text-right first:text-left";
                     th.textContent = title;
@@ -316,11 +316,11 @@
                             scaleSize: 2
                         },
                         data: [{
-                                name: "Leads calificados",
+                                name: "Leads en LQ calificados",
                                 value: totals.qualified
                             },
                             {
-                                name: "Leads no calificados",
+                                name: "Leads en LQ no calificados",
                                 value: totals.unqualified
                             }
                         ]
@@ -540,106 +540,6 @@
                 });
             }
 
-            function parseSortableValue(value) {
-                const raw = String(value ?? "").trim();
-                if (!raw || raw === "-") {
-                    return {
-                        type: "empty",
-                        value: ""
-                    };
-                }
-
-                const digitsOnlyCandidate = raw.replace(/[$%\s.,-]/g, "");
-                const looksNumeric = /^\d+$/.test(digitsOnlyCandidate);
-                const numericCandidate = raw
-                    .replace(/[^\d,.-]/g, "")
-                    .replace(/\.(?=\d{3}(\D|$))/g, "")
-                    .replace(",", ".");
-                const number = Number.parseFloat(numericCandidate);
-
-                if (looksNumeric && numericCandidate && Number.isFinite(number)) {
-                    return {
-                        type: "number",
-                        value: number
-                    };
-                }
-
-                return {
-                    type: "text",
-                    value: raw.toLocaleLowerCase("es")
-                };
-            }
-
-            function compareSortableValues(left, right, direction) {
-                if (left.type === "empty" && right.type !== "empty") return 1;
-                if (right.type === "empty" && left.type !== "empty") return -1;
-
-                const multiplier = direction === "asc" ? 1 : -1;
-
-                if (left.type === "number" && right.type === "number") {
-                    return (left.value - right.value) * multiplier;
-                }
-
-                return String(left.value).localeCompare(String(right.value), "es", {
-                    numeric: true,
-                    sensitivity: "base"
-                }) * multiplier;
-            }
-
-            function setupSortableTables() {
-                document.querySelectorAll("[data-sortable-table]").forEach((table) => {
-                    const tbody = table.tBodies[0];
-                    if (!tbody) return;
-
-                    Array.from(tbody.rows).forEach((row, index) => {
-                        row.dataset.originalIndex = String(index);
-                    });
-
-                    table.querySelectorAll("[data-sort-header]").forEach((button) => {
-                        if (button.dataset.sortReady === "1") {
-                            return;
-                        }
-                        button.dataset.sortReady = "1";
-
-                        button.addEventListener("click", () => {
-                            const columnIndex = Number.parseInt(button.dataset.columnIndex, 10);
-                            const currentDirection = button.dataset.sortDirection || "none";
-                            const nextDirection = currentDirection === "asc" ? "desc" : "asc";
-                            const rows = Array.from(tbody.rows);
-
-                            table.querySelectorAll("[data-sort-header]").forEach((header) => {
-                                header.dataset.sortDirection = "none";
-                                header.closest("th")?.setAttribute("aria-sort", "none");
-                                const icon = header.querySelector("[data-sort-icon]");
-                                if (icon) icon.textContent = "sort";
-                            });
-
-                            button.dataset.sortDirection = nextDirection;
-                            button.closest("th")?.setAttribute("aria-sort", nextDirection ===
-                                "asc" ? "ascending" : "descending");
-                            const activeIcon = button.querySelector("[data-sort-icon]");
-                            if (activeIcon) activeIcon.textContent = nextDirection;
-
-                            rows.sort((a, b) => {
-                                const left = parseSortableValue(a.cells[columnIndex]
-                                    ?.textContent);
-                                const right = parseSortableValue(b.cells[columnIndex]
-                                    ?.textContent);
-                                const result = compareSortableValues(left, right,
-                                    nextDirection);
-
-                                if (result !== 0) return result;
-
-                                return Number(a.dataset.originalIndex || 0) - Number(b
-                                    .dataset.originalIndex || 0);
-                            });
-
-                            rows.forEach((row) => tbody.appendChild(row));
-                        });
-                    });
-                });
-            }
-
             let listenersAttached = false;
             let initScheduled = false;
 
@@ -664,7 +564,6 @@
                 buildFunnelHistoryDailyChart();
                 buildFunnelHistoryDailyChart("opportunitiesSalesDailyChart", false);
                 buildFunnelHistoryDailyChart("opportunitiesSalesDailyLineChart", false, "line");
-                setupSortableTables();
                 setupDatetimeMax();
 
                 if (!listenersAttached) {

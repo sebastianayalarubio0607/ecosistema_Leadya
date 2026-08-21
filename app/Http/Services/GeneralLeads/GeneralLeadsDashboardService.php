@@ -19,6 +19,8 @@ use Illuminate\Support\Str;
 
 class GeneralLeadsDashboardService
 {
+    private const LEADS_FUNNEL_ID = 5;
+
     private const UNQUALIFIED = ['lead no efectivo', 'sin gestionar', 'sin respuesta', 'n/a', 'no efectivo', 'duplicado', 'spam'];
 
     private const SORTS = [
@@ -117,9 +119,16 @@ class GeneralLeadsDashboardService
 
     public function adTable(GeneralLeadsFilters $filters, Request $request, string $section): array
     {
+        $payload = $this->adTablePayload($filters, $section);
+
+        return $this->formatAdTableRows($request, $section, $payload['title'], $payload['rows']);
+    }
+
+    public function adTablePayload(GeneralLeadsFilters $filters, string $section): array
+    {
         return str_starts_with($section, 'meta_')
-            ? $this->metaTable($filters, $request, $section)
-            : $this->googleTable($filters, $request, $section);
+            ? $this->metaTablePayload($filters, $section)
+            : $this->googleTablePayload($filters, $section);
     }
 
     public function costSummary(GeneralLeadsFilters $filters): array
@@ -232,12 +241,28 @@ class GeneralLeadsDashboardService
         }
 
         if ($groupType === 'funnel_history' && $groupId !== '') {
+            $funnelIds = $groupId === '__SALES__' ? $this->funnelIds()['sales'] : [$groupId];
+            $isLeadsGroup = $this->isLeadsFunnelGroup($groupId);
+
             $query->join('lead_funnel_histories as lfh_list', function ($join) use ($filters) {
                 $join->on('lfh_list.lead_id', '=', 'leads.id')
                     ->whereBetween('lfh_list.created_at', [$filters->from, $filters->to]);
             })
-                ->where('lfh_list.funnel_id', $groupId)
+                ->leftJoin('funnels as f_history_list', 'f_history_list.id', '=', 'lfh_list.funnel_id')
                 ->distinct();
+
+            if ($isLeadsGroup) {
+                $leadsFunnelId = $this->leadsFunnelId();
+                $query->where(function ($q) use ($leadsFunnelId) {
+                    $q->where('lfh_list.funnel_id', $leadsFunnelId)
+                        ->orWhereNull('lfh_list.funnel_id')
+                        ->orWhereNull('f_history_list.id');
+                });
+            } else {
+                empty($funnelIds)
+                    ? $query->whereRaw('1 = 0')
+                    : $query->whereIn('lfh_list.funnel_id', $funnelIds);
+            }
         }
 
         $this->applyAdvertisingEntityFilter($query, $request, $filters);
@@ -250,6 +275,7 @@ class GeneralLeadsDashboardService
         $base = $this->leads->base($filters);
         $funnels = $this->funnelIds();
         $sales = $this->sales($filters, $funnels['sales']);
+        $salesGroupId = count($funnels['sales']) > 1 ? '__SALES__' : ($funnels['sales'][0] ?? null);
 
         return [
             'total' => (int) (clone $base)->distinct('leads.id')->count('leads.id'),
@@ -264,7 +290,7 @@ class GeneralLeadsDashboardService
                 'unmanaged' => $this->listUrl($filters, ['scope' => 'unmanaged']),
                 'not_effective' => isset($funnels['not_effective'][0]) ? $this->listUrl($filters, ['group_type' => 'funnel', 'group_id' => $funnels['not_effective'][0]]) : null,
                 'effective' => isset($funnels['effective'][0]) ? $this->listUrl($filters, ['group_type' => 'funnel', 'group_id' => $funnels['effective'][0]]) : null,
-                'sales' => isset($funnels['sales'][0]) ? $this->listUrl($filters, ['group_type' => 'funnel', 'group_id' => $funnels['sales'][0]]) : null,
+                'sales' => $salesGroupId ? $this->listUrl($filters, ['group_type' => 'funnel_history', 'group_id' => $salesGroupId]) : null,
             ],
             'missing_funnels' => $funnels['missing'],
         ];
@@ -290,14 +316,30 @@ class GeneralLeadsDashboardService
             return ['count' => 0, 'value' => GeneralLeadsPresentation::money(0)];
         }
 
-        $row = $this->leads->base($filters)
-            ->leftJoin('crm_state as cs_s', 'cs_s.id', '=', 'leads.crm_state')
-            ->leftJoin('qualification as q_s', 'q_s.id', '=', 'cs_s.qualification')
-            ->whereIn('q_s.funnel_id', $ids)
+        $leadIds = $this->historicalLeadIdsByFunnelIds($filters, $ids);
+
+        $row = DB::query()
+            ->fromSub($leadIds, 'sales_history_leads')
+            ->join('leads', 'leads.id', '=', 'sales_history_leads.lead_id')
             ->selectRaw('COUNT(DISTINCT leads.id) as total, COALESCE(SUM(COALESCE(leads.value, 0)), 0) as value')
             ->first();
 
         return ['count' => (int) ($row->total ?? 0), 'value' => GeneralLeadsPresentation::money($row->value ?? 0)];
+    }
+
+    private function historicalLeadIdsByFunnelIds(GeneralLeadsFilters $filters, array $ids): QueryBuilder
+    {
+        $query = DB::table('lead_funnel_histories as lfh_sales')
+            ->join('leads', 'leads.id', '=', 'lfh_sales.lead_id')
+            ->whereBetween('lfh_sales.created_at', [$filters->from, $filters->to])
+            ->whereBetween('leads.created_at', [$filters->from, $filters->to])
+            ->whereIn('lfh_sales.funnel_id', $ids);
+
+        $this->applyHistoryFilters($query, $filters);
+
+        return $query
+            ->select('leads.id as lead_id')
+            ->distinct();
     }
 
     private function breakdown(GeneralLeadsFilters $filters, string $dimension): array
@@ -312,6 +354,7 @@ class GeneralLeadsDashboardService
             ->selectRaw("
                 CASE WHEN {$column} IS NULL OR {$column} = '' THEN ? WHEN {$catalog}.id IS NULL THEN ? ELSE {$column} END as group_value,
                 CASE WHEN {$column} IS NULL OR {$column} = '' THEN ? WHEN {$catalog}.id IS NULL THEN ? ELSE COALESCE(NULLIF({$catalog}.name, ''), {$column}) END as group_label,
+                CASE WHEN {$column} IS NOT NULL AND {$column} != '' AND {$catalog}.id IS NULL THEN {$column} ELSE NULL END as missing_catalog_value,
                 COUNT(DISTINCT leads.id) as total,
                 COUNT(DISTINCT CASE WHEN q_b.name IS NOT NULL AND LOWER(TRIM(q_b.name)) NOT IN ({$this->excludedSql()}) THEN leads.id END) as qualified
             ", [$nullValue, $missingValue, $nullLabel, $missingLabel])
@@ -323,7 +366,7 @@ class GeneralLeadsDashboardService
                 $qualified = (int) $row->qualified;
 
                 return [
-                    'name' => GeneralLeadsPresentation::title($row->group_label),
+                    'name' => $this->breakdownLabel($row->group_label, $row->missing_catalog_value),
                     'value' => (string) $row->group_value,
                     'total' => $total,
                     'qualified' => $qualified,
@@ -335,6 +378,14 @@ class GeneralLeadsDashboardService
             ->all();
 
         return ['rows' => $rows, 'totals' => $this->totals($rows)];
+    }
+
+    private function breakdownLabel(mixed $label, mixed $missingValue = null): string
+    {
+        $display = GeneralLeadsPresentation::title($label);
+        $missing = trim((string) ($missingValue ?? ''));
+
+        return $missing === '' ? $display : "{$display}({$missing})";
     }
 
     private function sourceBreakdown(GeneralLeadsFilters $filters): array
@@ -390,6 +441,8 @@ class GeneralLeadsDashboardService
 
     private function funnels(GeneralLeadsFilters $filters): array
     {
+        $leadsFunnelId = $this->leadsFunnelId();
+
         $current = $this->leads->base($filters)
             ->leftJoin('crm_state as cs_cur', 'cs_cur.id', '=', 'leads.crm_state')
             ->leftJoin('qualification as q_cur', 'q_cur.id', '=', 'cs_cur.qualification')
@@ -407,13 +460,19 @@ class GeneralLeadsDashboardService
 
         $historyQuery = DB::table('lead_funnel_histories as lfh')
             ->join('leads', 'leads.id', '=', 'lfh.lead_id')
-            ->join('funnels as f_history', 'f_history.id', '=', 'lfh.funnel_id')
+            ->leftJoin('funnels as f_history', 'f_history.id', '=', 'lfh.funnel_id')
             ->whereBetween('lfh.created_at', [$filters->from, $filters->to])
             ->whereBetween('leads.created_at', [$filters->from, $filters->to]);
         $this->applyHistoryFilters($historyQuery, $filters);
-        $history = $historyQuery
-            ->selectRaw("f_history.id as funnel_id, COALESCE(NULLIF(f_history.name, ''), 'Sin Funnel') as name, COUNT(DISTINCT lfh.lead_id) as total")
-            ->groupBy('f_history.id', 'f_history.name')
+        $historyFunnelId = "CASE WHEN f_history.id IS NULL THEN {$leadsFunnelId} ELSE f_history.id END";
+        $historyFunnelName = "CASE WHEN f_history.id IS NULL THEN 'Leads' ELSE COALESCE(NULLIF(f_history.name, ''), 'Sin Funnel') END";
+        $history = DB::query()
+            ->fromSub(
+                (clone $historyQuery)->selectRaw("lfh.lead_id, {$historyFunnelId} as funnel_id, {$historyFunnelName} as name"),
+                'history_rows'
+            )
+            ->selectRaw('funnel_id, name, COUNT(DISTINCT lead_id) as total')
+            ->groupBy('funnel_id', 'name')
             ->orderByDesc('total')
             ->get()
             ->map(fn ($r) => [
@@ -425,13 +484,19 @@ class GeneralLeadsDashboardService
 
         $dailyQuery = DB::table('lead_funnel_histories as lfh')
             ->join('leads', 'leads.id', '=', 'lfh.lead_id')
-            ->join('funnels as f_day', 'f_day.id', '=', 'lfh.funnel_id')
+            ->leftJoin('funnels as f_day', 'f_day.id', '=', 'lfh.funnel_id')
             ->whereBetween('lfh.created_at', [$filters->from, $filters->to])
             ->whereBetween('leads.created_at', [$filters->from, $filters->to]);
         $this->applyHistoryFilters($dailyQuery, $filters);
-        $daily = $dailyQuery
-            ->selectRaw('DATE(lfh.created_at) as day, f_day.name as name, COUNT(DISTINCT lfh.lead_id) as total')
-            ->groupByRaw('DATE(lfh.created_at), f_day.id, f_day.name')
+        $dailyFunnelId = "CASE WHEN f_day.id IS NULL THEN {$leadsFunnelId} ELSE f_day.id END";
+        $dailyFunnelName = "CASE WHEN f_day.id IS NULL THEN 'Leads' ELSE COALESCE(NULLIF(f_day.name, ''), 'Sin Funnel') END";
+        $daily = DB::query()
+            ->fromSub(
+                (clone $dailyQuery)->selectRaw("DATE(lfh.created_at) as day, lfh.lead_id, {$dailyFunnelId} as funnel_id, {$dailyFunnelName} as name"),
+                'daily_rows'
+            )
+            ->selectRaw('day, name, COUNT(DISTINCT lead_id) as total')
+            ->groupBy('day', 'funnel_id', 'name')
             ->orderBy('day')
             ->get();
         $days = $daily->pluck('day')->unique()->values();
@@ -451,6 +516,13 @@ class GeneralLeadsDashboardService
 
     private function metaTable(GeneralLeadsFilters $filters, Request $request, string $section): array
     {
+        $payload = $this->metaTablePayload($filters, $section);
+
+        return $this->formatAdTableRows($request, $section, $payload['title'], $payload['rows']);
+    }
+
+    private function metaTablePayload(GeneralLeadsFilters $filters, string $section): array
+    {
         $title = match ($section) {
             'meta_campaigns' => 'Campañas Meta',
             'meta_ad_sets' => 'Grupos De Anuncios Meta',
@@ -458,7 +530,7 @@ class GeneralLeadsDashboardService
         };
         $costs = $this->liveMetrics()->metaRows($filters, $section);
 
-        return $this->formatAds($request, $filters, $section, $title, $costs, $this->metaLeadRows($filters, $section, $costs));
+        return ['title' => $title, 'rows' => $this->adRows($filters, $section, $costs, $this->metaLeadRows($filters, $section, $costs))];
     }
 
     private function metaLeadRows(GeneralLeadsFilters $filters, string $section, Collection $costs): Collection
@@ -501,6 +573,13 @@ class GeneralLeadsDashboardService
 
     private function googleTable(GeneralLeadsFilters $filters, Request $request, string $section): array
     {
+        $payload = $this->googleTablePayload($filters, $section);
+
+        return $this->formatAdTableRows($request, $section, $payload['title'], $payload['rows']);
+    }
+
+    private function googleTablePayload(GeneralLeadsFilters $filters, string $section): array
+    {
         $title = match ($section) {
             'google_campaigns' => 'Campañas Google',
             'google_ad_groups' => 'Grupos De Anuncios Google',
@@ -508,7 +587,7 @@ class GeneralLeadsDashboardService
         };
         $costs = $this->liveMetrics()->googleRows($filters, $section);
 
-        return $this->formatAds($request, $filters, $section, $title, $costs, $this->googleLeadRows($filters, $section));
+        return ['title' => $title, 'rows' => $this->adRows($filters, $section, $costs, $this->googleLeadRows($filters, $section))];
     }
 
     private function googleLeadRows(GeneralLeadsFilters $filters, string $section): Collection
@@ -550,6 +629,11 @@ class GeneralLeadsDashboardService
 
     private function formatAds(Request $request, GeneralLeadsFilters $filters, string $section, string $title, Collection $costs, Collection $leads): array
     {
+        return $this->formatAdTableRows($request, $section, $title, $this->adRows($filters, $section, $costs, $leads));
+    }
+
+    private function adRows(GeneralLeadsFilters $filters, string $section, Collection $costs, Collection $leads): array
+    {
         $rows = [];
         foreach ($costs as $id => $cost) {
             $name = (string) $cost->name_value;
@@ -575,6 +659,12 @@ class GeneralLeadsDashboardService
                 'url' => $this->adListUrl($filters, $section, (string) $id, $name),
             ];
         }
+
+        return $rows;
+    }
+
+    public function formatAdTableRows(Request $request, string $section, string $title, array $rows): array
+    {
         $sort = $request->input("sort.{$section}", 'cost');
         $dir = $request->input("dir.{$section}", 'desc') === 'asc' ? 'asc' : 'desc';
         $sortKey = self::SORTS[$sort] ?? 'cost_value';
@@ -729,6 +819,24 @@ class GeneralLeadsDashboardService
             'sales' => $sales,
             'missing' => array_values(array_filter([$notEffective === [] ? 'Lead No Efectivo' : null, $effective === [] ? 'Oportunidades O Respondidos' : null, $sales === [] ? 'Ventas' : null])),
         ];
+    }
+
+    private function leadsFunnelId(): int
+    {
+        $id = Funnel::query()
+            ->whereRaw('LOWER(TRIM(name)) = ?', ['leads'])
+            ->value('id');
+
+        $id ??= Funnel::query()
+            ->whereRaw('LOWER(TRIM(name)) = ?', ['lead'])
+            ->value('id');
+
+        return (int) ($id ?: self::LEADS_FUNNEL_ID);
+    }
+
+    private function isLeadsFunnelGroup(string $groupId): bool
+    {
+        return $groupId === '__LEADS__' || $groupId === (string) $this->leadsFunnelId();
     }
 
     private function applyHistoryFilters(QueryBuilder $query, GeneralLeadsFilters $filters): void
@@ -890,25 +998,25 @@ class GeneralLeadsDashboardService
             };
 
             return $adEntityName !== ''
-                ? "Leads Por {$label}: {$adEntityName}"
-                : "Leads Por {$label}";
+                ? "Leads en LQ Por {$label}: {$adEntityName}"
+                : "Leads en LQ Por {$label}";
         }
 
         $scope = (string) $request->query('scope', 'total');
         if ($scope === 'managed') {
-            return 'Leads Gestionados';
+            return 'Leads en LQ Gestionados';
         }
         if ($scope === 'unmanaged') {
-            return 'Leads No Gestionados';
+            return 'Leads en LQ No Gestionados';
         }
         if ($request->query('group_type') === 'funnel_history') {
-            return 'Histórico Leads En El Funnel';
+            return 'Histórico Leads en LQ En El Funnel';
         }
         if ($request->query('group_type') === 'funnel') {
-            return 'Leads Por Funnel';
+            return 'Leads en LQ Por Funnel';
         }
 
-        return 'Leads En El Periodo';
+        return 'Leads en LQ En El Periodo';
     }
 
     private function liveMetrics(): GeneralLeadsAdsLiveMetricsService

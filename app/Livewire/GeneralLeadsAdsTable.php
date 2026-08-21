@@ -2,7 +2,7 @@
 
 namespace App\Livewire;
 
-use App\Http\Services\GeneralLeads\GeneralLeadsDashboardService;
+use App\Http\Services\GeneralLeads\GeneralLeadsAdsTableCacheService;
 use App\Http\Services\GeneralLeads\GeneralLeadsFilters;
 use App\Http\Services\GeneralLeads\GeneralLeadsPlatformRateLimiter;
 use Illuminate\Http\Request;
@@ -63,20 +63,24 @@ class GeneralLeadsAdsTable extends Component
         $this->waitingPlatform = null;
 
         try {
-            $limit = app(GeneralLeadsPlatformRateLimiter::class)->hit($this->platform());
-            if (! $limit['allowed']) {
-                $this->waiting = true;
-                $this->waitSeconds = (int) $limit['retry_after'];
-                $this->waitingPlatform = $this->platformLabel();
-                $this->table = $this->placeholderTable();
-                $this->loaded = true;
-
-                return;
-            }
-
             $request = $this->requestFromState();
             $filters = GeneralLeadsFilters::fromRequest($request);
-            $this->table = app(GeneralLeadsDashboardService::class)->adTable($filters, $request, $this->section);
+            $cache = app(GeneralLeadsAdsTableCacheService::class);
+
+            if (! $cache->has($filters, $this->section)) {
+                $limit = app(GeneralLeadsPlatformRateLimiter::class)->hit($this->platform());
+                if (! $limit['allowed']) {
+                    $this->waiting = true;
+                    $this->waitSeconds = (int) $limit['retry_after'];
+                    $this->waitingPlatform = $this->platformLabel();
+                    $this->table = $this->placeholderTable();
+                    $this->loaded = true;
+
+                    return;
+                }
+            }
+
+            $this->table = $cache->table($filters, $request, $this->section);
             $this->loaded = true;
         } catch (\Throwable $exception) {
             report($exception);

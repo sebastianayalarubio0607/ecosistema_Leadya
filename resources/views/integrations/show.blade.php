@@ -25,6 +25,15 @@
         </form>
     @endif
 
+    @if(filled($integration->urldestino ?? null))
+        <a href="{{ $integration->urldestino }}"
+           target="_blank"
+           rel="noopener noreferrer"
+           class="px-4 py-2 rounded-xl bg-emerald-500/25 hover:bg-emerald-500/35 text-white border border-emerald-300/20">
+            Ir a plataforma
+        </a>
+    @endif
+
     <a href="{{ route('integrations.edit', $integration) }}"
        class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10">
         Editar
@@ -55,6 +64,21 @@
                     <div class="text-sm text-white/50">URL</div>
                     <div class="mt-1 break-all">{{ $integration->url }}</div>
                 </div>
+
+                @if(filled($integration->urldestino ?? null))
+                    <div>
+                        <div class="text-sm text-white/50">URL destino</div>
+                        <div class="mt-1 flex flex-wrap items-center gap-3">
+                            <span class="break-all">{{ $integration->urldestino }}</span>
+                            <a href="{{ $integration->urldestino }}"
+                               target="_blank"
+                               rel="noopener noreferrer"
+                               class="inline-flex px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-300/20 text-xs text-white">
+                                Ir a plataforma
+                            </a>
+                        </div>
+                    </div>
+                @endif
 
                 <div>
                     <div class="text-sm text-white/50">Public Key</div>

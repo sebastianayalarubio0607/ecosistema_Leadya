@@ -49,8 +49,7 @@ class MetaLeadAdsSyncService
      */
     public function exchangeLongLivedToken(string $shortLivedToken, ?string $metaAppId = null, ?string $metaAppSecret = null): array
     {
-        $appId = $metaAppId;
-        $appSecret = $metaAppSecret;
+        [$appId, $appSecret] = $this->resolveMetaCredentials($metaAppId, $metaAppSecret);
 
         $this->ensureMetaCredentialsConfigured($appId, $appSecret);
 
@@ -497,7 +496,7 @@ class MetaLeadAdsSyncService
             SendLeadToFacebook::dispatch($lead->id, (int) $lead->customer_id);
         }
 
-        $this->leadFunnelHistoryService->recordIfFunnelChanged($lead);
+        $this->leadFunnelHistoryService->recordInitialLead($lead);
         $this->dispatchLeadIntegrations($lead);
 
         return ['created' => 1, 'updated' => 0];
@@ -626,5 +625,26 @@ class MetaLeadAdsSyncService
         if (blank($appId) || blank($appSecret)) {
             throw new \RuntimeException('Faltan meta_app_id o meta_app_secret en meta_access_tokens.');
         }
+    }
+
+    private function resolveMetaCredentials(?string $appId, ?string $appSecret): array
+    {
+        if (filled($appId) && filled($appSecret)) {
+            return [$appId, $appSecret];
+        }
+
+        $token = MetaAccessToken::query()
+            ->select(['meta_app_id', 'meta_app_secret'])
+            ->where('token_type', MetaAccessToken::TYPE_USER_ACCESS_TOKEN)
+            ->where('is_active', true)
+            ->whereNotNull('meta_app_id')
+            ->whereNotNull('meta_app_secret')
+            ->latest('id')
+            ->first();
+
+        return [
+            $appId ?: $token?->meta_app_id,
+            $appSecret ?: $token?->meta_app_secret,
+        ];
     }
 }

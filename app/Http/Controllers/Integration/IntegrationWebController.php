@@ -29,15 +29,20 @@ class IntegrationWebController extends Controller
         $typeId = $request->get('integrationtype_id');
         $priority = $request->get('priority');
         $hasPriorityColumn = $this->hasIntegrationPriorityColumn();
+        $hasDestinationUrlColumn = $this->hasIntegrationDestinationUrlColumn();
 
         $integrations = Integration::query()
             ->with(['customer:id,name', 'integrationtype:id,name'])
-            ->when($q, function ($query) use ($q) {
-                $query->where(function ($query) use ($q) {
+            ->when($q, function ($query) use ($q, $hasDestinationUrlColumn) {
+                $query->where(function ($query) use ($q, $hasDestinationUrlColumn) {
                     $query->where('name', 'like', "%{$q}%")
                         ->orWhere('description', 'like', "%{$q}%")
                         ->orWhere('url', 'like', "%{$q}%")
                         ->orWhere('public_key', 'like', "%{$q}%");
+
+                    if ($hasDestinationUrlColumn) {
+                        $query->orWhere('urldestino', 'like', "%{$q}%");
+                    }
                 });
             })
             ->when($name, fn ($query) => $query->where('name', 'like', "%{$name}%"))
@@ -170,18 +175,13 @@ class IntegrationWebController extends Controller
     public function update(Request $request, Integration $integration)
     {
         $validated = $request->validate($this->rules($request, true, $integration));
+        $integration->loadMissing('integrationtype:id,name');
 
         $typeName = $this->normalizeIntegrationTypeName(
             Integrationtype::whereKey($validated['integrationtype_id'])->value('name')
         );
 
-        if ($typeName === 'kommopipeline' && empty($validated['tokent'])) {
-            $validated['tokent'] = $integration->tokent;
-        }
-
-        if ($typeName === 'atom' && empty($validated['tokent'])) {
-            $validated['tokent'] = $integration->tokent;
-        }
+        $validated = $this->preserveExistingSensitiveValues($validated, $integration, $typeName);
 
         $payload = $this->normalizePayloadByType($validated);
         $payload = $this->hydrateSalesforceTokenFromCredentials($payload);
@@ -273,6 +273,7 @@ class IntegrationWebController extends Controller
             'integrationtype_id' => 'required|exists:integrationtypes,id',
             'customer_id' => 'required|exists:customers,id',
             'url' => (in_array($typeName, ['hubspot', 'gohighlevel', 'atom', 'lety'], true) ? 'nullable' : 'required').'|url',
+            'urldestino' => ['nullable', 'url', 'max:2048'],
             'status' => 'required|boolean',
             'crm_Id_phone' => ['nullable', 'string', 'max:255'],
             'crm_Id_service' => ['nullable', 'string', 'max:255'],
@@ -365,7 +366,7 @@ class IntegrationWebController extends Controller
         }
 
         if ($typeName === 'freshworks') {
-            $rules['tokent'] = ['required', 'string'];
+            $rules['tokent'] = $this->sensitiveValueRule($updating, $integration, $typeName, 'tokent');
             $rules['territory_id'] = ['required', 'string', 'max:255'];
             $rules['owner_id'] = ['required', 'string', 'max:255'];
             $rules['city'] = ['required', 'string', 'max:255'];
@@ -376,16 +377,16 @@ class IntegrationWebController extends Controller
         if ($typeName === 'salesforce') {
             $rules['url_credenciales'] = ['required', 'url', 'max:255'];
             $rules['username'] = ['required', 'string', 'max:255'];
-            $rules['password'] = ['required', 'string'];
+            $rules['password'] = $this->sensitiveValueRule($updating, $integration, $typeName, 'password');
             $rules['body'] = ['required', 'string'];
         }
 
         if ($typeName === 'monday') {
-            $rules['tokent'] = ['required', 'string'];
+            $rules['tokent'] = $this->sensitiveValueRule($updating, $integration, $typeName, 'tokent');
         }
 
         if ($typeName === 'hubspot') {
-            $rules['access_token'] = ['required', 'string'];
+            $rules['access_token'] = $this->sensitiveValueRule($updating, $integration, $typeName, 'access_token');
             $rules['url_consulta_lead'] = ['required', 'url', 'max:255'];
             $rules['url_negocio'] = ['required', 'url', 'max:255'];
             $rules['url_creacionlead'] = ['required', 'url', 'max:255'];
@@ -395,21 +396,17 @@ class IntegrationWebController extends Controller
         }
 
         if ($typeName === 'gohighlevel') {
-            $rules['tokent'] = ['required', 'string'];
+            $rules['tokent'] = $this->sensitiveValueRule($updating, $integration, $typeName, 'tokent');
             $rules['body'] = ['required', 'string'];
         }
 
         if ($typeName === 'kommopipeline') {
-            $rules['tokent'] = $updating && filled($integration?->tokent)
-                ? ['nullable', 'string']
-                : ['required', 'string'];
+            $rules['tokent'] = $this->sensitiveValueRule($updating, $integration, $typeName, 'tokent');
             $rules['body'] = ['required', 'string'];
         }
 
         if ($typeName === 'atom') {
-            $rules['tokent'] = $updating && filled($integration?->tokent)
-                ? ['nullable', 'string']
-                : ['required', 'string'];
+            $rules['tokent'] = $this->sensitiveValueRule($updating, $integration, $typeName, 'tokent');
             $rules['body'] = ['required', 'string'];
         }
 
@@ -570,6 +567,65 @@ class IntegrationWebController extends Controller
     private function hasIntegrationPriorityColumn(): bool
     {
         return Schema::hasColumn('integrations', 'priority');
+    }
+
+    private function hasIntegrationDestinationUrlColumn(): bool
+    {
+        return Schema::hasColumn('integrations', 'urldestino');
+    }
+
+    private function sensitiveValueRule(bool $updating, ?Integration $integration, string $typeName, string $field): array
+    {
+        return $this->hasStoredSensitiveValue($updating, $integration, $typeName, $field)
+            ? ['nullable', 'string']
+            : ['required', 'string'];
+    }
+
+    private function hasStoredSensitiveValue(bool $updating, ?Integration $integration, string $typeName, string $field): bool
+    {
+        if (! $updating || ! $integration || ! $this->integrationTypeMatches($integration, $typeName)) {
+            return false;
+        }
+
+        $storedField = $field === 'access_token' ? 'tokent' : $field;
+
+        return filled($integration->{$storedField});
+    }
+
+    private function integrationTypeMatches(Integration $integration, string $typeName): bool
+    {
+        if ($typeName === '') {
+            return false;
+        }
+
+        $existingTypeName = $this->normalizeIntegrationTypeName(optional($integration->integrationtype)->name);
+
+        if ($existingTypeName === '') {
+            $existingTypeName = $this->normalizeIntegrationTypeName(
+                Integrationtype::whereKey($integration->integrationtype_id)->value('name')
+            );
+        }
+
+        return $existingTypeName === $typeName;
+    }
+
+    private function preserveExistingSensitiveValues(array $validated, Integration $integration, string $typeName): array
+    {
+        if (! $this->integrationTypeMatches($integration, $typeName)) {
+            return $validated;
+        }
+
+        foreach (['tokent', 'client_secret', 'refresh_token', 'password'] as $field) {
+            if (array_key_exists($field, $validated) && blank($validated[$field]) && filled($integration->{$field})) {
+                $validated[$field] = $integration->{$field};
+            }
+        }
+
+        if (array_key_exists('access_token', $validated) && blank($validated['access_token']) && filled($integration->tokent)) {
+            $validated['access_token'] = $integration->tokent;
+        }
+
+        return $validated;
     }
 
     private function normalizeIntegrationTypeName(?string $typeName): string

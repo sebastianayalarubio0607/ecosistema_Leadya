@@ -4,14 +4,22 @@ const csrfToken = () => document.querySelector('meta[name="csrf-token"]')?.getAt
 
 const statusFor = (element) => element.closest('tr')?.querySelector('[data-row-status]');
 
-const setStatus = (element, message, tone = 'muted') => {
+const setStatus = (element, message, tone = 'muted', spinner = false) => {
     const status = statusFor(element);
 
     if (!status) {
         return;
     }
 
-    status.textContent = message;
+    status.replaceChildren();
+
+    if (spinner) {
+        const icon = document.createElement('span');
+        icon.className = 'mr-2 inline-block h-3 w-3 animate-spin rounded-full border-2 border-current border-r-transparent align-[-2px]';
+        status.append(icon);
+    }
+
+    status.append(document.createTextNode(message));
     status.classList.remove('text-white/50', 'text-emerald-200', 'text-amber-200', 'text-rose-200');
     status.classList.add({
         muted: 'text-white/50',
@@ -19,6 +27,57 @@ const setStatus = (element, message, tone = 'muted') => {
         saved: 'text-emerald-200',
         error: 'text-rose-200',
     }[tone] || 'text-white/50');
+};
+
+const setSavingOverlay = (element, visible, message = 'Guardando...') => {
+    const overlay = element.closest('[data-saving-control]')?.querySelector('[data-saving-overlay]');
+
+    if (!overlay) {
+        return;
+    }
+
+    overlay.replaceChildren();
+
+    if (visible) {
+        const icon = document.createElement('span');
+        icon.className = 'mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent';
+        overlay.append(icon, document.createTextNode(message));
+        overlay.classList.remove('hidden');
+        overlay.classList.add('flex');
+        return;
+    }
+
+    overlay.classList.add('hidden');
+    overlay.classList.remove('flex');
+};
+
+const setLocked = (element, locked, message = 'Guardando...') => {
+    element.disabled = locked;
+    element.classList.toggle('cursor-wait', locked);
+    element.classList.toggle('opacity-60', locked);
+    element.classList.toggle('ring-2', locked);
+    element.classList.toggle('ring-amber-300/40', locked);
+    setSavingOverlay(element, locked, message);
+};
+
+const unlockAfterCountdown = (element) => {
+    let seconds = 3;
+    setStatus(element, `Guardado. Disponible en ${seconds}s`, 'saved', true);
+    setSavingOverlay(element, true, `Disponible en ${seconds}s`);
+
+    const interval = window.setInterval(() => {
+        seconds -= 1;
+
+        if (seconds <= 0) {
+            window.clearInterval(interval);
+            setLocked(element, false);
+            setStatus(element, 'Listo', 'muted');
+            return;
+        }
+
+        setStatus(element, `Guardado. Disponible en ${seconds}s`, 'saved', true);
+        setSavingOverlay(element, true, `Disponible en ${seconds}s`);
+    }, 1000);
 };
 
 const errorMessage = async (response) => {
@@ -60,11 +119,15 @@ const bindCrmStateSelects = () => {
 
         select.dataset.bound = 'true';
         select.addEventListener('change', async () => {
+            if (select.disabled) {
+                return;
+            }
+
             const previous = select.dataset.originalValue || '';
             const selected = select.selectedOptions[0];
 
-            setStatus(select, 'Guardando...', 'saving');
-            select.disabled = true;
+            setLocked(select, true, 'Guardando estado...');
+            setStatus(select, 'Guardando estado...', 'saving', true);
 
             try {
                 const payload = await patch(select.dataset.updateUrl, { crm_state: select.value });
@@ -76,18 +139,21 @@ const bindCrmStateSelects = () => {
                     qualification.title = qualification.textContent;
                 }
 
-                setStatus(select, 'Guardado', 'saved');
+                unlockAfterCountdown(select);
             } catch (error) {
                 select.value = previous;
+                setLocked(select, false);
                 setStatus(select, error.message, 'error');
-            } finally {
-                select.disabled = false;
             }
         });
     });
 };
 
 const saveValue = async (input) => {
+    if (input.disabled) {
+        return;
+    }
+
     const value = input.value.trim();
     const previous = input.dataset.originalValue || '';
 
@@ -95,14 +161,16 @@ const saveValue = async (input) => {
         return;
     }
 
-    setStatus(input, 'Guardando...', 'saving');
+    setLocked(input, true, 'Guardando valor...');
+    setStatus(input, 'Guardando valor...', 'saving', true);
 
     try {
         const payload = await patch(input.dataset.updateUrl, { value: value === '' ? null : value });
         input.dataset.originalValue = payload.value ?? '';
         input.value = payload.value ?? '';
-        setStatus(input, 'Guardado', 'saved');
+        unlockAfterCountdown(input);
     } catch (error) {
+        setLocked(input, false);
         setStatus(input, error.message, 'error');
     }
 };
@@ -132,6 +200,16 @@ const bindValueInputs = () => {
 };
 
 const mountLeadManagement = () => {
+    document.querySelectorAll('[data-dismiss-management-notice]').forEach((button) => {
+        if (button.dataset.bound === 'true') {
+            return;
+        }
+
+        button.dataset.bound = 'true';
+        button.addEventListener('click', () => {
+            button.closest('[data-management-notice]')?.remove();
+        });
+    });
     bindCrmStateSelects();
     bindValueInputs();
 };

@@ -26,7 +26,7 @@
                 </div>
 
                 <div class="col-span-12 md:col-span-6">
-                    <div class="text-xs text-white/50 mb-2">{{ $hasBreakdownRows ? 'Tabla de leads (clic)' : 'Leyenda (clic)' }}</div>
+                    <div class="text-xs text-white/50 mb-2">{{ $hasBreakdownRows ? 'Tabla de Leads en LQ (clic)' : 'Leyenda (clic)' }}</div>
                     <div id="{{ $legendId }}" class="{{ $hasBreakdownRows ? 'overflow-x-auto' : 'space-y-2' }}"
                         @if($hasBreakdownRows) data-legend-variant="breakdown-table" @endif></div>
                 </div>

@@ -13,6 +13,27 @@
     </x-slot>
 
     <div class="mx-auto max-w-[1800px] space-y-6 p-4 sm:p-6">
+        @if($table['notice'])
+            <div
+                class="fixed right-4 top-20 z-50 max-w-md rounded-2xl border border-amber-200/20 bg-slate-950/95 p-4 text-white shadow-2xl shadow-black/30 backdrop-blur"
+                data-management-notice
+                role="alert"
+            >
+                <div class="flex items-start gap-3">
+                    <div class="mt-1 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-amber-400/15 text-amber-200">
+                        !
+                    </div>
+                    <div class="min-w-0">
+                        <p class="text-sm font-semibold text-amber-100">Cliente sin integracion</p>
+                        <p class="mt-1 text-sm text-white/70">{{ $table['notice'] }}</p>
+                    </div>
+                    <button type="button" class="ml-auto rounded-lg px-2 py-1 text-white/60 hover:bg-white/10 hover:text-white" data-dismiss-management-notice aria-label="Cerrar aviso">
+                        x
+                    </button>
+                </div>
+            </div>
+        @endif
+
         <section class="grid grid-cols-1 gap-4 xl:grid-cols-12">
             <div class="rounded-2xl border border-white/10 bg-zinc-950/25 p-4 backdrop-blur xl:col-span-3">
                 <p class="text-sm text-white/60">Cliente Seleccionado</p>
@@ -62,8 +83,13 @@
 
         @if(! $table['show'])
             <section class="rounded-2xl border border-white/10 bg-zinc-950/25 p-6 text-center backdrop-blur">
-                <h2 class="text-lg font-semibold text-white">Selecciona los filtros para consultar leads</h2>
-                <p class="mt-2 text-sm text-white/60">La tabla se mostrara despues de aplicar la configuracion de filtros.</p>
+                @if($table['blocked'])
+                    <h2 class="text-lg font-semibold text-white">Cliente no gestionable</h2>
+                    <p class="mt-2 text-sm text-white/60">Asocia una integracion al cliente para habilitar la gestion de sus leads.</p>
+                @else
+                    <h2 class="text-lg font-semibold text-white">Selecciona los filtros para consultar leads</h2>
+                    <p class="mt-2 text-sm text-white/60">La tabla se mostrara despues de aplicar la configuracion de filtros.</p>
+                @endif
             </section>
         @else
             <section class="rounded-2xl border border-white/10 bg-zinc-950/25 p-4 backdrop-blur" data-lead-management-table>
@@ -104,6 +130,7 @@
                                     <td class="max-w-44 truncate whitespace-nowrap px-3 py-2" title="{{ $lead->name ?: 'Sin Dato' }}">{{ $lead->name ?: 'Sin Dato' }}</td>
                                     <td class="max-w-44 truncate whitespace-nowrap px-3 py-2" title="{{ $lead->last_name ?: 'Sin Dato' }}">{{ $lead->last_name ?: 'Sin Dato' }}</td>
                                     <td class="min-w-64 px-3 py-2">
+                                        <div class="relative" data-saving-control>
                                         <select
                                             class="w-full rounded-xl border-white/10 bg-slate-900/60 text-white"
                                             data-lead-crm-state
@@ -122,6 +149,11 @@
                                                 </option>
                                             @endforeach
                                         </select>
+                                            <div class="pointer-events-none absolute inset-0 hidden items-center justify-center rounded-xl border border-amber-300/30 bg-slate-950/80 text-xs font-semibold text-amber-100 backdrop-blur-sm" data-saving-overlay>
+                                                <span class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent"></span>
+                                                Guardando...
+                                            </div>
+                                        </div>
                                     </td>
                                     <td class="max-w-48 truncate whitespace-nowrap px-3 py-2" data-lead-qualification title="{{ $lead->qualification_name }}">{{ $lead->qualification_name }}</td>
                                     <td class="max-w-xs truncate whitespace-nowrap px-3 py-2" title="{{ $lead->page_url ?: 'Sin Dato' }}">
@@ -132,6 +164,7 @@
                                         @endif
                                     </td>
                                     <td class="min-w-40 px-3 py-2">
+                                        <div class="relative" data-saving-control>
                                         <input
                                             type="number"
                                             min="0"
@@ -142,6 +175,11 @@
                                             data-update-url="{{ route('lead-management.value', $lead) }}"
                                             data-original-value="{{ $lead->value }}"
                                         >
+                                            <div class="pointer-events-none absolute inset-0 hidden items-center justify-center rounded-xl border border-amber-300/30 bg-slate-950/80 text-xs font-semibold text-amber-100 backdrop-blur-sm" data-saving-overlay>
+                                                <span class="mr-2 inline-block h-4 w-4 animate-spin rounded-full border-2 border-current border-r-transparent"></span>
+                                                Guardando...
+                                            </div>
+                                        </div>
                                     </td>
                                     <td class="max-w-44 truncate whitespace-nowrap px-3 py-2" title="{{ $lead->source_name }}">{{ $lead->source_name }}</td>
                                     <td class="max-w-44 truncate whitespace-nowrap px-3 py-2" title="{{ $lead->medium_name }}">{{ $lead->medium_name }}</td>

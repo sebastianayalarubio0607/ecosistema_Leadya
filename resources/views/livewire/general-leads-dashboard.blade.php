@@ -75,12 +75,12 @@
         <section class="space-y-4">
             <h2 class="text-2xl font-bold text-white">Resumen</h2>
             <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4 2xl:grid-cols-7">
-                @include('dashboard.general-leads.partials.summary-card', ['label' => 'Leads En El Periodo', 'value' => number_format($data['summary']['total'], 0, ',', '.'), 'secondaryLabel' => 'Periodo', 'secondaryValue' => $data['header']['period'], 'href' => $data['summary']['urls']['total']])
-                @include('dashboard.general-leads.partials.summary-card', ['label' => 'Leads Gestionados', 'value' => number_format($data['summary']['managed'], 0, ',', '.'), 'href' => $data['summary']['urls']['managed']])
-                @include('dashboard.general-leads.partials.summary-card', ['label' => 'Leads No Gestionados', 'value' => number_format($data['summary']['unmanaged'], 0, ',', '.'), 'href' => $data['summary']['urls']['unmanaged']])
-                @include('dashboard.general-leads.partials.summary-card', ['label' => 'Leads No Efectivos', 'value' => number_format($data['summary']['not_effective'], 0, ',', '.'), 'href' => $data['summary']['urls']['not_effective']])
-                @include('dashboard.general-leads.partials.summary-card', ['label' => 'Leads Efectivos', 'value' => number_format($data['summary']['effective'], 0, ',', '.'), 'href' => $data['summary']['urls']['effective']])
-                @include('dashboard.general-leads.partials.summary-card', ['label' => 'Leads Venta', 'value' => number_format($data['summary']['sales']['count'], 0, ',', '.'), 'secondaryLabel' => 'Valor De Venta', 'secondaryValue' => $data['summary']['sales']['value'], 'href' => $data['summary']['urls']['sales']])
+                @include('dashboard.general-leads.partials.summary-card', ['label' => 'Leads en LQ En El Periodo', 'value' => number_format($data['summary']['total'], 0, ',', '.'), 'secondaryLabel' => 'Periodo', 'secondaryValue' => $data['header']['period'], 'href' => $data['summary']['urls']['total']])
+                @include('dashboard.general-leads.partials.summary-card', ['label' => 'Leads en LQ Gestionados', 'value' => number_format($data['summary']['managed'], 0, ',', '.'), 'href' => $data['summary']['urls']['managed']])
+                @include('dashboard.general-leads.partials.summary-card', ['label' => 'Leads en LQ No Gestionados', 'value' => number_format($data['summary']['unmanaged'], 0, ',', '.'), 'href' => $data['summary']['urls']['unmanaged']])
+                @include('dashboard.general-leads.partials.summary-card', ['label' => 'Leads en LQ No Efectivos', 'value' => number_format($data['summary']['not_effective'], 0, ',', '.'), 'href' => $data['summary']['urls']['not_effective']])
+                @include('dashboard.general-leads.partials.summary-card', ['label' => 'Leads en LQ Efectivos', 'value' => number_format($data['summary']['effective'], 0, ',', '.'), 'href' => $data['summary']['urls']['effective']])
+                @include('dashboard.general-leads.partials.summary-card', ['label' => 'Leads en LQ Venta', 'value' => number_format($data['summary']['sales']['count'], 0, ',', '.'), 'secondaryLabel' => 'Valor De Venta', 'secondaryValue' => $data['summary']['sales']['value'], 'href' => $data['summary']['urls']['sales']])
                 <livewire:general-leads-costs :query="$filtersQuery" mode="summary" :key="'costs-summary-'.md5(json_encode($filtersQuery))" />
             </div>
             @if($data['summary']['missing_funnels'])
@@ -95,10 +95,10 @@
         </section>
 
         <section class="space-y-4">
-            <h2 class="text-2xl font-bold text-white">Desglose De Leads</h2>
-            @include('dashboard.general-leads.partials.breakdown-card', ['eyebrow' => 'Desglose', 'title' => 'Leads Por Source', 'breakdown' => $data['breakdowns']['source'], 'chartType' => 'donut', 'chartPayload' => $data['charts']['donuts']['source']])
-            @include('dashboard.general-leads.partials.breakdown-card', ['eyebrow' => 'Desglose', 'title' => 'Leads Por Origen', 'breakdown' => $data['breakdowns']['origin'], 'chartType' => 'donut', 'chartPayload' => $data['charts']['donuts']['origin']])
-            @include('dashboard.general-leads.partials.breakdown-card', ['eyebrow' => 'Desglose', 'title' => 'Leads Por Tipo', 'breakdown' => $data['breakdowns']['type'], 'chartType' => 'donut', 'chartPayload' => $data['charts']['donuts']['type']])
+            <h2 class="text-2xl font-bold text-white">Desglose De Leads en LQ</h2>
+            @include('dashboard.general-leads.partials.breakdown-card', ['eyebrow' => 'Desglose', 'title' => 'Leads en LQ Por Source', 'breakdown' => $data['breakdowns']['source'], 'chartType' => 'donut', 'chartPayload' => $data['charts']['donuts']['source']])
+            @include('dashboard.general-leads.partials.breakdown-card', ['eyebrow' => 'Desglose', 'title' => 'Leads en LQ Por Origen', 'breakdown' => $data['breakdowns']['origin'], 'chartType' => 'donut', 'chartPayload' => $data['charts']['donuts']['origin']])
+            @include('dashboard.general-leads.partials.breakdown-card', ['eyebrow' => 'Desglose', 'title' => 'Leads en LQ Por Tipo', 'breakdown' => $data['breakdowns']['type'], 'chartType' => 'donut', 'chartPayload' => $data['charts']['donuts']['type']])
         </section>
 
         <section class="space-y-4">
@@ -122,7 +122,7 @@
                     </div>
                 </section>
                 <section class="rounded-2xl border border-white/10 bg-zinc-950/25 p-4 backdrop-blur">
-                    <h3 class="text-lg font-semibold text-white">Histórico Leads En El Funnel</h3>
+                    <h3 class="text-lg font-semibold text-white">Histórico Leads en LQ En El Funnel</h3>
                     <div class="mt-4 space-y-2">
                         @forelse($data['funnels']['history'] as $row)
                             <a href="{{ $row['url'] }}" class="flex items-center justify-between rounded-xl border border-white/10 bg-white/5 px-4 py-3 transition hover:bg-white/10"><span class="text-sm text-white/80">{{ $row['name'] }}</span><span class="text-lg font-bold text-white">{{ number_format($row['total'], 0, ',', '.') }}</span></a>
@@ -132,7 +132,7 @@
                     </div>
                 </section>
                 <section class="rounded-2xl border border-white/10 bg-zinc-950/25 p-4 backdrop-blur">
-                    <h3 class="text-lg font-semibold text-white">Histórico Diario De Leads En Funnel</h3>
+                    <h3 class="text-lg font-semibold text-white">Histórico Diario De Leads en LQ En Funnel</h3>
                     <p class="mt-1 text-xs text-white/50">{{ $data['notes']['history'] }}</p>
                     <div class="mt-4 h-80 w-full" data-general-chart data-chart-type="funnel-daily" data-chart='@json($data['funnels']['daily'])'></div>
                 </section>

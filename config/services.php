@@ -38,9 +38,6 @@ return [
     'meta' => [
         'access_token' => env('META_ACCESS_TOKEN'),
         'log_webhook_url' => env('META_LOG_WEBHOOK_URL'),
-        'graph_version' => env('META_GRAPH_VERSION', 'v26.0'),
-        'app_id' => env('META_APP_ID'),
-        'app_secret' => env('META_APP_SECRET'),
         'verify_token' => env('META_VERIFY_TOKEN'),
     ],
     

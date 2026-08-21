@@ -17,7 +17,7 @@
                 <label class="block mb-1 text-white/70">Buscar</label>
                 <input name="q" value="{{ $q ?? request('q') }}"
                        class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
-                       placeholder="Buscar por nombre, url o public_key..." />
+                       placeholder="Buscar por nombre, url, destino o public_key..." />
             </div>
 
             <div class="md:col-span-2">
@@ -122,6 +122,15 @@
                                        href="{{ route('integrations.edit', $integration) }}">
                                         Editar
                                     </a>
+
+                                    @if(filled($integration->urldestino ?? null))
+                                        <a class="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-300/20 text-xs"
+                                           href="{{ $integration->urldestino }}"
+                                           target="_blank"
+                                           rel="noopener noreferrer">
+                                            Ir a plataforma
+                                        </a>
+                                    @endif
 
                                     <form method="POST"
                                           action="{{ route('integrations.destroy', $integration) }}"

@@ -679,6 +679,8 @@ class DashboardGerencialLeadsController extends Controller
             $respondedFunnelId = null;
 
             if ($funnelTable && $qualFunnelFk) {
+                $leadsFunnelId = $this->resolveLeadsFunnelId($funnelTable);
+                $leadsFunnelIdSql = (int) $leadsFunnelId;
                 $qFunnels = clone $base;
                 $qFunnels = $this->applyLeadDimensionFilters($qFunnels, $filters, $leadTable, true, true, true, true);
 
@@ -688,7 +690,7 @@ class DashboardGerencialLeadsController extends Controller
                     ->leftJoin("{$funnelTable} as fn", 'fn.id', '=', "qlf.{$qualFunnelFk}")
                     ->selectRaw("
                         CASE
-                            WHEN {$leadTable}.crm_state IS NULL OR {$leadTable}.crm_state = '' THEN '__LEADS__'
+                            WHEN {$leadTable}.crm_state IS NULL OR {$leadTable}.crm_state = '' THEN CAST({$leadsFunnelIdSql} AS CHAR)
                             WHEN fn.id IS NULL THEN '__NULL__'
                             ELSE CAST(fn.id AS CHAR)
                         END as funnel_id,
@@ -720,7 +722,8 @@ class DashboardGerencialLeadsController extends Controller
                 $notEffectiveFunnelId = $this->findFunnelIdByName($funnelTable, 'Lead NO Efectivo');
                 $qualifiedFunnelId = $this->findFunnelIdByName($funnelTable, 'Oportunidades');
                 $respondedFunnelId = $this->findFunnelIdByName($funnelTable, 'Respondidos');
-                $salesFunnelId = $this->findFunnelIdByName($funnelTable, 'Ventas');
+                $salesFunnelIds = $this->findFunnelIdsByNames($funnelTable, ['Ventas', 'Venta']);
+                $salesFunnelId = $salesFunnelIds[0] ?? null;
 
                 if ($notEffectiveFunnelId !== null) {
                     $notEffectiveCount = $this->countLeadsByFunnelIds($base, $filters, $leadTable, $funnelTable, $qualFunnelFk, [$notEffectiveFunnelId]);
@@ -730,9 +733,9 @@ class DashboardGerencialLeadsController extends Controller
                 if (! empty($qualifiedFunnelIds)) {
                     $qualifiedCount = $this->countLeadsByFunnelIds($base, $filters, $leadTable, $funnelTable, $qualFunnelFk, $qualifiedFunnelIds);
                 }
-                if ($salesFunnelId !== null) {
-                    $salesCount = $this->countLeadsByFunnelIds($base, $filters, $leadTable, $funnelTable, $qualFunnelFk, [$salesFunnelId]);
-                    $salesValueSum = $this->sumLeadsValueByFunnelIds($base, $filters, $leadTable, $funnelTable, $qualFunnelFk, [$salesFunnelId]);
+                if (! empty($salesFunnelIds)) {
+                    $salesCount = $this->countHistoricalLeadsByFunnelIds($qTotals, $leadTable, $salesFunnelIds, $from, $to);
+                    $salesValueSum = $this->sumHistoricalLeadsValueByFunnelIds($qTotals, $leadTable, $salesFunnelIds, $from, $to);
                 }
 
                 $channelQualificationBreakdown = $this->buildCampaignOriginQualificationBreakdown(
@@ -772,13 +775,22 @@ class DashboardGerencialLeadsController extends Controller
             if ($historyTable && Schema::hasTable($historyTable) && $funnelTableForHistory) {
                 // Base de leads: mismos filtros + ventana (leads.created_at)
                 $leadIdsSub = (clone $qTotals)->select("{$leadTable}.id");
+                $leadsFunnelId = $this->resolveLeadsFunnelId($funnelTableForHistory);
+                $leadsFunnelIdSql = (int) $leadsFunnelId;
+                $historyFunnelId = "CASE WHEN fnh.id IS NULL THEN {$leadsFunnelIdSql} ELSE fnh.id END";
+                $historyFunnelName = "CASE WHEN fnh.id IS NULL THEN 'Leads' ELSE COALESCE(fnh.name, '') END";
 
-                $rowsH = DB::table("{$historyTable} as lfh")
-                    ->join("{$funnelTableForHistory} as fnh", 'fnh.id', '=', 'lfh.funnel_id')
-                    ->whereBetween('lfh.created_at', [$from, $to])
-                    ->whereIn('lfh.lead_id', $leadIdsSub)
-                    ->selectRaw("lfh.funnel_id as funnel_id, COALESCE(fnh.name, '') as name, COUNT(DISTINCT lfh.lead_id) as total")
-                    ->groupBy('lfh.funnel_id', 'fnh.name')
+                $rowsH = DB::query()
+                    ->fromSub(
+                        DB::table("{$historyTable} as lfh")
+                            ->leftJoin("{$funnelTableForHistory} as fnh", 'fnh.id', '=', 'lfh.funnel_id')
+                            ->whereBetween('lfh.created_at', [$from, $to])
+                            ->whereIn('lfh.lead_id', $leadIdsSub)
+                            ->selectRaw("lfh.lead_id, {$historyFunnelId} as funnel_id, {$historyFunnelName} as name"),
+                        'history_rows'
+                    )
+                    ->selectRaw('funnel_id, name, COUNT(DISTINCT lead_id) as total')
+                    ->groupBy('funnel_id', 'name')
                     ->orderByDesc('total')
                     ->get();
 
@@ -790,12 +802,17 @@ class DashboardGerencialLeadsController extends Controller
                     ];
                 }
 
-                $rowsHDaily = DB::table("{$historyTable} as lfh")
-                    ->join("{$funnelTableForHistory} as fnh", 'fnh.id', '=', 'lfh.funnel_id')
-                    ->whereBetween('lfh.created_at', [$from, $to])
-                    ->whereIn('lfh.lead_id', $leadIdsSub)
-                    ->selectRaw("DATE(lfh.created_at) as day, lfh.funnel_id as funnel_id, COALESCE(fnh.name, '') as name, COUNT(DISTINCT lfh.lead_id) as total")
-                    ->groupByRaw('DATE(lfh.created_at), lfh.funnel_id, fnh.name')
+                $rowsHDaily = DB::query()
+                    ->fromSub(
+                        DB::table("{$historyTable} as lfh")
+                            ->leftJoin("{$funnelTableForHistory} as fnh", 'fnh.id', '=', 'lfh.funnel_id')
+                            ->whereBetween('lfh.created_at', [$from, $to])
+                            ->whereIn('lfh.lead_id', $leadIdsSub)
+                            ->selectRaw("DATE(lfh.created_at) as day, lfh.lead_id, {$historyFunnelId} as funnel_id, {$historyFunnelName} as name"),
+                        'daily_rows'
+                    )
+                    ->selectRaw('day, funnel_id, name, COUNT(DISTINCT lead_id) as total')
+                    ->groupBy('day', 'funnel_id', 'name')
                     ->orderBy('day')
                     ->get();
 
@@ -834,6 +851,7 @@ class DashboardGerencialLeadsController extends Controller
                 'qualified_funnel_id' => $qualifiedFunnelId,
                 'sales_count' => $salesCount,
                 'sales_funnel_id' => $salesFunnelId,
+                'sales_funnel_ids' => $salesFunnelIds ?? [],
                 'sales_value_sum' => (float) $salesValueSum,
 
                 'not_effective_count' => (int) $notEffectiveCount,
@@ -990,11 +1008,13 @@ class DashboardGerencialLeadsController extends Controller
             [$funnelTable, $qualFunnelFk] = $this->resolveFunnelJoinInfo();
             if ($funnelTable && $qualFunnelFk) {
                 $q->leftJoin("{$funnelTable} as fn", 'fn.id', '=', "ql.{$qualFunnelFk}");
+                $leadsFunnelId = $this->resolveLeadsFunnelId($funnelTable);
 
-                if ($groupId === '__LEADS__') {
-                    $q->where(function ($qq) use ($leadTable) {
+                if ($this->isLeadsFunnelGroupId($groupId, $funnelTable)) {
+                    $q->where(function ($qq) use ($leadTable, $leadsFunnelId) {
                         $qq->whereNull("{$leadTable}.crm_state")
-                            ->orWhere("{$leadTable}.crm_state", '');
+                            ->orWhere("{$leadTable}.crm_state", '')
+                            ->orWhere('fn.id', $leadsFunnelId);
                     });
                 } elseif ($groupId === '__NULL__') {
                     $q->whereNotNull("{$leadTable}.crm_state")
@@ -1021,10 +1041,10 @@ class DashboardGerencialLeadsController extends Controller
                 });
 
                 // Ã¢Å“â€¦ "Leads" histÃƒÂ³rico = (Lead + Lead NO Efectivo)
-                if ($groupId === '__LEADS__') {
-                    [$funnelTable] = $this->resolveFunnelJoinInfo();
-                    $funnelTable = Schema::hasTable('funnels') ? 'funnels' : $funnelTable;
+                [$funnelTable] = $this->resolveFunnelJoinInfo();
+                $funnelTable = Schema::hasTable('funnels') ? 'funnels' : $funnelTable;
 
+                if ($this->isLeadsFunnelGroupId($groupId, $funnelTable)) {
                     $leadId = $funnelTable ? $this->findFunnelIdByName($funnelTable, 'Lead') : null;
                     $leadsId = $funnelTable ? $this->findFunnelIdByName($funnelTable, 'Leads') : null;
                     $ids = array_values(array_filter([$leadId, $leadsId]));
@@ -1037,6 +1057,28 @@ class DashboardGerencialLeadsController extends Controller
                             ->map(fn ($v) => (string) $v)
                             ->all();
                     }
+
+                    $leadsFunnelId = $this->resolveLeadsFunnelId($funnelTable);
+
+                    if (! in_array($leadsFunnelId, $ids, true)) {
+                        $ids[] = $leadsFunnelId;
+                    }
+
+                    if ($funnelTable) {
+                        $q->leftJoin("{$funnelTable} as fnh_group", 'fnh_group.id', '=', 'lfh.funnel_id');
+                    }
+
+                    $q->where(function ($qq) use ($ids, $funnelTable) {
+                        $qq->whereIn('lfh.funnel_id', $ids)
+                            ->orWhereNull('lfh.funnel_id');
+
+                        if ($funnelTable) {
+                            $qq->orWhereNull('fnh_group.id');
+                        }
+                    });
+                    $historyOrderIds = $ids;
+                } elseif ($groupId === '__SALES__') {
+                    $ids = $funnelTable ? $this->findFunnelIdsByNames($funnelTable, ['Ventas', 'Venta']) : [];
 
                     if (empty($ids)) {
                         $q->whereRaw('1=0');
@@ -1232,6 +1274,9 @@ class DashboardGerencialLeadsController extends Controller
             if ($groupId === '__LEADS__') {
                 return 'Leads';
             }
+            if ($groupId === '__SALES__') {
+                return 'Ventas';
+            }
             [$funnelTable] = $this->resolveFunnelJoinInfo();
             $funnelTable = Schema::hasTable('funnels') ? 'funnels' : $funnelTable;
 
@@ -1299,6 +1344,121 @@ class DashboardGerencialLeadsController extends Controller
             ->value('id');
 
         return $id !== null ? (string) $id : null;
+    }
+
+    private function findFunnelIdsByNames(string $funnelTable, array $names): array
+    {
+        $normalizedNames = collect($names)
+            ->map(fn ($name) => mb_strtolower(trim((string) $name)))
+            ->filter()
+            ->unique()
+            ->values();
+
+        if ($normalizedNames->isEmpty()) {
+            return [];
+        }
+
+        $placeholders = implode(',', array_fill(0, $normalizedNames->count(), '?'));
+        $priority = array_flip($normalizedNames->all());
+
+        return DB::table($funnelTable)
+            ->whereRaw("LOWER(TRIM(name)) IN ({$placeholders})", $normalizedNames->all())
+            ->get(['id', 'name'])
+            ->sortBy(fn ($row) => $priority[mb_strtolower(trim((string) $row->name))] ?? PHP_INT_MAX)
+            ->pluck('id')
+            ->map(fn ($id) => (string) $id)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function resolveLeadsFunnelId(?string $funnelTable = null): string
+    {
+        $funnelTable ??= Schema::hasTable('funnels')
+            ? 'funnels'
+            : (Schema::hasTable('funnel') ? 'funnel' : null);
+
+        if ($funnelTable) {
+            $ids = $this->findFunnelIdsByNames($funnelTable, ['Leads', 'Lead']);
+
+            if (! empty($ids)) {
+                return (string) $ids[0];
+            }
+        }
+
+        return '5';
+    }
+
+    private function isLeadsFunnelGroupId(string $groupId, ?string $funnelTable = null): bool
+    {
+        return $groupId === '__LEADS__' || $groupId === $this->resolveLeadsFunnelId($funnelTable);
+    }
+
+    private function countHistoricalLeadsByFunnelIds(
+        Builder $leadQuery,
+        string $leadTable,
+        array $funnelIds,
+        Carbon $from,
+        Carbon $to
+    ): int {
+        $leadIdsSubquery = $this->historicalLeadIdsByFunnelIdsQuery($leadQuery, $leadTable, $funnelIds, $from, $to);
+
+        if (! $leadIdsSubquery) {
+            return 0;
+        }
+
+        return (int) DB::query()
+            ->fromSub($leadIdsSubquery, 'sales_history_leads')
+            ->count();
+    }
+
+    private function sumHistoricalLeadsValueByFunnelIds(
+        Builder $leadQuery,
+        string $leadTable,
+        array $funnelIds,
+        Carbon $from,
+        Carbon $to
+    ): float {
+        if (! Schema::hasColumn($leadTable, 'value')) {
+            return 0.0;
+        }
+
+        $leadIdsSubquery = $this->historicalLeadIdsByFunnelIdsQuery($leadQuery, $leadTable, $funnelIds, $from, $to);
+
+        if (! $leadIdsSubquery) {
+            return 0.0;
+        }
+
+        return (float) Lead::query()
+            ->whereIn("{$leadTable}.id", $leadIdsSubquery)
+            ->sum("{$leadTable}.value");
+    }
+
+    private function historicalLeadIdsByFunnelIdsQuery(
+        Builder $leadQuery,
+        string $leadTable,
+        array $funnelIds,
+        Carbon $from,
+        Carbon $to
+    ) {
+        $funnelIds = array_values(array_filter($funnelIds, fn ($id) => $id !== null && $id !== ''));
+        $historyTable = (new LeadFunnelHistory)->getTable();
+
+        if (empty($funnelIds) || ! Schema::hasTable($historyTable)) {
+            return null;
+        }
+
+        $leadIdsSubquery = (clone $leadQuery)
+            ->reorder()
+            ->select("{$leadTable}.id")
+            ->distinct();
+
+        return DB::table("{$historyTable} as lfh_sales")
+            ->whereBetween('lfh_sales.created_at', [$from, $to])
+            ->whereIn('lfh_sales.funnel_id', $funnelIds)
+            ->whereIn('lfh_sales.lead_id', $leadIdsSubquery)
+            ->select('lfh_sales.lead_id')
+            ->distinct();
     }
 
     private function countLeadsByFunnelId(
@@ -2213,13 +2373,15 @@ class DashboardGerencialLeadsController extends Controller
         ]));
         $qualifiedFunnelId = $metric['qualified_funnel_id'] ?? null;
         $salesFunnelId = $metric['sales_funnel_id'] ?? null;
+        $salesFunnelIds = $metric['sales_funnel_ids'] ?? array_filter([$salesFunnelId]);
+        $salesHistoryGroupId = count($salesFunnelIds) > 1 ? '__SALES__' : $salesFunnelId;
 
         $qualifiedUrl = $qualifiedFunnelId
             ? route('dashboard.gerencial-leads.list', array_merge($baseClick, ['group_type' => 'funnel', 'group_id' => $qualifiedFunnelId]))
             : null;
 
-        $salesUrl = $salesFunnelId
-            ? route('dashboard.gerencial-leads.list', array_merge($baseClick, ['group_type' => 'funnel', 'group_id' => $salesFunnelId]))
+        $salesUrl = $salesHistoryGroupId
+            ? route('dashboard.gerencial-leads.list', array_merge($baseClick, ['group_type' => 'funnel_history', 'group_id' => $salesHistoryGroupId]))
             : null;
 
         // Ã¢Å“â€¦ Leads NO Efectivos (por Qualification)
@@ -2334,21 +2496,21 @@ class DashboardGerencialLeadsController extends Controller
 
         $summaryCards = [
             [
-                'title' => 'Leads no Efectivos',
+                'title' => 'Leads en LQ no Efectivos',
                 'value' => (int) ($metric['not_effective_count'] ?? 0),
                 'url' => $notEffectiveUrl,
                 'missing' => 'No existe un funnel llamado "Lead NO Efectivo".',
                 'cta' => 'Ver lista',
             ],
             [
-                'title' => 'Leads calificados',
+                'title' => 'Leads en LQ calificados',
                 'value' => (int) ($metric['qualified_count'] ?? 0),
                 'url' => $qualifiedUrl,
                 'missing' => 'No existe un funnel llamado "Oportunidades" o "Respondidos".',
                 'cta' => 'Ver lista',
             ],
             [
-                'title' => 'Leads con ventas',
+                'title' => 'Leads en LQ con ventas',
                 'value' => (int) ($metric['sales_count'] ?? 0),
                 'url' => $salesUrl,
                 'missing' => 'No existe un funnel llamado "Ventas".',
@@ -2746,9 +2908,9 @@ class DashboardGerencialLeadsController extends Controller
                 $columns = [
                     ['key' => 'nombre',              'label' => 'Nombre CampaÃ±a'],
                     ['key' => 'costo',               'label' => 'Costo CampaÃ±a'],
-                    ['key' => 'leads',               'label' => 'Leads CampaÃ±a'],
-                    ['key' => 'leads_calificados',   'label' => 'Leads calificados CampaÃ±a'],
-                    ['key' => 'leads_no_calificados', 'label' => 'Leads no calificados CampaÃ±a'],
+                    ['key' => 'leads',               'label' => 'Leads en LQ CampaÃ±a'],
+                    ['key' => 'leads_calificados',   'label' => 'Leads en LQ calificados CampaÃ±a'],
+                    ['key' => 'leads_no_calificados', 'label' => 'Leads en LQ no calificados CampaÃ±a'],
                     ['key' => 'roas',                'label' => 'ROAS'],
                     ['key' => 'CPL',                'label' => 'CPL CampaÃ±a'],
                 ];
@@ -3017,9 +3179,9 @@ class DashboardGerencialLeadsController extends Controller
                     ['key' => 'customer_name',        'label' => 'Cliente'],
                     ['key' => 'nombre',               'label' => 'Grupo de anuncio'],
                     ['key' => 'costo_anuncio',        'label' => 'Costo'],
-                    ['key' => 'leads_anuncio',        'label' => 'Leads'],
-                    ['key' => 'leads_calificados',    'label' => 'Leads calificados'],
-                    ['key' => 'leads_no_calificados', 'label' => 'Leads no calificados'],
+                    ['key' => 'leads_anuncio',        'label' => 'Leads en LQ'],
+                    ['key' => 'leads_calificados',    'label' => 'Leads en LQ calificados'],
+                    ['key' => 'leads_no_calificados', 'label' => 'Leads en LQ no calificados'],
                     ['key' => 'roas',                 'label' => 'ROAS'],
                     ['key' => 'CPL',                  'label' => 'CPL'],
                 ];
@@ -3281,9 +3443,9 @@ class DashboardGerencialLeadsController extends Controller
                 $columns = [
                     ['key' => 'nombre',               'label' => 'Nombre Anuncio'],
                     ['key' => 'costo_anuncio',        'label' => 'Costo anuncio'],
-                    ['key' => 'leads_anuncio',        'label' => 'Leads anuncio'],
-                    ['key' => 'leads_calificados',    'label' => 'Leads calificados Anuncio'],
-                    ['key' => 'leads_no_calificados', 'label' => 'Leads no calificados Anuncio'],
+                    ['key' => 'leads_anuncio',        'label' => 'Leads en LQ anuncio'],
+                    ['key' => 'leads_calificados',    'label' => 'Leads en LQ calificados Anuncio'],
+                    ['key' => 'leads_no_calificados', 'label' => 'Leads en LQ no calificados Anuncio'],
                     ['key' => 'roas',                 'label' => 'ROAS'],
                     ['key' => 'CPL',                 'label' => 'CPL Anuncio'],
                 ];
@@ -3528,9 +3690,9 @@ class DashboardGerencialLeadsController extends Controller
         $columns = [
             ['key' => 'name', 'label' => 'Nombre'],
             ['key' => 'cost', 'label' => 'Costo'],
-            ['key' => 'leads', 'label' => 'Leads'],
-            ['key' => 'qualified_leads', 'label' => 'Leads calificados'],
-            ['key' => 'unqualified_leads', 'label' => 'Leads no calificados'],
+            ['key' => 'leads', 'label' => 'Leads en LQ'],
+            ['key' => 'qualified_leads', 'label' => 'Leads en LQ calificados'],
+            ['key' => 'unqualified_leads', 'label' => 'Leads en LQ no calificados'],
             ['key' => 'cpl', 'label' => 'CPL'],
         ];
 
@@ -3877,9 +4039,9 @@ class DashboardGerencialLeadsController extends Controller
                     ['key' => 'name', 'label' => 'Nombre'],
                     ['key' => 'cost', 'label' => 'Costo'],
                     ['key' => 'roas', 'label' => 'ROAS'],
-                    ['key' => 'leads', 'label' => 'Leads'],
-                    ['key' => 'qualified_leads', 'label' => 'Leads calificados'],
-                    ['key' => 'unqualified_leads', 'label' => 'Leads no calificados'],
+                    ['key' => 'leads', 'label' => 'Leads en LQ'],
+                    ['key' => 'qualified_leads', 'label' => 'Leads en LQ calificados'],
+                    ['key' => 'unqualified_leads', 'label' => 'Leads en LQ no calificados'],
                     ['key' => 'cpl', 'label' => 'CPL'],
                 ],
                 'rows' => $rows,
@@ -4076,9 +4238,9 @@ class DashboardGerencialLeadsController extends Controller
                     ['key' => 'ad_group_name', 'label' => 'Grupo de anuncio'],
                     ['key' => 'cost', 'label' => 'Costo'],
                     ['key' => 'roas', 'label' => 'ROAS'],
-                    ['key' => 'leads', 'label' => 'Leads'],
-                    ['key' => 'qualified_leads', 'label' => 'Leads calificados'],
-                    ['key' => 'non_qualified_leads', 'label' => 'Leads no calificados'],
+                    ['key' => 'leads', 'label' => 'Leads en LQ'],
+                    ['key' => 'qualified_leads', 'label' => 'Leads en LQ calificados'],
+                    ['key' => 'non_qualified_leads', 'label' => 'Leads en LQ no calificados'],
                     ['key' => 'cpl', 'label' => 'CPL'],
                 ],
                 'rows' => $formattedRows,

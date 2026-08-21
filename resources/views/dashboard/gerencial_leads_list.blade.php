@@ -3,7 +3,7 @@
         <div class="flex items-center justify-between gap-3">
             <div>
                 <h2 class="font-semibold text-xl text-indigo-200">
-                    Leads: {{ $groupLabel }}
+                    Leads en LQ: {{ $groupLabel }}
                 </h2>
                 <div class="text-sm text-white/60">Periodo: {{ $periodLabel }}</div>
             </div>

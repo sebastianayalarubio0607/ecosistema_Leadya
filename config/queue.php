@@ -64,9 +64,9 @@ return [
         'meta_whatsapp_subscriptions' => [
             'driver' => 'database',
             'connection' => env('DB_QUEUE_CONNECTION'),
-            'table' => env('META_WHATSAPP_SUBSCRIPTION_QUEUE_TABLE', 'meta_whatsapp_subscription_jobs'),
-            'queue' => env('META_WHATSAPP_SUBSCRIPTION_QUEUE', 'meta-whatsapp-subscriptions'),
-            'retry_after' => (int) env('META_WHATSAPP_SUBSCRIPTION_RETRY_AFTER', 3700),
+            'table' => 'meta_whatsapp_subscription_jobs',
+            'queue' => 'meta-whatsapp-subscriptions',
+            'retry_after' => 3700,
             'after_commit' => false,
         ],
 

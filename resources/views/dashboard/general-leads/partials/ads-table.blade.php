@@ -1,31 +1,32 @@
 @php
-    $columns = ['name' => 'Nombre', 'cost' => 'Costo', 'impressions' => 'Impresiones', 'clicks' => 'Clicks', 'ctr' => 'CTR', 'cpc' => 'CPC', 'cpm' => 'CPM', 'conversions' => 'Conversiones Totales', 'roas' => 'ROAS', 'leads' => 'Leads', 'qualified_leads' => 'Leads Calificados', 'unqualified_leads' => 'Leads No Calificados', 'cpl' => 'CPL'];
+    $columns = ['name' => 'Nombre', 'cost' => 'Costo', 'impressions' => 'Impresiones', 'clicks' => 'Clicks', 'ctr' => 'CTR', 'cpc' => 'CPC', 'cpm' => 'CPM', 'conversions' => 'Conversiones Totales', 'roas' => 'ROAS', 'leads' => 'Leads en LQ', 'qualified_leads' => 'Leads en LQ Calificados', 'unqualified_leads' => 'Leads en LQ No Calificados', 'cpl' => 'CPL'];
     $livewireSort = $livewireSort ?? false;
 @endphp
 
-<section class="rounded-2xl border border-white/10 bg-zinc-950/25 p-4 backdrop-blur">
+<section class="rounded-2xl border border-white/10 bg-zinc-950/25 p-4 backdrop-blur" data-sortable-table-wrap>
     <div class="mb-4">
         <p class="text-sm text-white/60">Resumen Por</p>
         <h3 class="text-lg font-semibold text-white">{{ $table['title'] }}</h3>
     </div>
+    @if($livewireSort)
+        <div data-sort-status class="mb-3 hidden flex items-center gap-2 rounded-xl border border-sky-300/20 bg-sky-300/10 px-4 py-2 text-sm font-semibold text-sky-100">
+            <span class="h-2 w-2 animate-pulse rounded-full bg-sky-200"></span>
+            Ordenando tabla con datos cargados...
+        </div>
+    @endif
     <div class="overflow-x-auto rounded-xl border border-white/10">
-        <table class="min-w-full text-xs">
+        <table class="min-w-full text-xs" data-sortable-table>
             <thead class="bg-white/5 text-white/70">
                 <tr>
                     @foreach($columns as $key => $label)
                         @php
-                            $nextDir = ($table['sort'] === $key && $table['dir'] === 'asc') ? 'desc' : 'asc';
+                            $active = ($table['sort'] ?? '') === $key;
+                            $direction = $active ? ($table['dir'] ?? 'desc') : 'none';
                         @endphp
                         <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">
-                            @if($livewireSort)
-                                <button type="button" wire:click="sortBy('{{ $table['section'] }}', '{{ $key }}')" class="inline-flex items-center gap-1 hover:text-white">
-                                    <span>{{ $label }}</span><span class="text-[10px] text-white/35">{{ $table['sort'] === $key ? strtoupper($table['dir']) : 'SORT' }}</span>
-                                </button>
-                            @else
-                                <a href="{{ request()->fullUrlWithQuery(["sort[{$table['section']}]" => $key, "dir[{$table['section']}]" => $nextDir]) }}" class="inline-flex items-center gap-1 hover:text-white">
-                                    <span>{{ $label }}</span><span class="text-[10px] text-white/35">{{ $table['sort'] === $key ? strtoupper($table['dir']) : 'SORT' }}</span>
-                                </a>
-                            @endif
+                            <button type="button" data-sort-header data-column-index="{{ $loop->index }}" data-sort-direction="{{ $direction }}" class="inline-flex items-center gap-1 hover:text-white">
+                                <span>{{ $label }}</span><span class="text-[10px] text-white/35" data-sort-icon>{{ $active ? strtoupper($direction) : 'SORT' }}</span>
+                            </button>
                         </th>
                     @endforeach
                 </tr>

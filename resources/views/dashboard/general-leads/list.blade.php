@@ -21,7 +21,7 @@
 
         <section class="rounded-2xl border border-white/10 bg-zinc-950/25 p-4 backdrop-blur">
             <div class="mb-4 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                <h2 class="text-lg font-semibold text-white">Datos Completos De Leads</h2>
+                <h2 class="text-lg font-semibold text-white">Datos Completos De Leads en LQ</h2>
                 <p class="text-xs text-white/50">Incluye los campos solicitados, sin Agent, Fields Custom ni Message.</p>
             </div>
 

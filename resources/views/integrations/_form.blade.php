@@ -1,4 +1,37 @@
 ﻿<div class="grid gap-4">
+    @php
+        $selectedIntegrationTypeId = old('integrationtype_id', $integration->integrationtype_id ?? null);
+        $selectedIntegrationTypeName = optional(($types ?? collect())->firstWhere('id', (int) $selectedIntegrationTypeId))->name;
+
+        if (!$selectedIntegrationTypeName && isset($integration)) {
+            $selectedIntegrationTypeName = optional($integration->integrationtype)->name;
+        }
+
+        $currentIntegrationTypeKey = \Illuminate\Support\Str::of((string) $selectedIntegrationTypeName)
+            ->ascii()
+            ->lower()
+            ->replace([' ', '-'], '_')
+            ->replaceMatches('/_+/', '_')
+            ->trim('_')
+            ->toString();
+
+        $currentIntegrationTypeKey = match ($currentIntegrationTypeKey) {
+            'go_high_level', 'leadconnector', 'lead_connector' => 'gohighlevel',
+            'kommo_pipeline' => 'kommopipeline',
+            default => $currentIntegrationTypeKey,
+        };
+
+        $hasStoredSecretFor = function ($typeKey, $field = 'tokent') use ($integration, $currentIntegrationTypeKey) {
+            return ($integration->exists ?? false)
+                && $currentIntegrationTypeKey === $typeKey
+                && filled($integration->{$field} ?? null);
+        };
+
+        $maskedSecret = fn ($value, $fallback) => filled($value)
+            ? \App\Support\SensitiveValue::mask($value)
+            : $fallback;
+    @endphp
+
     <div>
         <label class="block mb-1 text-white/70">Nombre *</label>
         <input name="name" value="{{ old('name', $integration->name ?? '') }}"
@@ -37,6 +70,16 @@
         <label class="block mb-1 text-white/70">URL *</label>
         <input name="url" value="{{ old('url', $integration->url ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40" placeholder="https://..." data-base-url-input>
         @error('url') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+    </div>
+
+    <div>
+        <label class="block mb-1 text-white/70">URL destino</label>
+        <input name="urldestino"
+               value="{{ old('urldestino', $integration->urldestino ?? '') }}"
+               class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
+               placeholder="https://crm.example.com/o/enlace-de-google-sheets">
+        @error('urldestino') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+        <p class="mt-1 text-xs text-white/50">Guarda aqui el enlace directo a la plataforma externa, como el CRM, Monday, HubSpot o la hoja de Google Sheets.</p>
     </div>
 
     <div>
@@ -90,7 +133,7 @@
     </div>
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden" data-show-for="kommo">
-        <div><label class="block mb-1 text-white/70">token</label><input name="tokent" value="{{ old('tokent', $integration->tokent ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
+        <div><label class="block mb-1 text-white/70">token</label><input name="tokent" type="password" value="{{ old('tokent') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="{{ $hasStoredSecretFor('kommo') ? $maskedSecret($integration->tokent ?? null, 'Token de Kommo') : 'Token de Kommo' }}" data-has-stored-secret="{{ $hasStoredSecretFor('kommo') ? '1' : '0' }}">@error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">crm_Id_phone</label><input name="crm_Id_phone" value="{{ old('crm_Id_phone', $integration->crm_Id_phone ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('crm_Id_phone') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">crm_Id_email</label><input name="crm_Id_email" value="{{ old('crm_Id_email', $integration->crm_Id_email ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('crm_Id_email') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">crm_Id_service</label><input name="crm_Id_service" value="{{ old('crm_Id_service', $integration->crm_Id_service ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('crm_Id_service') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
@@ -159,7 +202,8 @@ JSON;
                    type="password"
                    value="{{ old('tokent') }}"
                    class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white"
-                   placeholder="{{ ($integration->exists && filled($integration->tokent ?? null)) ? $kommoPipelineTokenMask : 'Bearer token de Kommo' }}"
+                   placeholder="{{ $hasStoredSecretFor('kommopipeline') ? $kommoPipelineTokenMask : 'Bearer token de Kommo' }}"
+                   data-has-stored-secret="{{ $hasStoredSecretFor('kommopipeline') ? '1' : '0' }}"
                    data-required-for="kommopipeline">
             @error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
             @if($integration->exists && filled($integration->tokent ?? null))
@@ -293,7 +337,8 @@ JSON;
                    type="password"
                    value="{{ old('tokent') }}"
                    class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white"
-                   placeholder="{{ ($integration->exists && filled($integration->tokent ?? null)) ? $atomTokenMask : 'Bearer token' }}"
+                   placeholder="{{ $hasStoredSecretFor('atom') ? $atomTokenMask : 'Bearer token' }}"
+                   data-has-stored-secret="{{ $hasStoredSecretFor('atom') ? '1' : '0' }}"
                    data-required-for="atom">
             @error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
             @if($integration->exists && filled($integration->tokent ?? null))
@@ -476,10 +521,10 @@ TEXT;
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden" data-show-for="zoho">
         <div><label class="block mb-1 text-white/70">client_id</label><input name="client_id" value="{{ old('client_id', $integration->client_id ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('client_id') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
-        <div><label class="block mb-1 text-white/70">client_secret</label><input name="client_secret" value="{{ old('client_secret', $integration->client_secret ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('client_secret') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
+        <div><label class="block mb-1 text-white/70">client_secret</label><input name="client_secret" type="password" value="{{ old('client_secret') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="{{ $hasStoredSecretFor('zoho', 'client_secret') ? $maskedSecret($integration->client_secret ?? null, 'client_secret') : 'client_secret' }}" data-has-stored-secret="{{ $hasStoredSecretFor('zoho', 'client_secret') ? '1' : '0' }}">@error('client_secret') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">code</label><input name="code" value="{{ old('code', $integration->code ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('code') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
-        <div><label class="block mb-1 text-white/70">access_token</label><input name="access_token" value="{{ old('access_token', $integration->tokent ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('access_token') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
-        <div><label class="block mb-1 text-white/70">refresh_token</label><input name="refresh_token" value="{{ old('refresh_token', $integration->refresh_token ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">@error('refresh_token') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
+        <div><label class="block mb-1 text-white/70">access_token</label><input name="access_token" type="password" value="{{ old('access_token') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="{{ $hasStoredSecretFor('zoho') ? $maskedSecret($integration->tokent ?? null, 'access_token') : 'access_token' }}" data-has-stored-secret="{{ $hasStoredSecretFor('zoho') ? '1' : '0' }}">@error('access_token') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
+        <div><label class="block mb-1 text-white/70">refresh_token</label><input name="refresh_token" type="password" value="{{ old('refresh_token') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="{{ $hasStoredSecretFor('zoho', 'refresh_token') ? $maskedSecret($integration->refresh_token ?? null, 'refresh_token') : 'refresh_token' }}" data-has-stored-secret="{{ $hasStoredSecretFor('zoho', 'refresh_token') ? '1' : '0' }}">@error('refresh_token') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
     </div>
 
     @php
@@ -498,7 +543,7 @@ TEXT;
     @endphp
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden" data-show-for="freshworks" data-freshworks-block>
-        <div><label class="block mb-1 text-white/70">token *</label><input name="tokent" value="{{ old('tokent', $integration->tokent ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="freshworks">@error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
+        <div><label class="block mb-1 text-white/70">token *</label><input name="tokent" type="password" value="{{ old('tokent') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="{{ $hasStoredSecretFor('freshworks') ? $maskedSecret($integration->tokent ?? null, 'token') : 'token' }}" data-has-stored-secret="{{ $hasStoredSecretFor('freshworks') ? '1' : '0' }}" data-required-for="freshworks">@error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">territory_id *</label><input name="territory_id" value="{{ old('territory_id', $integration->territory_id ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="freshworks">@error('territory_id') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">owner_id *</label><input name="owner_id" value="{{ old('owner_id', $integration->owner_id ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="freshworks">@error('owner_id') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">City *</label><input name="city" value="{{ old('city', $integration->city ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="freshworks">@error('city') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
@@ -606,7 +651,7 @@ JSON;
     <div class="grid grid-cols-1 gap-4 hidden" data-show-for="gohighlevel">
         <div>
             <label class="block mb-1 text-white/70">Token LeadConnector / GoHighLevel *</label>
-            <input name="tokent" type="password" value="{{ old('tokent', $integration->tokent ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="gohighlevel">
+            <input name="tokent" type="password" value="{{ old('tokent') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="{{ $hasStoredSecretFor('gohighlevel') ? $maskedSecret($integration->tokent ?? null, 'Token LeadConnector / GoHighLevel') : 'Token LeadConnector / GoHighLevel' }}" data-has-stored-secret="{{ $hasStoredSecretFor('gohighlevel') ? '1' : '0' }}" data-required-for="gohighlevel">
             @error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
             <p class="mt-1 text-xs text-white/50">Se envia como Bearer token. El endpoint por defecto es contacts/upsert de LeadConnector si dejas la URL vacia.</p>
         </div>
@@ -622,15 +667,15 @@ JSON;
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden" data-show-for="salesforce">
         <div><label class="block mb-1 text-white/70">url_credenciales *</label><input name="url_credenciales" value="{{ old('url_credenciales', $integration->url_credenciales ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="https://..." data-required-for="salesforce">@error('url_credenciales') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">Client ID / Consumer Key *</label><input name="username" value="{{ old('username', $integration->username ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="salesforce">@error('username') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
-        <div><label class="block mb-1 text-white/70">Client Secret / Consumer Secret *</label><input name="password" type="password" value="{{ old('password', $integration->password ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="salesforce">@error('password') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
-        <div><label class="block mb-1 text-white/70">token</label><input name="tokent" value="{{ old('tokent', $integration->tokent ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" readonly>@error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
+        <div><label class="block mb-1 text-white/70">Client Secret / Consumer Secret *</label><input name="password" type="password" value="{{ old('password') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="{{ $hasStoredSecretFor('salesforce', 'password') ? $maskedSecret($integration->password ?? null, 'Client Secret / Consumer Secret') : 'Client Secret / Consumer Secret' }}" data-has-stored-secret="{{ $hasStoredSecretFor('salesforce', 'password') ? '1' : '0' }}" data-required-for="salesforce">@error('password') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
+        <div><label class="block mb-1 text-white/70">token</label><input name="tokent" type="password" value="{{ old('tokent') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="{{ $hasStoredSecretFor('salesforce') ? $maskedSecret($integration->tokent ?? null, 'token') : 'Se actualiza al autenticar' }}" data-has-stored-secret="{{ $hasStoredSecretFor('salesforce') ? '1' : '0' }}" readonly>@error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div class="md:col-span-2"><label class="block mb-1 text-white/70">body *</label><textarea name="body" rows="10" class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-sm text-white" placeholder='json con el payload a enviar a Salesforce' data-required-for="salesforce">{{ old('body', $integration->body ?? '') }}</textarea>@error('body') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
     </div>
 
     <div class="grid grid-cols-1 gap-4 hidden" data-show-for="monday">
         <div>
             <label class="block mb-1 text-white/70">Authorization *</label>
-            <input name="tokent" value="{{ old('tokent', $integration->tokent ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="Token permanente de Monday" data-required-for="monday">
+            <input name="tokent" type="password" value="{{ old('tokent') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="{{ $hasStoredSecretFor('monday') ? $maskedSecret($integration->tokent ?? null, 'Token permanente de Monday') : 'Token permanente de Monday' }}" data-has-stored-secret="{{ $hasStoredSecretFor('monday') ? '1' : '0' }}" data-required-for="monday">
             @error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
             <p class="mt-1 text-xs text-white/50">Se usara como header Authorization para las consultas GraphQL a Monday.</p>
         </div>
@@ -639,7 +684,7 @@ JSON;
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden" data-show-for="hubspot">
         <div>
             <label class="block mb-1 text-white/70">access_token *</label>
-            <input name="access_token" value="{{ old('access_token', $integration->tokent ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="hubspot">
+            <input name="access_token" type="password" value="{{ old('access_token') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="{{ $hasStoredSecretFor('hubspot') ? $maskedSecret($integration->tokent ?? null, 'access_token') : 'access_token' }}" data-has-stored-secret="{{ $hasStoredSecretFor('hubspot') ? '1' : '0' }}" data-required-for="hubspot">
             @error('access_token') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
             @error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
         </div>
@@ -769,7 +814,8 @@ document.addEventListener('DOMContentLoaded', () => {
     block.querySelectorAll('input, select, textarea').forEach(el => {
       el.disabled = !visible;
       const requiredFor = (el.dataset.requiredFor || '').trim().toLowerCase();
-      el.required = visible && requiredFor !== '' && requiredFor === key;
+      const hasStoredSecret = el.dataset.hasStoredSecret === '1';
+      el.required = visible && requiredFor !== '' && requiredFor === key && !hasStoredSecret;
     });
   }
 

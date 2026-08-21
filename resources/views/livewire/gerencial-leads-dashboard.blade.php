@@ -98,14 +98,14 @@
 
         <div class="grid grid-cols-1 md:grid-cols-7 gap-2">
             <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 col-span-1">
-                <div class="text-sm text-white/60">Leads en el periodo seleccionado</div>
+                <div class="text-sm text-white/60">Leads en LQ en el periodo seleccionado</div>
                 <div class="text-3xl font-bold text-white">{{ $ui['summary']['count'] }}</div>
                 <span class="text-3xl font-bold text-white">Periodo:</span> <br>
                 <span class="text-xs text-white/80 font-semibold">{{ $ui['summary']['period_label'] }}</span>
             </div>
 
             <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 col-span-1">
-                <div class="text-sm text-white/60">Leads gestionados</div>
+                <div class="text-sm text-white/60">Leads en LQ gestionados</div>
                 <div class="text-3xl font-bold text-white">{{ $ui['summary']['managed'] }}</div>
             </div>
 
@@ -209,7 +209,7 @@
 
         <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
             @include('dashboard.partials.funnel-stack', [
-                'title' => 'Estado actual de Leads por Funnel',
+                'title' => 'Estado actual de Leads en LQ por Funnel',
                 'cards' => $ui['cards']['funnels'],
                 'totalLabel' => 'Total',
                 'totalValue' => $ui['totals']['total_leads'],
@@ -220,7 +220,7 @@
             ])
 
             @include('dashboard.partials.funnel-stack', [
-                'title' => 'Historico Leads en el Funnel',
+                'title' => 'Historico Leads en LQ en el Funnel',
                 'cards' => $ui['cards']['funnels_history'],
                 'totalLabel' => 'Total',
                 'totalValue' => $ui['totals']['total_leads'],
@@ -234,7 +234,7 @@
         @php($historyDailyChart = $ui['charts']['funnels_history_daily'] ?? ['labels' => [], 'datasets' => []])
         <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 w-full">
             <div class="flex items-center justify-between mb-3">
-                <h3 class="text-white font-semibold">Historico Leads en el Funnel por dia</h3>
+                <h3 class="text-white font-semibold">Historico Leads en LQ en el Funnel por dia</h3>
                 <div class="text-xs text-white/50">
                     Total:
                     <span class="text-white/80 font-semibold">{{ $ui['totals']['total_leads'] }}</span>

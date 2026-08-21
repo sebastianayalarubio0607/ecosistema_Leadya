@@ -105,6 +105,17 @@ class LeadManagementController extends Controller
             return [
                 'show' => false,
                 'leads' => null,
+                'notice' => null,
+                'blocked' => false,
+            ];
+        }
+
+        if ($this->selectedCustomerWithoutIntegrations($filters)) {
+            return [
+                'show' => false,
+                'leads' => null,
+                'notice' => 'Este cliente no puede ser gestionado porque no tiene una integracion asociada.',
+                'blocked' => true,
             ];
         }
 
@@ -142,6 +153,8 @@ class LeadManagementController extends Controller
         return [
             'show' => true,
             'leads' => $leads,
+            'notice' => null,
+            'blocked' => false,
         ];
     }
 
@@ -154,6 +167,12 @@ class LeadManagementController extends Controller
         }
 
         return false;
+    }
+
+    private function selectedCustomerWithoutIntegrations(GeneralLeadsFilters $filters): bool
+    {
+        return $filters->customerId !== null
+            && ! Integration::query()->where('customer_id', $filters->customerId)->exists();
     }
 
     private function attachCrmStateOptions(Collection $leads): void
