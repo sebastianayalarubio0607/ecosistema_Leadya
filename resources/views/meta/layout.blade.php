@@ -1,6 +1,13 @@
+@php
+    $reactiveViewsEnabled = request()->routeIs('meta.*')
+        || request()->routeIs('google-ads.*')
+        || request()->routeIs('customers.*');
+@endphp
+
 <x-app-layout>
     <x-slot name="header">
-        <div class="flex items-center justify-between gap-3">
+        <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"
+             @if($reactiveViewsEnabled) data-reactive-region="page-header" @endif>
             <div>
                 <h2 class="font-semibold text-xl text-indigo-200">@yield('title')</h2>
                 @hasSection('subtitle')
@@ -8,30 +15,39 @@
                 @endif
             </div>
 
-            <div class="flex items-center gap-2">
+            <div class="flex flex-wrap items-center gap-2">
                 @yield('header_actions')
             </div>
         </div>
     </x-slot>
 
-    <div class="p-6 max-w-7xl mx-auto space-y-4">
-        @if(session('success'))
-            <div class="rounded-2xl border border-white/10 bg-emerald-500/10 text-emerald-100 px-4 py-3">
-                {{ session('success') }}
-            </div>
-        @endif
+    <div class="w-full max-w-none p-4 sm:p-6 space-y-4"
+         @if($reactiveViewsEnabled) data-reactive-page="1" @endif>
+        <div @if($reactiveViewsEnabled) data-reactive-region="page-flashes" @endif>
+            @if(session('success'))
+                <div class="rounded-2xl border border-white/10 bg-emerald-500/10 text-emerald-100 px-4 py-3">
+                    {{ session('success') }}
+                </div>
+            @endif
 
-        @if($errors->any())
-            <div class="rounded-2xl border border-white/10 bg-rose-500/10 text-rose-100 px-4 py-3">
-                <div class="font-semibold mb-2">Errores:</div>
-                <ul class="list-disc ml-5 space-y-1">
-                    @foreach($errors->all() as $e)
-                        <li>{{ $e }}</li>
-                    @endforeach
-                </ul>
-            </div>
-        @endif
+            @if($errors->any())
+                <div class="rounded-2xl border border-white/10 bg-rose-500/10 text-rose-100 px-4 py-3">
+                    <div class="font-semibold mb-2">Errores:</div>
+                    <ul class="list-disc ml-5 space-y-1">
+                        @foreach($errors->all() as $e)
+                            <li>{{ $e }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            @endif
+        </div>
 
-        @yield('content')
+        <div @if($reactiveViewsEnabled) data-reactive-region="page-content" @endif>
+            @yield('content')
+        </div>
+
+        @if($reactiveViewsEnabled)
+            <livewire:reactive-view-refresher />
+        @endif
     </div>
 </x-app-layout>

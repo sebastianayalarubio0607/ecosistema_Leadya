@@ -3,8 +3,12 @@
 namespace App\Http\Controllers\Meta;
 
 use App\Http\Controllers\Controller;
+use App\Http\Services\Meta\MetaAssetStatusSyncService;
+use App\Jobs\SyncMetaAdAccountStatusJob;
+use App\Jobs\SyncMetaAssetStatusesJob;
 use App\Models\Customer;
 use App\Models\MetaAdAccount;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -28,6 +32,10 @@ class MetaAdAccountController extends Controller
 
         if ($request->filled('status')) {
             $q->where('status', $request->string('status')->toString());
+        }
+
+        if ($request->filled('estado_meta')) {
+            $q->where('estado_meta', $request->string('estado_meta')->toString());
         }
 
         if ($request->filled('subscription')) {
@@ -87,7 +95,11 @@ class MetaAdAccountController extends Controller
 
     public function show(MetaAdAccount $ad_account)
     {
-        $ad_account->load('customer');
+        $ad_account->load([
+            'customer',
+            'statusHistories' => fn ($query) => $query->with('webhookEvent:id,object,field')->orderByDesc('consulted_at')->limit(15),
+        ]);
+
         return view('meta.ad_accounts.show', compact('ad_account'));
     }
 
@@ -119,5 +131,19 @@ class MetaAdAccountController extends Controller
     {
         $ad_account->delete();
         return redirect()->route('meta.ad-accounts.index')->with('success', 'Cuenta eliminada.');
+    }
+
+    public function syncStatuses(): RedirectResponse
+    {
+        SyncMetaAssetStatusesJob::dispatch('manual', MetaAssetStatusSyncService::ASSET_TYPE_AD_ACCOUNTS);
+
+        return back()->with('success', 'Consulta de estados de cuentas publicitarias enviada a la cola.');
+    }
+
+    public function syncStatus(MetaAdAccount $ad_account): RedirectResponse
+    {
+        SyncMetaAdAccountStatusJob::dispatch((int) $ad_account->id, 'manual');
+
+        return back()->with('success', 'Consulta de estado de la cuenta publicitaria enviada a la cola.');
     }
 }

@@ -56,6 +56,8 @@ Route::post('/integrations/leads/crm-state/{public_key}', [LeadCrmStateControlle
 
 Route::get('/webhooks/meta/lead-ads', [MetaLeadAdsWebhookController::class, 'verify']);
 Route::post('/webhooks/meta/lead-ads', [MetaLeadAdsWebhookController::class, 'receive']);
+Route::get('/webhooks/meta/lead-ad', [MetaLeadAdsWebhookController::class, 'verify']);
+Route::post('/webhooks/meta/lead-ad', [MetaLeadAdsWebhookController::class, 'receive']);
 Route::get('/webhooks/meta/whatsapp', [MetaWhatsAppWebhookController::class, 'verify']);
 Route::post('/webhooks/meta/whatsapp', [MetaWhatsAppWebhookController::class, 'receive']);
 

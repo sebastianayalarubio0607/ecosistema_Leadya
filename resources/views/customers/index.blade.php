@@ -38,23 +38,24 @@
             <div>50 items por pagina</div>
         </div>
 
-        <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]">
-            <table class="w-full min-w-[2000px] table-fixed text-sm">
+        <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]" data-sortable-table-wrap>
+            <div class="hidden px-3 py-2 text-xs text-white/50" data-sort-status>Ordenando...</div>
+            <table class="w-full min-w-[2000px] table-fixed text-sm" data-sortable-table>
                 <thead class="bg-white/5 text-white/70">
                     <tr>
-                        <th class="w-48 text-left px-3 py-2 whitespace-nowrap">Nombre</th>
-                        <th class="w-28 text-left px-3 py-2 whitespace-nowrap">Status</th>
-                        <th class="w-44 text-left px-3 py-2 whitespace-nowrap">FB Pixel ID</th>
-                        <th class="w-32 text-left px-3 py-2 whitespace-nowrap">Meta_dataset</th>
-                        <th class="w-48 text-left px-3 py-2 whitespace-nowrap">Meta_dataset_id</th>
-                        <th class="w-72 text-left px-3 py-2 whitespace-nowrap">Meta_dataset_token</th>
-                        <th class="w-44 text-left px-3 py-2 whitespace-nowrap">FB Test Event Code</th>
-                        <th class="w-40 text-left px-3 py-2 whitespace-nowrap">ID Google Ads</th>
-                        <th class="w-24 text-left px-3 py-2 whitespace-nowrap">Divisa</th>
-                        <th class="w-36 text-left px-3 py-2 whitespace-nowrap">Valor minimo</th>
-                        <th class="w-56 text-left px-3 py-2 whitespace-nowrap">Meta Account ID</th>
-                        <th class="w-72 text-left px-3 py-2 whitespace-nowrap">Meta WhatsApp</th>
-                        <th class="w-72 text-left px-3 py-2 whitespace-nowrap">Meta Pages asociadas</th>
+                        <x-sort-header :index="0" label="Nombre" class="w-48" />
+                        <x-sort-header :index="1" label="Status" class="w-28" />
+                        <x-sort-header :index="2" label="FB Pixel ID" class="w-44" />
+                        <x-sort-header :index="3" label="Meta_dataset" class="w-32" />
+                        <x-sort-header :index="4" label="Meta_dataset_id" class="w-48" />
+                        <x-sort-header :index="5" label="Meta_dataset_token" class="w-72" />
+                        <x-sort-header :index="6" label="FB Test Event Code" class="w-44" />
+                        <x-sort-header :index="7" label="ID Google Ads" class="w-40" />
+                        <x-sort-header :index="8" label="Divisa" class="w-24" />
+                        <x-sort-header :index="9" label="Valor minimo" class="w-36" />
+                        <x-sort-header :index="10" label="Meta Account ID" class="w-56" />
+                        <x-sort-header :index="11" label="Meta WhatsApp" class="w-72" />
+                        <x-sort-header :index="12" label="Meta Pages asociadas" class="w-72" />
                         <th class="w-72 text-left px-3 py-2 whitespace-nowrap">Acciones</th>
                     </tr>
                 </thead>

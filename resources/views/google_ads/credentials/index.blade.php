@@ -18,15 +18,16 @@
             Esta configuración es global y se reutiliza para todos los clientes. Solo se sincronizan clientes que tengan diligenciado su campo <span class="font-mono text-white">id_Gads</span>.
         </div>
 
-        <div class="overflow-x-auto rounded-xl border border-white/10">
-            <table class="min-w-full text-sm">
+        <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]" data-sortable-table-wrap>
+            <div class="hidden px-3 py-2 text-xs text-white/50" data-sort-status>Ordenando...</div>
+            <table class="w-full min-w-[900px] text-sm" data-sortable-table>
                 <thead class="bg-white/5 text-white/70">
                     <tr>
-                        <th class="text-left px-3 py-2">Developer Token</th>
-                        <th class="text-left px-3 py-2">Customer ID</th>
-                        <th class="text-left px-3 py-2">MCC ID</th>
-                        <th class="text-left px-3 py-2">Expira</th>
-                        <th class="text-left px-3 py-2">Activo</th>
+                        <x-sort-header :index="0" label="Developer Token" />
+                        <x-sort-header :index="1" label="Customer ID" />
+                        <x-sort-header :index="2" label="MCC ID" />
+                        <x-sort-header :index="3" label="Expira" />
+                        <x-sort-header :index="4" label="Activo" />
                         <th class="text-left px-3 py-2">Acciones</th>
                     </tr>
                 </thead>

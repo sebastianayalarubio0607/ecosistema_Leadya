@@ -1,7 +1,7 @@
 @extends('meta.layout')
 
 @section('title', 'Meta Forms')
-@section('subtitle', 'Formularios Lead Ads disponibles para sincronización')
+@section('subtitle', 'Formularios Lead Ads disponibles para sincronizaciÃ³n')
 
 @section('header_actions')
     <a href="{{ route('meta.forms.create') }}" class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10">+ Nuevo</a>
@@ -19,7 +19,7 @@
                 <input name="search" value="{{ request('search') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40" placeholder="Buscar por ID o nombre">
             </div>
             <div class="md:col-span-4">
-                <label class="block mb-1 text-white/70">Página</label>
+                <label class="block mb-1 text-white/70">PÃ¡gina</label>
                 <select name="meta_page_id" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
                     <option value="">-- Todas --</option>
                     @foreach($pages as $page)
@@ -41,30 +41,31 @@
             </div>
         </form>
 
-        <div class="overflow-x-auto rounded-xl border border-white/10">
-            <table class="min-w-full text-sm">
+        <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]" data-sortable-table-wrap>
+            <div class="hidden px-3 py-2 text-xs text-white/50" data-sort-status>Ordenando...</div>
+            <table class="w-full min-w-[1100px] text-sm" data-sortable-table>
                 <thead class="bg-white/5 text-white/70">
                     <tr>
-                        <th class="text-left px-3 py-2">Cliente</th>
-                        <th class="text-left px-3 py-2">Página</th>
-                        <th class="text-left px-3 py-2">Formulario</th>
-                        <th class="text-left px-3 py-2">Estado CRM</th>
-                        <th class="text-left px-3 py-2">Meta Status</th>
-                        <th class="text-left px-3 py-2">Mappings</th>
-                        <th class="text-left px-3 py-2 w-80">Acciones</th>
+                        <x-sort-header :index="0" label="Cliente" />
+                        <x-sort-header :index="1" label="PÃ¡gina" />
+                        <x-sort-header :index="2" label="Formulario" />
+                        <x-sort-header :index="3" label="Estado CRM" />
+                        <x-sort-header :index="4" label="Meta Status" />
+                        <x-sort-header :index="5" label="Mappings" align="right" />
+                        <x-sort-header :index="6" label="Acciones" class="w-80" />
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-white/10 text-white/80">
                     @forelse($items as $item)
                         <tr class="hover:bg-white/5">
-                            <td class="px-3 py-2">{{ $item->page?->customer?->name ?? '—' }}</td>
-                            <td class="px-3 py-2">{{ $item->page?->name ?? '—' }}</td>
+                            <td class="px-3 py-2">{{ $item->page?->customer?->name ?? 'â€”' }}</td>
+                            <td class="px-3 py-2">{{ $item->page?->name ?? 'â€”' }}</td>
                             <td class="px-3 py-2">
                                 <div class="font-medium text-white">{{ $item->name }}</div>
                                 <div class="text-xs text-white/50">{{ $item->meta_form_id }}</div>
                             </td>
                             <td class="px-3 py-2">{{ $item->status ? 'Activo' : 'Inactivo' }}</td>
-                            <td class="px-3 py-2">{{ $item->meta_status ?: '—' }}</td>
+                            <td class="px-3 py-2">{{ $item->meta_status ?: 'â€”' }}</td>
                             <td class="px-3 py-2">{{ $item->field_mappings_count }}</td>
                             <td class="px-3 py-2">
                                 <div class="flex items-center gap-2 flex-wrap">

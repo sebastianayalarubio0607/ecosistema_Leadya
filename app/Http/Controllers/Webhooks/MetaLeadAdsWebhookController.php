@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Webhooks;
 
 use App\Http\Controllers\Controller;
+use App\Http\Services\Meta\MetaAssetStatusSyncService;
+use App\Jobs\SyncMetaAssetStatusesForCustomerJob;
 use App\Jobs\SyncMetaLeadsJob;
 use App\Jobs\SyncMetaPageLeadsJob;
 use App\Services\Meta\MetaWebhookStorageService;
@@ -10,6 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 
 class MetaLeadAdsWebhookController extends Controller
@@ -26,10 +29,17 @@ class MetaLeadAdsWebhookController extends Controller
         return response((string) $request->query('hub_challenge', $request->query('hub.challenge')), Response::HTTP_OK);
     }
 
-    public function receive(Request $request, MetaWebhookStorageService $metaWebhookStorageService): JsonResponse
+    public function receive(
+        Request $request,
+        MetaWebhookStorageService $metaWebhookStorageService,
+        MetaAssetStatusSyncService $metaAssetStatusSyncService,
+    ): JsonResponse
     {
+        $storedEvents = new Collection;
+
         try {
-            $metaWebhookStorageService->storeFromRequest($request);
+            $result = $metaWebhookStorageService->storeFromRequest($request);
+            $storedEvents = $result instanceof Collection ? $result : new Collection;
         } catch (\Throwable $exception) {
             Log::error('Meta webhook payload could not be stored', [
                 'exception' => $exception::class,
@@ -37,11 +47,58 @@ class MetaLeadAdsWebhookController extends Controller
             ]);
         }
 
-        if ($this->dispatchLeadgenPageSyncJobs($request) === 0) {
+        $hasAssetStatusEvent = $this->hasMetaAssetStatusEvent($storedEvents);
+        $this->dispatchMetaAssetStatusJobs($storedEvents, $metaAssetStatusSyncService);
+
+        if ($this->dispatchLeadgenPageSyncJobs($request) === 0 && ! $hasAssetStatusEvent) {
             SyncMetaLeadsJob::dispatch();
         }
 
         return response()->json(['received' => true], Response::HTTP_OK);
+    }
+
+    private function dispatchMetaAssetStatusJobs(Collection $events, MetaAssetStatusSyncService $service): int
+    {
+        $jobsDispatched = 0;
+        $customerEvents = [];
+
+        foreach ($events as $event) {
+            if (! $event || ! $this->isMetaAssetStatusEvent($event->object, $event->field)) {
+                continue;
+            }
+
+            $customerId = $service->resolveCustomerIdFromWebhookEvent($event);
+
+            if (! $customerId) {
+                Log::warning('Meta ad account asset status webhook skipped because no customer was resolved.', [
+                    'meta_webhook_event_id' => $event->id,
+                    'account_id' => $event->account_id,
+                    'field' => $event->field,
+                ]);
+
+                continue;
+            }
+
+            $customerEvents[$customerId] ??= $event->id;
+        }
+
+        foreach ($customerEvents as $customerId => $eventId) {
+            SyncMetaAssetStatusesForCustomerJob::dispatch((int) $customerId, (int) $eventId, 'webhook');
+            $jobsDispatched++;
+        }
+
+        return $jobsDispatched;
+    }
+
+    private function isMetaAssetStatusEvent(?string $object, ?string $field): bool
+    {
+        return $object === 'ad_account'
+            && in_array($field, ['with_issues_ad_objects', 'in_process_ad_objects'], true);
+    }
+
+    private function hasMetaAssetStatusEvent(Collection $events): bool
+    {
+        return $events->contains(fn ($event) => $event && $this->isMetaAssetStatusEvent($event->object, $event->field));
     }
 
     private function dispatchLeadgenPageSyncJobs(Request $request): int

@@ -27,16 +27,17 @@
                 </form>
             </div>
 
-            <div class="overflow-x-auto rounded-xl border border-white/10">
-                <table class="min-w-full text-sm">
+            <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]" data-sortable-table-wrap>
+                <div class="hidden px-3 py-2 text-xs text-white/50" data-sort-status>Ordenando...</div>
+                <table class="w-full min-w-[850px] text-sm" data-sortable-table>
                     <thead class="bg-white/5 text-white/70">
                         <tr>
-                            <th class="text-left px-3 py-2">ID</th>
-                            <th class="text-left px-3 py-2">Job</th>
-                            <th class="text-left px-3 py-2">Intentos</th>
-                            <th class="text-left px-3 py-2">Disponible</th>
-                            <th class="text-left px-3 py-2">Creado</th>
-                            <th class="text-left px-3 py-2 w-40">Acciones</th>
+                            <x-sort-header :index="0" label="ID" />
+                            <x-sort-header :index="1" label="Job" />
+                            <x-sort-header :index="2" label="Intentos" align="right" />
+                            <x-sort-header :index="3" label="Disponible" />
+                            <x-sort-header :index="4" label="Creado" />
+                            <x-sort-header :index="5" label="Acciones" class="w-40" />
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-white/10 text-white/80">
@@ -75,16 +76,17 @@
                 </form>
             </div>
 
-            <div class="overflow-x-auto rounded-xl border border-white/10">
-                <table class="min-w-full text-sm">
+            <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]" data-sortable-table-wrap>
+                <div class="hidden px-3 py-2 text-xs text-white/50" data-sort-status>Ordenando...</div>
+                <table class="w-full min-w-[1150px] text-sm" data-sortable-table>
                     <thead class="bg-white/5 text-white/70">
                         <tr>
-                            <th class="text-left px-3 py-2">ID</th>
-                            <th class="text-left px-3 py-2">Accion</th>
-                            <th class="text-left px-3 py-2">WABA</th>
-                            <th class="text-left px-3 py-2">Fallo</th>
-                            <th class="text-left px-3 py-2">Reintentado</th>
-                            <th class="text-left px-3 py-2 w-40">Acciones</th>
+                            <x-sort-header :index="0" label="ID" />
+                            <x-sort-header :index="1" label="Accion" />
+                            <x-sort-header :index="2" label="WABA" />
+                            <x-sort-header :index="3" label="Fallo" />
+                            <x-sort-header :index="4" label="Reintentado" />
+                            <x-sort-header :index="5" label="Acciones" class="w-40" />
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-white/10 text-white/80">

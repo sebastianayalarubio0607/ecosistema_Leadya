@@ -22,6 +22,11 @@ class MetaPage extends Model
         'subscription_checked_at',
         'subscription_updated_at',
         'subscription_last_error',
+        'estado_meta',
+        'estado_meta_nombre',
+        'estado_meta_checked_at',
+        'estado_meta_payload',
+        'estado_meta_last_error',
     ];
 
     protected $casts = [
@@ -32,6 +37,8 @@ class MetaPage extends Model
         'last_token_refresh_at' => 'datetime',
         'subscription_checked_at' => 'datetime',
         'subscription_updated_at' => 'datetime',
+        'estado_meta_checked_at' => 'datetime',
+        'estado_meta_payload' => 'array',
     ];
 
     public function customer(): BelongsTo
@@ -42,5 +49,10 @@ class MetaPage extends Model
     public function forms(): HasMany
     {
         return $this->hasMany(MetaForm::class);
+    }
+
+    public function statusHistories(): HasMany
+    {
+        return $this->hasMany(MetaPageStatusHistory::class);
     }
 }

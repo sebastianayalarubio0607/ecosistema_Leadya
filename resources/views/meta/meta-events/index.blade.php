@@ -31,15 +31,16 @@
             </div>
         </form>
 
-        <div class="overflow-x-auto rounded-xl border border-white/10">
-            <table class="min-w-full text-sm">
+        <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]" data-sortable-table-wrap>
+            <div class="hidden px-3 py-2 text-xs text-white/50" data-sort-status>Ordenando...</div>
+            <table class="w-full min-w-[850px] text-sm" data-sortable-table>
                 <thead class="bg-white/5 text-white/70">
                     <tr>
-                        <th class="text-left px-3 py-2">ID</th>
-                        <th class="text-left px-3 py-2">Nombre</th>
-                        <th class="text-left px-3 py-2">Estado</th>
-                        <th class="text-left px-3 py-2">CRM States</th>
-                        <th class="text-left px-3 py-2 w-56">Acciones</th>
+                        <x-sort-header :index="0" label="ID" />
+                        <x-sort-header :index="1" label="Nombre" />
+                        <x-sort-header :index="2" label="Estado" />
+                        <x-sort-header :index="3" label="CRM States" align="right" />
+                        <x-sort-header :index="4" label="Acciones" class="w-56" />
                     </tr>
                 </thead>
 

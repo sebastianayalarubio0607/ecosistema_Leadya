@@ -23,15 +23,16 @@
             </div>
         </form>
 
-        <div class="overflow-x-auto rounded-xl border border-white/10">
-            <table class="min-w-full text-sm">
+        <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]" data-sortable-table-wrap>
+            <div class="hidden px-3 py-2 text-xs text-white/50" data-sort-status>Ordenando...</div>
+            <table class="w-full min-w-[950px] text-sm" data-sortable-table>
                 <thead class="bg-white/5 text-white/70">
                     <tr>
-                        <th class="text-left px-3 py-2">Customer</th>
-                        <th class="text-left px-3 py-2">Account</th>
-                        <th class="text-left px-3 py-2">Campaign</th>
-                        <th class="text-left px-3 py-2">Objective</th>
-                        <th class="text-left px-3 py-2">Status</th>
+                        <x-sort-header :index="0" label="Customer" />
+                        <x-sort-header :index="1" label="Account" />
+                        <x-sort-header :index="2" label="Campaign" />
+                        <x-sort-header :index="3" label="Objective" />
+                        <x-sort-header :index="4" label="Status" />
                         <th class="text-left px-3 py-2 w-56">Acciones</th>
                     </tr>
                 </thead>

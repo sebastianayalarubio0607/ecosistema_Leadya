@@ -7,6 +7,7 @@ use App\Jobs\MetaPageSubscriptionScanJob;
 use App\Jobs\MetaWhatsappSubscriptionScanJob;
 use App\Jobs\PruneMetaSubscriptionFailedJobs;
 use App\Jobs\SyncGoogleAdsDailyMetricsJob;
+use App\Jobs\SyncMetaAssetStatusesJob;
 use App\Jobs\SyncMetaFormsJob;
 use App\Jobs\SyncMetaLeadsJob;
 use App\Jobs\SyncMetaPagesJob;
@@ -37,6 +38,11 @@ Artisan::command('inspire', function () {
 Schedule::command('meta:sync-insights-yesterday --timezone=America/Bogota')
     ->dailyAt('02:00')
     ->timezone('America/Bogota');
+
+Schedule::job(new SyncMetaAssetStatusesJob('scheduled'))
+    ->dailyAt('02:00')
+    ->timezone('America/Bogota')
+    ->withoutOverlapping();
 
     // Refresca los tokens de larga duración de Meta diariamente a las 3:00 AM hora de Bogotá
 Schedule::job(new RefreshMetaLongLivedTokenJob())

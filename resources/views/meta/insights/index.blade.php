@@ -85,28 +85,29 @@
 
         {{-- Table --}}
         <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4">
-            <div class="overflow-x-auto rounded-xl border border-white/10">
-                <table class="min-w-full text-sm">
+            <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]" data-sortable-table-wrap>
+                <div class="hidden px-3 py-2 text-xs text-white/50" data-sort-status>Ordenando...</div>
+                <table class="w-full min-w-[1700px] text-sm" data-sortable-table>
                     <thead class="bg-white/5 text-white/70">
                         <tr>
-                            <th class="text-left px-3 py-2">Cliente</th>
-                            <th class="text-left px-3 py-2">Cuenta</th>
-                            <th class="text-left px-3 py-2">Campaña</th>
-                            <th class="text-left px-3 py-2">Conjunto</th>
-                            <th class="text-left px-3 py-2">Anuncio</th>
+                            <x-sort-header :index="0" label="Cliente" />
+                            <x-sort-header :index="1" label="Cuenta" />
+                            <x-sort-header :index="2" label="Campaña" />
+                            <x-sort-header :index="3" label="Conjunto" />
+                            <x-sort-header :index="4" label="Anuncio" />
 
-                            <th class="text-right px-3 py-2">Imp.</th>
-                            <th class="text-right px-3 py-2">Reach</th>
-                            <th class="text-right px-3 py-2">Freq</th>
-                            <th class="text-right px-3 py-2">Clicks</th>
-                            <th class="text-right px-3 py-2">Spend</th>
+                            <x-sort-header :index="5" label="Imp." align="right" />
+                            <x-sort-header :index="6" label="Reach" align="right" />
+                            <x-sort-header :index="7" label="Freq" align="right" />
+                            <x-sort-header :index="8" label="Clicks" align="right" />
+                            <x-sort-header :index="9" label="Spend" align="right" />
 
-                            <th class="text-right px-3 py-2">CTR</th>
-                            <th class="text-right px-3 py-2">uCTR</th>
-                            <th class="text-right px-3 py-2">CPC</th>
-                            <th class="text-right px-3 py-2">CPM</th>
+                            <x-sort-header :index="10" label="CTR" align="right" />
+                            <x-sort-header :index="11" label="uCTR" align="right" />
+                            <x-sort-header :index="12" label="CPC" align="right" />
+                            <x-sort-header :index="13" label="CPM" align="right" />
 
-                            <th class="text-left px-3 py-2">Fecha</th>
+                            <x-sort-header :index="14" label="Fecha" />
                         </tr>
                     </thead>
 

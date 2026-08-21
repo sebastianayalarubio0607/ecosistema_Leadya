@@ -37,20 +37,21 @@
         <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 space-y-4">
             <h3 class="text-white font-semibold">Jobs en proceso</h3>
 
-            <div class="overflow-x-auto rounded-xl border border-white/10">
-                <table class="min-w-full text-xs">
+            <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]" data-sortable-table-wrap>
+                <div class="hidden px-3 py-2 text-xs text-white/50" data-sort-status>Ordenando...</div>
+                <table class="w-full min-w-[1300px] text-xs" data-sortable-table>
                     <thead class="bg-white/5 text-white/70">
                         <tr>
-                            <th class="text-left px-3 py-2">ID</th>
-                            <th class="text-left px-3 py-2">Lead</th>
-                            <th class="text-left px-3 py-2">Customer</th>
-                            <th class="text-left px-3 py-2">CrmState</th>
-                            <th class="text-left px-3 py-2">Conversion</th>
-                            <th class="text-left px-3 py-2">Order ID</th>
-                            <th class="text-left px-3 py-2">Click</th>
-                            <th class="text-left px-3 py-2">Intentos</th>
-                            <th class="text-left px-3 py-2">Resultado</th>
-                            <th class="text-left px-3 py-2">Fechas</th>
+                            <x-sort-header :index="0" label="ID" />
+                            <x-sort-header :index="1" label="Lead" />
+                            <x-sort-header :index="2" label="Customer" />
+                            <x-sort-header :index="3" label="CrmState" />
+                            <x-sort-header :index="4" label="Conversion" />
+                            <x-sort-header :index="5" label="Order ID" />
+                            <x-sort-header :index="6" label="Click" />
+                            <x-sort-header :index="7" label="Intentos" />
+                            <x-sort-header :index="8" label="Resultado" />
+                            <x-sort-header :index="9" label="Fechas" />
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-white/10 text-white/80">
@@ -100,18 +101,19 @@
         <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 space-y-4">
             <h3 class="text-white font-semibold">Jobs fallidos</h3>
 
-            <div class="overflow-x-auto rounded-xl border border-white/10">
-                <table class="min-w-full text-xs">
+            <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]" data-sortable-table-wrap>
+                <div class="hidden px-3 py-2 text-xs text-white/50" data-sort-status>Ordenando...</div>
+                <table class="w-full min-w-[1300px] text-xs" data-sortable-table>
                     <thead class="bg-white/5 text-white/70">
                         <tr>
-                            <th class="text-left px-3 py-2">ID</th>
-                            <th class="text-left px-3 py-2">Lead</th>
-                            <th class="text-left px-3 py-2">Customer</th>
-                            <th class="text-left px-3 py-2">CrmState</th>
-                            <th class="text-left px-3 py-2">Motivo</th>
-                            <th class="text-left px-3 py-2">Respuesta</th>
-                            <th class="text-left px-3 py-2">Intentos</th>
-                            <th class="text-left px-3 py-2">Fechas</th>
+                            <x-sort-header :index="0" label="ID" />
+                            <x-sort-header :index="1" label="Lead" />
+                            <x-sort-header :index="2" label="Customer" />
+                            <x-sort-header :index="3" label="CrmState" />
+                            <x-sort-header :index="4" label="Motivo" />
+                            <x-sort-header :index="5" label="Respuesta" />
+                            <x-sort-header :index="6" label="Intentos" />
+                            <x-sort-header :index="7" label="Fechas" />
                             <th class="text-left px-3 py-2">Acciones</th>
                         </tr>
                     </thead>

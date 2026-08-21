@@ -19,6 +19,11 @@ class MetaAdAccount extends Model
         'subscription_checked_at',
         'subscription_updated_at',
         'subscription_last_error',
+        'estado_meta',
+        'estado_meta_nombre',
+        'estado_meta_checked_at',
+        'estado_meta_payload',
+        'estado_meta_last_error',
     ];
 
     protected $casts = [
@@ -27,6 +32,8 @@ class MetaAdAccount extends Model
         'token_can_view_account' => 'boolean',
         'subscription_checked_at' => 'datetime',
         'subscription_updated_at' => 'datetime',
+        'estado_meta_checked_at' => 'datetime',
+        'estado_meta_payload' => 'array',
     ];
 
     public function isActive(): bool
@@ -42,5 +49,10 @@ class MetaAdAccount extends Model
     public function campaigns(): HasMany
     {
         return $this->hasMany(MetaCampaign::class);
+    }
+
+    public function statusHistories(): HasMany
+    {
+        return $this->hasMany(MetaAdAccountStatusHistory::class);
     }
 }

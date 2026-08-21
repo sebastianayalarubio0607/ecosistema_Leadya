@@ -85,18 +85,19 @@
             </div>
         </form>
 
-        <div class="overflow-x-auto rounded-xl border border-white/10">
-            <table class="min-w-full text-sm">
+        <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]" data-sortable-table-wrap>
+            <div class="hidden px-3 py-2 text-xs text-white/50" data-sort-status>Ordenando...</div>
+            <table class="w-full min-w-[1150px] text-sm" data-sortable-table>
                 <thead class="bg-white/5 text-white/70">
                     <tr>
-                        <th class="text-left px-3 py-2">Customers</th>
-                        <th class="text-left px-3 py-2">WABA ID</th>
-                        <th class="text-left px-3 py-2">Phone Number ID</th>
-                        <th class="text-left px-3 py-2">WA ID</th>
-                        <th class="text-left px-3 py-2">Estado</th>
-                        <th class="text-left px-3 py-2">Suscripcion</th>
-                        <th class="text-left px-3 py-2">Token ve WABA</th>
-                        <th class="text-left px-3 py-2 w-56">Acciones</th>
+                        <x-sort-header :index="0" label="Customers" />
+                        <x-sort-header :index="1" label="WABA ID" />
+                        <x-sort-header :index="2" label="Phone Number ID" />
+                        <x-sort-header :index="3" label="WA ID" />
+                        <x-sort-header :index="4" label="Estado" />
+                        <x-sort-header :index="5" label="Suscripcion" />
+                        <x-sort-header :index="6" label="Token ve WABA" />
+                        <x-sort-header :index="7" label="Acciones" class="w-56" />
                     </tr>
                 </thead>
 

@@ -8,6 +8,11 @@
         @csrf
         <button class="px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-white border border-white/10">Revisar suscripciones</button>
     </form>
+    <form method="POST" action="{{ route('meta.ad-accounts.statuses.sync-all') }}">
+        @csrf
+        <button class="px-4 py-2 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-white border border-white/10">Consultar estados</button>
+    </form>
+    <a href="{{ route('meta.ad-accounts.status-history.index') }}" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">Historial estados</a>
     <a href="{{ route('meta.ad-accounts.subscription-jobs.index') }}" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">Jobs</a>
     <a href="{{ route('meta.ad-accounts.create') }}" class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10">+ Nueva</a>
 @endsection
@@ -52,6 +57,13 @@
             </div>
 
             <div class="md:col-span-3">
+                <label class="block mb-1 text-white/70">Estado Meta</label>
+                <input name="estado_meta" value="{{ request('estado_meta') }}"
+                       class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
+                       placeholder="Codigo Meta">
+            </div>
+
+            <div class="md:col-span-3">
                 <label class="block mb-1 text-white/70">Suscripcion</label>
                 <select name="subscription" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
                     <option value="">-- Todas --</option>
@@ -83,17 +95,20 @@
             </div>
         </form>
 
-        <div class="overflow-x-auto rounded-xl border border-white/10">
-            <table class="min-w-full text-sm">
+        <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]" data-sortable-table-wrap>
+            <div class="hidden px-3 py-2 text-xs text-white/50" data-sort-status>Ordenando...</div>
+            <table class="w-full min-w-[1100px] text-sm" data-sortable-table>
                 <thead class="bg-white/5 text-white/70">
                     <tr>
-                        <th class="text-left px-3 py-2">Cliente</th>
-                        <th class="text-left px-3 py-2">Meta Account ID</th>
-                        <th class="text-left px-3 py-2">Nombre</th>
-                        <th class="text-left px-3 py-2">Estado</th>
-                        <th class="text-left px-3 py-2">Suscripcion</th>
-                        <th class="text-left px-3 py-2">Token ve cuenta</th>
-                        <th class="text-left px-3 py-2 w-56">Acciones</th>
+                        <x-sort-header :index="0" label="Cliente" />
+                        <x-sort-header :index="1" label="Meta Account ID" />
+                        <x-sort-header :index="2" label="Nombre" />
+                        <x-sort-header :index="3" label="Estado interno" />
+                        <x-sort-header :index="4" label="Estado Meta" />
+                        <x-sort-header :index="5" label="Suscripcion" />
+                        <x-sort-header :index="6" label="Token ve cuenta" />
+                        <x-sort-header :index="7" label="Ultima consulta" />
+                        <th class="text-left px-3 py-2 w-64 whitespace-nowrap">Acciones</th>
                     </tr>
                 </thead>
 
@@ -104,6 +119,10 @@
                             <td class="px-3 py-2 font-semibold">{{ $it->meta_account_id }}</td>
                             <td class="px-3 py-2">{{ $it->name }}</td>
                             <td class="px-3 py-2">{{ $it->status }}</td>
+                            <td class="px-3 py-2">
+                                <div class="font-semibold">{{ $it->estado_meta ?? 'Sin consultar' }}</div>
+                                <div class="text-xs text-white/50">{{ $it->estado_meta_nombre ?: 'Sin estado Meta' }}</div>
+                            </td>
                             <td class="px-3 py-2">
                                 <span class="inline-flex rounded-lg border px-2 py-1 text-xs font-semibold {{ $it->is_subscribed_to_meta_app ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200 shadow-sm shadow-emerald-950/30' : 'bg-rose-500/15 border-rose-300/30 text-rose-200 shadow-sm shadow-rose-950/30' }}">
                                     {{ $it->is_subscribed_to_meta_app ? 'Suscrita' : 'No suscrita' }}
@@ -116,10 +135,18 @@
                                     {{ $it->token_can_view_account ? 'Si' : 'No' }}
                                 @endif
                             </td>
+                            <td class="px-3 py-2">{{ optional($it->estado_meta_checked_at)->format('Y-m-d H:i') ?: '-' }}</td>
                             <td class="px-3 py-2">
-                                <div class="flex items-center gap-2">
+                                <div class="flex items-center gap-2 flex-wrap">
                                     <a class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs"
                                        href="{{ route('meta.ad-accounts.show', $it) }}">Ver</a>
+                                    <a class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs"
+                                       href="{{ route('meta.ad-accounts.status-history.index', ['meta_ad_account_id' => $it->id]) }}">Historial</a>
+
+                                    <form action="{{ route('meta.ad-accounts.statuses.sync', $it) }}" method="POST">
+                                        @csrf
+                                        <button class="px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-white/10 text-xs">Consultar estado</button>
+                                    </form>
 
                                     <a class="px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-white/10 text-xs"
                                        href="{{ route('meta.ad-accounts.edit', $it) }}">Editar</a>
@@ -136,7 +163,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="7" class="px-3 py-8 text-center text-white/60">
+                            <td colspan="9" class="px-3 py-8 text-center text-white/60">
                                 No hay cuentas para mostrar.
                             </td>
                         </tr>

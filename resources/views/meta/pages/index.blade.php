@@ -5,6 +5,11 @@
 
 @section('header_actions')
     <a href="{{ route('meta.pages.create') }}" class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10">+ Nueva</a>
+    <a href="{{ route('meta.pages.status-history.index') }}" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">Historial estados</a>
+    <form method="POST" action="{{ route('meta.pages.statuses.sync-all') }}">
+        @csrf
+        <button class="px-4 py-2 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-white border border-white/10">Consultar estados</button>
+    </form>
     <form method="POST" action="{{ route('meta.pages.subscription-jobs.scan') }}">
         @csrf
         <button class="px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-white border border-white/10">Revisar leadgen</button>
@@ -49,6 +54,11 @@
             </div>
 
             <div class="md:col-span-3">
+                <label class="block mb-1 text-white/70">Estado Meta</label>
+                <input name="estado_meta" value="{{ request('estado_meta') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40" placeholder="Codigo Meta">
+            </div>
+
+            <div class="md:col-span-3">
                 <label class="block mb-1 text-white/70">Leadgen</label>
                 <select name="leadgen" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
                     <option value="">-- Todos --</option>
@@ -77,18 +87,21 @@
             </div>
         </form>
 
-        <div class="overflow-x-auto rounded-xl border border-white/10">
-            <table class="min-w-full text-sm">
+        <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]" data-sortable-table-wrap>
+            <div class="hidden px-3 py-2 text-xs text-white/50" data-sort-status>Ordenando...</div>
+            <table class="w-full min-w-[1150px] text-sm" data-sortable-table>
                 <thead class="bg-white/5 text-white/70">
                     <tr>
-                        <th class="text-left px-3 py-2">Cliente</th>
-                        <th class="text-left px-3 py-2">Meta Page ID</th>
-                        <th class="text-left px-3 py-2">Nombre</th>
-                        <th class="text-left px-3 py-2">Estado CRM</th>
-                        <th class="text-left px-3 py-2">Leadgen</th>
-                        <th class="text-left px-3 py-2">Forms</th>
-                        <th class="text-left px-3 py-2">Última sync</th>
-                        <th class="text-left px-3 py-2 w-72">Acciones</th>
+                        <x-sort-header :index="0" label="Cliente" />
+                        <x-sort-header :index="1" label="Meta Page ID" />
+                        <x-sort-header :index="2" label="Nombre" />
+                        <x-sort-header :index="3" label="Estado CRM" />
+                        <x-sort-header :index="4" label="Estado Meta" />
+                        <x-sort-header :index="5" label="Leadgen" />
+                        <x-sort-header :index="6" label="Forms" />
+                        <x-sort-header :index="7" label="Ultima sync" />
+                        <x-sort-header :index="8" label="Ultima consulta" />
+                        <th class="text-left px-3 py-2 w-80 whitespace-nowrap">Acciones</th>
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-white/10 text-white/80">
@@ -99,15 +112,25 @@
                             <td class="px-3 py-2">{{ $item->name }}</td>
                             <td class="px-3 py-2">{{ $item->status ? 'Activa' : 'Inactiva' }}</td>
                             <td class="px-3 py-2">
+                                <div class="font-semibold">{{ $item->estado_meta ?? 'Sin consultar' }}</div>
+                                <div class="text-xs text-white/50">{{ $item->estado_meta_nombre ?: 'Sin estado Meta' }}</div>
+                            </td>
+                            <td class="px-3 py-2">
                                 <span class="inline-flex rounded-lg border px-2 py-1 text-xs font-semibold {{ $item->is_leadgen_subscribed ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200 shadow-sm shadow-emerald-950/30' : 'bg-rose-500/15 border-rose-300/30 text-rose-200 shadow-sm shadow-rose-950/30' }}">
                                     {{ $item->is_leadgen_subscribed ? 'Suscrita' : 'No suscrita' }}
                                 </span>
                             </td>
                             <td class="px-3 py-2">{{ $item->forms_count }}</td>
                             <td class="px-3 py-2">{{ optional($item->last_synced_at)->format('Y-m-d H:i') ?: '—' }}</td>
+                            <td class="px-3 py-2">{{ optional($item->estado_meta_checked_at)->format('Y-m-d H:i') ?: '-' }}</td>
                             <td class="px-3 py-2">
                                 <div class="flex items-center gap-2 flex-wrap">
                                     <a class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs" href="{{ route('meta.pages.show', $item) }}">Ver</a>
+                                    <a class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs" href="{{ route('meta.pages.status-history.index', ['meta_page_id' => $item->id]) }}">Historial</a>
+                                    <form action="{{ route('meta.pages.statuses.sync', $item) }}" method="POST">
+                                        @csrf
+                                        <button class="px-3 py-1.5 rounded-lg bg-sky-500/20 hover:bg-sky-500/30 border border-white/10 text-xs">Consultar estado</button>
+                                    </form>
                                     <a class="px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-white/10 text-xs" href="{{ route('meta.pages.edit', $item) }}">Editar</a>
                                     <form action="{{ route('meta.pages.sync-forms', $item) }}" method="POST">
                                         @csrf
@@ -118,7 +141,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="px-3 py-8 text-center text-white/60">No hay páginas Meta registradas.</td>
+                            <td colspan="10" class="px-3 py-8 text-center text-white/60">No hay páginas Meta registradas.</td>
                         </tr>
                     @endforelse
                 </tbody>

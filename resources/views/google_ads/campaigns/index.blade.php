@@ -43,18 +43,19 @@
                 </div>
             </form>
 
-            <div class="overflow-x-auto rounded-xl border border-white/10">
-                <table class="min-w-full text-sm">
+            <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]" data-sortable-table-wrap>
+                <div class="hidden px-3 py-2 text-xs text-white/50" data-sort-status>Ordenando...</div>
+                <table class="w-full min-w-[950px] text-sm" data-sortable-table>
                     <thead class="bg-white/5 text-white/70">
                         <tr>
-                            <th class="text-left px-3 py-2">Fecha</th>
-                            <th class="text-left px-3 py-2">Cliente</th>
-                            <th class="text-left px-3 py-2">Campaign</th>
-                            <th class="text-left px-3 py-2">Status</th>
-                            <th class="text-left px-3 py-2">Impresiones</th>
-                            <th class="text-left px-3 py-2">Clicks</th>
-                            <th class="text-left px-3 py-2">Conversiones</th>
-                            <th class="text-left px-3 py-2">Costo</th>
+                            <x-sort-header :index="0" label="Fecha" />
+                            <x-sort-header :index="1" label="Cliente" />
+                            <x-sort-header :index="2" label="Campaign" />
+                            <x-sort-header :index="3" label="Status" />
+                            <x-sort-header :index="4" label="Impresiones" />
+                            <x-sort-header :index="5" label="Clicks" />
+                            <x-sort-header :index="6" label="Conversiones" />
+                            <x-sort-header :index="7" label="Costo" />
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-white/10 text-white/80">

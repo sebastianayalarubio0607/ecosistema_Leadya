@@ -7,6 +7,7 @@ use Carbon\Carbon;
 use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
+use Illuminate\Support\Collection;
 
 class MetaWebhookStorageService
 {
@@ -19,16 +20,20 @@ class MetaWebhookStorageService
         'x-request-id',
     ];
 
-    public function storeFromRequest(Request $request): void
+    /**
+     * @return \Illuminate\Support\Collection<int, \App\Models\MetaWebhookEvent>
+     */
+    public function storeFromRequest(Request $request)
     {
         $payload = $this->payloadFromRequest($request);
         $object = $this->stringOrNull(data_get($payload, 'object'));
         $entries = $this->listFromValue(data_get($payload, 'entry'));
         $receivedAt = now();
         $headers = $this->safeHeaders($request);
+        $events = new Collection;
 
         if ($entries === []) {
-            $this->storeEvent(
+            $event = $this->storeEvent(
                 request: $request,
                 payload: $payload,
                 value: null,
@@ -39,7 +44,11 @@ class MetaWebhookStorageService
                 headers: $headers,
             );
 
-            return;
+            if ($event) {
+                $events->push($event);
+            }
+
+            return $events;
         }
 
         foreach ($entries as $entry) {
@@ -47,7 +56,7 @@ class MetaWebhookStorageService
             $changes = $this->listFromValue(data_get($entryPayload, 'changes'));
 
             if ($changes === []) {
-                $this->storeEvent(
+                $event = $this->storeEvent(
                     request: $request,
                     payload: $payload,
                     value: null,
@@ -58,13 +67,17 @@ class MetaWebhookStorageService
                     headers: $headers,
                 );
 
+                if ($event) {
+                    $events->push($event);
+                }
+
                 continue;
             }
 
             foreach ($changes as $change) {
                 $changePayload = is_array($change) ? $change : ['value' => $change];
 
-                $this->storeEvent(
+                $event = $this->storeEvent(
                     request: $request,
                     payload: $payload,
                     value: data_get($changePayload, 'value'),
@@ -74,8 +87,14 @@ class MetaWebhookStorageService
                     receivedAt: $receivedAt,
                     headers: $headers,
                 );
+
+                if ($event) {
+                    $events->push($event);
+                }
             }
         }
+
+        return $events;
     }
 
     private function storeEvent(
@@ -87,7 +106,7 @@ class MetaWebhookStorageService
         ?array $change,
         Carbon $receivedAt,
         array $headers,
-    ): void {
+    ): ?MetaWebhookEvent {
         $field = $this->stringOrNull(data_get($change, 'field'));
         $entryId = $this->stringOrNull(data_get($entry, 'id'));
         $metaEventTime = $this->resolveMetaEventTime($entry, $change, $value);
@@ -110,14 +129,16 @@ class MetaWebhookStorageService
         ], $this->knownIdentifiers($payload, $entry, $change, $value));
 
         try {
-            if (MetaWebhookEvent::query()->where('event_hash', $attributes['event_hash'])->exists()) {
-                return;
+            $existingEvent = MetaWebhookEvent::query()->where('event_hash', $attributes['event_hash'])->first();
+
+            if ($existingEvent) {
+                return $existingEvent;
             }
 
-            MetaWebhookEvent::query()->create($attributes);
+            return MetaWebhookEvent::query()->create($attributes);
         } catch (QueryException $exception) {
             if ($this->isDuplicateEntry($exception)) {
-                return;
+                return MetaWebhookEvent::query()->where('event_hash', $attributes['event_hash'])->first();
             }
 
             throw $exception;
@@ -193,11 +214,16 @@ class MetaWebhookStorageService
             $entry ?? [],
             $payload,
         ];
+        $accountId = $this->firstString($sources, ['account_id', 'ad_account_id']);
+
+        if ($accountId === null && $this->stringOrNull(data_get($payload, 'object')) === 'ad_account') {
+            $accountId = $this->firstString([$entry ?? []], ['id']);
+        }
 
         return [
             'app_id' => $this->firstString($sources, ['app_id']),
             'page_id' => $this->firstString($sources, ['page_id']),
-            'account_id' => $this->firstString($sources, ['account_id', 'ad_account_id']),
+            'account_id' => $accountId,
             'leadgen_id' => $this->firstString($sources, ['leadgen_id']),
             'form_id' => $this->firstString($sources, ['form_id']),
             'ad_id' => $this->firstString($sources, ['ad_id']),

@@ -1,7 +1,7 @@
 @extends('meta.layout')
 
 @section('title', 'Meta Access Tokens')
-@section('subtitle', 'Gestión global de tokens Meta por tipo')
+@section('subtitle', 'GestiÃ³n global de tokens Meta por tipo')
 
 @section('header_actions')
     <a href="{{ route('meta.access-tokens.create') }}" class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10">
@@ -37,30 +37,31 @@
             </div>
         </form>
 
-        <div class="overflow-x-auto rounded-xl border border-white/10">
-            <table class="min-w-full text-sm">
+        <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]" data-sortable-table-wrap>
+            <div class="hidden px-3 py-2 text-xs text-white/50" data-sort-status>Ordenando...</div>
+            <table class="w-full min-w-[1050px] text-sm" data-sortable-table>
                 <thead class="bg-white/5 text-white/70">
                     <tr>
-                        <th class="text-left px-3 py-2">Tipo</th>
-                        <th class="text-left px-3 py-2">Meta App ID</th>
-                        <th class="text-left px-3 py-2">Expira</th>
-                        <th class="text-left px-3 py-2">Activo</th>
-                        <th class="text-left px-3 py-2">Último refresh</th>
-                        <th class="text-left px-3 py-2 w-72">Acciones</th>
+                        <x-sort-header :index="0" label="Tipo" />
+                        <x-sort-header :index="1" label="Meta App ID" />
+                        <x-sort-header :index="2" label="Expira" />
+                        <x-sort-header :index="3" label="Activo" />
+                        <x-sort-header :index="4" label="Ãšltimo refresh" />
+                        <x-sort-header :index="5" label="Acciones" class="w-72" />
                     </tr>
                 </thead>
                 <tbody class="divide-y divide-white/10 text-white/80">
                     @forelse($items as $item)
                         <tr class="hover:bg-white/5">
-                            <td class="px-3 py-2">{{ $item->token_type ?: '—' }}</td>
-                            <td class="px-3 py-2">{{ $item->meta_app_id ?: '—' }}</td>
-                            <td class="px-3 py-2">{{ optional($item->expires_at)->format('Y-m-d H:i') ?: '—' }}</td>
+                            <td class="px-3 py-2">{{ $item->token_type ?: 'â€”' }}</td>
+                            <td class="px-3 py-2">{{ $item->meta_app_id ?: 'â€”' }}</td>
+                            <td class="px-3 py-2">{{ optional($item->expires_at)->format('Y-m-d H:i') ?: 'â€”' }}</td>
                             <td class="px-3 py-2">
                                 <span class="px-2 py-1 rounded-lg text-xs border {{ $item->is_active ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
                                     {{ $item->is_active ? 'Activo' : 'Inactivo' }}
                                 </span>
                             </td>
-                            <td class="px-3 py-2">{{ optional($item->refresh_last_run_at)->format('Y-m-d H:i') ?: '—' }}</td>
+                            <td class="px-3 py-2">{{ optional($item->refresh_last_run_at)->format('Y-m-d H:i') ?: 'â€”' }}</td>
                             <td class="px-3 py-2">
                                 <div class="flex items-center gap-2 flex-wrap">
                                     <a class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs" href="{{ route('meta.access-tokens.show', $item) }}">Ver</a>

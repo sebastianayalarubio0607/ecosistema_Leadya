@@ -20,6 +20,7 @@ use App\Http\Controllers\GoogleAds\GoogleAdsSyncController;
 use App\Http\Controllers\Meta\MetaAccessTokenController;
 use App\Http\Controllers\Meta\MetaAdAccountSubscriptionJobController;
 use App\Http\Controllers\Meta\MetaAdAccountController;
+use App\Http\Controllers\Meta\MetaAdAccountStatusHistoryController;
 use App\Http\Controllers\Meta\MetaAdController;
 use App\Http\Controllers\Meta\MetaAdInsightController;
 use App\Http\Controllers\Meta\MetaAdSetController;
@@ -29,6 +30,7 @@ use App\Http\Controllers\Meta\MetaFormController;
 use App\Http\Controllers\Meta\MetaFormFieldMappingController;
 use App\Http\Controllers\Meta\MetaPageController;
 use App\Http\Controllers\Meta\MetaPageSubscriptionJobController;
+use App\Http\Controllers\Meta\MetaPageStatusHistoryController;
 use App\Http\Controllers\Meta\MetaSyncController;
 use App\Http\Controllers\Meta\MetaWhatsappController;
 use App\Http\Controllers\Meta\MetaWhatsappSubscriptionJobController;
@@ -130,6 +132,14 @@ Route::middleware('auth')->group(function () {
         Route::resource('ad-accounts', MetaAdAccountController::class)
             ->parameters(['ad-accounts' => 'ad_account']);
 
+        Route::post('ad-accounts/statuses/sync', [MetaAdAccountController::class, 'syncStatuses'])
+            ->name('ad-accounts.statuses.sync-all');
+        Route::post('ad-accounts/{ad_account}/status-sync', [MetaAdAccountController::class, 'syncStatus'])
+            ->name('ad-accounts.statuses.sync');
+
+        Route::get('ad-accounts-status-history', [MetaAdAccountStatusHistoryController::class, 'index'])
+            ->name('ad-accounts.status-history.index');
+
         Route::get('ad-accounts-subscriptions/jobs', [MetaAdAccountSubscriptionJobController::class, 'index'])
             ->name('ad-accounts.subscription-jobs.index');
         Route::post('ad-accounts-subscriptions/scan', [MetaAdAccountSubscriptionJobController::class, 'scan'])
@@ -177,6 +187,14 @@ Route::middleware('auth')->group(function () {
 
         Route::resource('pages', MetaPageController::class)
             ->parameters(['pages' => 'page']);
+
+        Route::post('pages/statuses/sync', [MetaPageController::class, 'syncStatuses'])
+            ->name('pages.statuses.sync-all');
+        Route::post('pages/{page}/status-sync', [MetaPageController::class, 'syncStatus'])
+            ->name('pages.statuses.sync');
+
+        Route::get('pages-status-history', [MetaPageStatusHistoryController::class, 'index'])
+            ->name('pages.status-history.index');
 
         Route::post('pages/sync', [MetaPageController::class, 'syncAll'])
             ->name('pages.sync-all');

@@ -3,7 +3,10 @@
 namespace Tests\Feature;
 
 use App\Jobs\SyncMetaLeadsJob;
+use App\Jobs\SyncMetaAssetStatusesForCustomerJob;
 use App\Jobs\SyncMetaPageLeadsJob;
+use App\Models\Customer;
+use App\Models\MetaAdAccount;
 use App\Models\MetaWebhookEvent;
 use App\Services\Meta\MetaWebhookStorageService;
 use Illuminate\Http\Request;
@@ -28,8 +31,15 @@ class MetaLeadAdsWebhookTest extends TestCase
         DB::purge('sqlite');
         DB::reconnect('sqlite');
 
-        $migration = require database_path('migrations/2026_07_27_000000_create_meta_webhook_events_table.php');
-        $migration->up();
+        foreach ([
+            '2025_04_25_210705_create_customers_table.php',
+            '2026_01_27_000001_create_meta_ad_accounts_table.php',
+            '2026_01_27_000006_add_customer_id_to_meta_ad_accounts_table.php',
+            '2026_07_27_000000_create_meta_webhook_events_table.php',
+        ] as $migrationPath) {
+            $migration = require database_path('migrations/'.$migrationPath);
+            $migration->up();
+        }
 
         Queue::fake();
     }
@@ -37,6 +47,8 @@ class MetaLeadAdsWebhookTest extends TestCase
     protected function tearDown(): void
     {
         Schema::dropIfExists('meta_webhook_events');
+        Schema::dropIfExists('meta_ad_accounts');
+        Schema::dropIfExists('customers');
 
         parent::tearDown();
     }
@@ -207,6 +219,110 @@ class MetaLeadAdsWebhookTest extends TestCase
         $this->postJson('/api/webhooks/meta/lead-ads', $payload)->assertOk();
 
         $this->assertSame(1, MetaWebhookEvent::query()->count());
+    }
+
+    public function test_it_dispatches_customer_scoped_asset_status_job_for_ad_account_status_webhook(): void
+    {
+        $customer = Customer::query()->create([
+            'name' => 'Cliente Meta Estado',
+            'status' => true,
+        ]);
+
+        MetaAdAccount::withoutEvents(function () use ($customer): void {
+            MetaAdAccount::query()->create([
+                'customer_id' => $customer->id,
+                'meta_account_id' => 'act_123456789',
+                'name' => 'Cuenta Meta',
+                'status' => 'active',
+            ]);
+        });
+
+        $payload = [
+            'object' => 'ad_account',
+            'entry' => [
+                [
+                    'id' => 'act_123456789',
+                    'time' => 1710000000,
+                    'changes' => [
+                        [
+                            'field' => 'with_issues_ad_objects',
+                            'value' => [
+                                'account_id' => '123456789',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $this->postJson('/api/webhooks/meta/lead-ad', $payload)->assertOk();
+
+        Queue::assertPushed(SyncMetaAssetStatusesForCustomerJob::class, function (SyncMetaAssetStatusesForCustomerJob $job) use ($customer): bool {
+            return $job->customerId === $customer->id
+                && $job->queryType === 'webhook'
+                && $job->metaWebhookEventId !== null;
+        });
+        Queue::assertNotPushed(SyncMetaLeadsJob::class);
+
+        $event = MetaWebhookEvent::query()->firstOrFail();
+
+        $this->assertSame('ad_account', $event->object);
+        $this->assertSame('with_issues_ad_objects', $event->field);
+        $this->assertSame('123456789', $event->account_id);
+    }
+
+    public function test_it_uses_ad_account_entry_id_when_asset_status_payload_has_no_account_id(): void
+    {
+        $customer = Customer::query()->create([
+            'name' => 'Cliente Meta Entry',
+            'status' => true,
+        ]);
+
+        MetaAdAccount::withoutEvents(function () use ($customer): void {
+            MetaAdAccount::query()->create([
+                'customer_id' => $customer->id,
+                'meta_account_id' => '893247768830003',
+                'name' => 'Cuenta Meta Entry',
+                'status' => 'active',
+            ]);
+        });
+
+        $payload = [
+            'object' => 'ad_account',
+            'entry' => [
+                [
+                    'id' => '893247768830003',
+                    'time' => 1787245925,
+                    'changes' => [
+                        [
+                            'field' => 'in_process_ad_objects',
+                            'value' => [
+                                'id' => '120252436486500589',
+                                'level' => 'AD',
+                                'status_name' => 'PENDING_REVIEW',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+
+        $this->postJson('/api/webhooks/meta/lead-ad', $payload)->assertOk();
+
+        Queue::assertPushed(SyncMetaAssetStatusesForCustomerJob::class, function (SyncMetaAssetStatusesForCustomerJob $job) use ($customer): bool {
+            return $job->customerId === $customer->id
+                && $job->queryType === 'webhook'
+                && $job->metaWebhookEventId !== null;
+        });
+        Queue::assertNotPushed(SyncMetaLeadsJob::class);
+
+        $event = MetaWebhookEvent::query()->firstOrFail();
+
+        $this->assertSame('ad_account', $event->object);
+        $this->assertSame('in_process_ad_objects', $event->field);
+        $this->assertSame('893247768830003', $event->entry_id);
+        $this->assertSame('893247768830003', $event->account_id);
+        $this->assertSame('120252436486500589', data_get($event->value, 'id'));
     }
 
     public function test_a_database_error_does_not_affect_the_expected_meta_response(): void
