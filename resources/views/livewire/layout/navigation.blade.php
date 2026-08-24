@@ -56,6 +56,12 @@ new class extends Component {
             'icon' => 'link',
         ],
         [
+            'label' => 'Conectores IA',
+            'route' => 'ai-connectors.index',
+            'active' => ['ai-connectors.*'],
+            'icon' => 'puzzle',
+        ],
+        [
             'label' => 'CRM States',
             'route' => 'crmstates.index',
             'active' => ['crmstates.*'],

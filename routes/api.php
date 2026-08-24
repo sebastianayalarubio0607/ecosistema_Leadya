@@ -9,8 +9,13 @@ use App\Http\Controllers\IntegrationTypeController;
 use App\Http\Controllers\LeadIntegrationController;
 use App\Http\Middleware\ApiAuthMiddleware;
 use App\Http\Controllers\Api\LeadCrmStateController;
+use App\Http\Controllers\AiConnectors\AiConnectorMcpController;
+use App\Http\Controllers\AiConnectors\AiConnectorOAuthMetadataController;
+use App\Http\Controllers\AiConnectors\AiConnectorOAuthTokenController;
 use App\Http\Controllers\Webhooks\MetaLeadAdsWebhookController;
 use App\Http\Controllers\Webhooks\MetaWhatsAppWebhookController;
+use App\Http\Middleware\AiConnectors\AiConnectorMcpAuthenticate;
+use App\Http\Middleware\AiConnectors\AiConnectorMcpOriginGuard;
 use App\Models\Customer;
 use Illuminate\Http\Request;
 
@@ -45,6 +50,19 @@ Route::middleware([ApiAuthMiddleware::class])->group(function () {
 
 Route::get('/prueba-sin-auth', function () {
     return response()->json(['ok' => true]);
+});
+
+Route::prefix('ai-connectors')->name('api.ai-connectors.')->group(function () {
+    Route::get('/.well-known/oauth-protected-resource', [AiConnectorOAuthMetadataController::class, 'protectedResource'])
+        ->name('oauth.protected-resource');
+    Route::get('/.well-known/oauth-authorization-server', [AiConnectorOAuthMetadataController::class, 'authorizationServer'])
+        ->name('oauth.authorization-server');
+    Route::post('/oauth/token', AiConnectorOAuthTokenController::class)
+        ->middleware('throttle:30,1')
+        ->name('oauth.token');
+    Route::post('/mcp', AiConnectorMcpController::class)
+        ->middleware([AiConnectorMcpAuthenticate::class, AiConnectorMcpOriginGuard::class])
+        ->name('mcp');
 });
 
 
