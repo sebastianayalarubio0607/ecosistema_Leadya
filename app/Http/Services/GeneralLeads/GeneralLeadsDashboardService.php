@@ -145,11 +145,15 @@ class GeneralLeadsDashboardService
             ->withQueryString();
 
         $leads->getCollection()->transform(function (Lead $lead) use ($columns) {
-            return collect($columns)
+            $row = collect($columns)
                 ->mapWithKeys(fn (array $column) => [
                     $column['key'] => $this->listColumnValue($lead, $column['key']),
                 ])
                 ->all();
+
+            $row['integration_statuses_badges'] = $this->leadIntegrationStatusBadges($lead);
+
+            return $row;
         });
 
         return [
@@ -1156,24 +1160,57 @@ class GeneralLeadsDashboardService
 
     private function leadIntegrationStatusesText(Lead $lead): string
     {
+        $statuses = $this->formatLeadIntegrationStatuses($lead);
+
+        if (empty($statuses)) {
+            return 'Sin integraciones';
+        }
+
+        return collect($statuses)
+            ->map(function (array $status) {
+                $answerCode = $status['answer_code'] ? ' ('.$status['answer_code'].')' : '';
+
+                return $status['integration'].': '.$status['status_label'].$answerCode;
+            })
+            ->implode(' | ');
+    }
+
+    private function formatLeadIntegrationStatuses(Lead $lead): array
+    {
         $leadIntegrations = $lead->relationLoaded('leadIntegrations')
             ? $lead->leadIntegrations
             : $lead->leadIntegrations()->with('integration:id,name')->orderBy('id')->get();
 
-        if ($leadIntegrations->isEmpty()) {
-            return 'Sin integraciones';
-        }
-
         return $leadIntegrations
             ->map(function ($leadIntegration) {
                 $status = strtolower(trim((string) ($leadIntegration->status ?? '')));
-                $integration = $leadIntegration->integration?->name
-                    ?: ($leadIntegration->integration_id ? 'Integracion #'.$leadIntegration->integration_id : 'Integracion');
-                $answerCode = $leadIntegration->answer_code ? ' ('.$leadIntegration->answer_code.')' : '';
 
-                return $integration.': '.$this->leadIntegrationStatusLabel($status).$answerCode;
+                return [
+                    'integration' => $leadIntegration->integration?->name
+                        ?: ($leadIntegration->integration_id ? 'Integracion #'.$leadIntegration->integration_id : 'Integracion'),
+                    'status' => $status ?: 'unknown',
+                    'status_label' => $this->leadIntegrationStatusLabel($status),
+                    'answer_code' => $leadIntegration->answer_code,
+                ];
             })
-            ->implode(' | ');
+            ->values()
+            ->all();
+    }
+
+    private function leadIntegrationStatusBadges(Lead $lead): array
+    {
+        return collect($this->formatLeadIntegrationStatuses($lead))
+            ->map(function (array $status) {
+                $answerCode = $status['answer_code'] ? ' ('.$status['answer_code'].')' : '';
+                $rawAnswerCode = trim((string) ($status['answer_code'] ?? ''));
+
+                return [
+                    'text' => $status['integration'].': '.$status['status_label'].$answerCode,
+                    'is_success' => $rawAnswerCode !== '' && is_numeric($rawAnswerCode) && (int) $rawAnswerCode === 200,
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     private function leadIntegrationStatusLabel(string $status): string

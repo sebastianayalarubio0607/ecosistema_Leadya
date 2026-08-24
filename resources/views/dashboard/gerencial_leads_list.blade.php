@@ -66,10 +66,31 @@
                         @forelse($leads as $row)
                             <tr class="hover:bg-white/5">
                                 @foreach ($tableColumns as $column)
-                                    @php($value = $row[$column['key']] ?? '')
-                                    <td class="max-w-xs truncate px-3 py-2 whitespace-nowrap" title="{{ $value }}">
-                                        {{ $value === '' ? '-' : $value }}
-                                    </td>
+                                    @php
+                                        $value = $row[$column['key']] ?? '';
+                                        $integrationBadges = $column['key'] === 'integration_statuses_text'
+                                            ? ($row['integration_statuses_badges'] ?? [])
+                                            : [];
+                                    @endphp
+
+                                    @if ($column['key'] === 'integration_statuses_text' && count($integrationBadges) > 0)
+                                        <td class="max-w-sm px-3 py-2" title="{{ $value }}">
+                                            <div class="flex max-w-sm flex-wrap gap-1.5">
+                                                @foreach ($integrationBadges as $badge)
+                                                    <span
+                                                        class="inline-flex max-w-full items-center rounded-lg border px-2 py-1 text-[11px] font-semibold leading-tight {{ ($badge['is_success'] ?? false) ? 'border-emerald-300/25 bg-emerald-500/20 text-emerald-100' : 'border-red-300/25 bg-red-500/20 text-red-100' }}"
+                                                        title="{{ $badge['text'] ?? '' }}"
+                                                    >
+                                                        <span class="truncate">{{ $badge['text'] ?? '' }}</span>
+                                                    </span>
+                                                @endforeach
+                                            </div>
+                                        </td>
+                                    @else
+                                        <td class="max-w-xs truncate px-3 py-2 whitespace-nowrap" title="{{ $value }}">
+                                            {{ $value === '' ? '-' : $value }}
+                                        </td>
+                                    @endif
                                 @endforeach
                             </tr>
                         @empty

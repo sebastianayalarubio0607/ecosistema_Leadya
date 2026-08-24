@@ -110,7 +110,7 @@
             <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
                 <h3 class="text-base font-semibold text-white">Conjuntos de datos</h3>
 
-                <div class="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                <div class="mt-4 grid grid-cols-1 xl:grid-cols-3 gap-4">
                     <section class="rounded-xl border border-white/10 bg-slate-900/40 p-4 space-y-3">
                         <div>
                             <div class="text-sm font-semibold text-white">Conjuntos de datos pixel</div>
@@ -154,6 +154,34 @@
                             <div class="text-sm text-white/50">Meta_dataset_token</div>
                             <div class="mt-2 text-sm break-all rounded-xl border border-white/10 bg-slate-900/60 p-3">
                                 {{ $customer->Meta_dataset_token ?: '—' }}
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="rounded-xl border border-white/10 bg-slate-900/40 p-4 space-y-3">
+                        <div>
+                            <div class="text-sm font-semibold text-white">Conjunto de datos WhatsApp</div>
+                            <div class="mt-1 text-sm text-white/60">Se usara para medir por separado los leads que llegan desde conversaciones de WhatsApp.</div>
+                        </div>
+
+                        <div>
+                            <div class="text-sm text-white/50">Meta_dataset WhatsApp</div>
+                            <div class="mt-1">
+                                <span class="px-2 py-1 rounded-lg text-xs border {{ (int) $customer->Meta_whatsapp_dataset === 1 ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
+                                    {{ (int) $customer->Meta_whatsapp_dataset === 1 ? 'Activo' : 'Inactivo' }}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div>
+                            <div class="text-sm text-white/50">Meta_dataset_id</div>
+                            <div class="mt-1 break-all">{{ $customer->Meta_whatsapp_dataset_id ?: '—' }}</div>
+                        </div>
+
+                        <div>
+                            <div class="text-sm text-white/50">Meta_dataset_token</div>
+                            <div class="mt-2 text-sm break-all rounded-xl border border-white/10 bg-slate-900/60 p-3">
+                                {{ $customer->Meta_whatsapp_dataset_token ?: '—' }}
                             </div>
                         </div>
                     </section>

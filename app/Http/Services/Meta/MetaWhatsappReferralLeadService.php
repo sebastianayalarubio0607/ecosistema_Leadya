@@ -154,7 +154,11 @@ class MetaWhatsappReferralLeadService
             return false;
         }
 
-        $contact = $this->resolveContact($contacts, $this->stringOrNull(data_get($message, 'from')));
+        $messageFrom = $this->firstString(
+            data_get($message, 'from'),
+            data_get($message, 'from_user_id')
+        );
+        $contact = $this->resolveContact($contacts, $messageFrom);
         $leadPayload = $this->buildLeadPayload($customerId, $wabaId, $displayPhoneNumber, $contact, $message, $referral);
 
         if ($this->findExistingLead($leadPayload)) {
@@ -162,7 +166,7 @@ class MetaWhatsappReferralLeadService
         }
 
         $lead = $this->leadService->createLead($leadPayload);
-        $lead->loadMissing('crmState');
+        $lead->loadMissing('crmState.metaEvent', 'crmState.whatsappEvent');
 
         $this->dispatchMetaConversion($lead);
         $this->leadFunnelHistoryService->recordInitialLead($lead);
@@ -193,7 +197,9 @@ class MetaWhatsappReferralLeadService
         );
         $phone = $this->firstString(
             data_get($contact, 'wa_id'),
+            data_get($contact, 'user_id'),
             data_get($message, 'from'),
+            data_get($message, 'from_user_id'),
             $this->extractPhoneFromText($messageBody)
         );
 
@@ -207,11 +213,17 @@ class MetaWhatsappReferralLeadService
             'effective_lead' => self::EFFECTIVE_LEAD,
             'page_url' => $this->firstString(data_get($referral, 'video_url'), data_get($referral, 'source_url')),
             'campaign_origin' => self::CAMPAIGN_ORIGIN,
+            'message' => $messageBody,
             'plataforma' => $this->stringOrNull(data_get($referral, 'media_type')),
             'meta_id_ad' => $this->stringOrNull(data_get($referral, 'source_id')),
             'gad_source' => self::GAD_SOURCE,
             'meta_payload' => $referral,
-            'whasapp_user_id' => $this->firstString(data_get($contact, 'user_id'), data_get($message, 'from_user_id')),
+            'whasapp_user_id' => $this->firstString(
+                data_get($contact, 'wa_id'),
+                data_get($contact, 'user_id'),
+                data_get($message, 'from'),
+                data_get($message, 'from_user_id')
+            ),
             'ctwa_clid' => $this->stringOrNull(data_get($referral, 'ctwa_clid')),
             'whatsapp_business_account_id' => $wabaId,
             'number_whatsApp_companies' => $displayPhoneNumber,
@@ -227,7 +239,7 @@ class MetaWhatsappReferralLeadService
             return;
         }
 
-        if (! empty($lead->crmState?->meta_event_id)) {
+        if (! empty($lead->crmState?->whatsapp_event_id) || ! empty($lead->crmState?->meta_event_id)) {
             SendLeadToFacebook::dispatch($lead->id, (int) $lead->customer_id);
         }
     }
@@ -385,7 +397,10 @@ class MetaWhatsappReferralLeadService
                 continue;
             }
 
-            if ($messageFrom && $this->stringOrNull(data_get($contact, 'wa_id')) === $messageFrom) {
+            if ($messageFrom && in_array($messageFrom, array_filter([
+                $this->stringOrNull(data_get($contact, 'wa_id')),
+                $this->stringOrNull(data_get($contact, 'user_id')),
+            ]), true)) {
                 return $contact;
             }
         }

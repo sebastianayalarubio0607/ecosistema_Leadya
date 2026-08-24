@@ -20,6 +20,7 @@
                 'integrations' => $integrations,
                 'qualifications' => $qualifications,
                 'metaEvents' => $metaEvents,
+                'whatsappEvents' => $whatsappEvents,
                 'isCreate' => true,
                 'submitText' => 'Guardar',
                 'cancelUrl' => route('crmstates.index'),

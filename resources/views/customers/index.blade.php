@@ -40,7 +40,7 @@
 
         <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]" data-sortable-table-wrap>
             <div class="hidden px-3 py-2 text-xs text-white/50" data-sort-status>Ordenando...</div>
-            <table class="w-full min-w-[2000px] table-fixed text-sm" data-sortable-table>
+            <table class="w-full min-w-[2500px] table-fixed text-sm" data-sortable-table>
                 <thead class="bg-white/5 text-white/70">
                     <tr>
                         <x-sort-header :index="0" label="Nombre" class="w-48" />
@@ -49,13 +49,16 @@
                         <x-sort-header :index="3" label="Meta_dataset" class="w-32" />
                         <x-sort-header :index="4" label="Meta_dataset_id" class="w-48" />
                         <x-sort-header :index="5" label="Meta_dataset_token" class="w-72" />
-                        <x-sort-header :index="6" label="FB Test Event Code" class="w-44" />
-                        <x-sort-header :index="7" label="ID Google Ads" class="w-40" />
-                        <x-sort-header :index="8" label="Divisa" class="w-24" />
-                        <x-sort-header :index="9" label="Valor minimo" class="w-36" />
-                        <x-sort-header :index="10" label="Meta Account ID" class="w-56" />
-                        <x-sort-header :index="11" label="Meta WhatsApp" class="w-72" />
-                        <x-sort-header :index="12" label="Meta Pages asociadas" class="w-72" />
+                        <x-sort-header :index="6" label="WA Meta_dataset" class="w-36" />
+                        <x-sort-header :index="7" label="WA Meta_dataset_id" class="w-52" />
+                        <x-sort-header :index="8" label="WA Meta_dataset_token" class="w-72" />
+                        <x-sort-header :index="9" label="FB Test Event Code" class="w-44" />
+                        <x-sort-header :index="10" label="ID Google Ads" class="w-40" />
+                        <x-sort-header :index="11" label="Divisa" class="w-24" />
+                        <x-sort-header :index="12" label="Valor minimo" class="w-36" />
+                        <x-sort-header :index="13" label="Meta Account ID" class="w-56" />
+                        <x-sort-header :index="14" label="Meta WhatsApp" class="w-72" />
+                        <x-sort-header :index="15" label="Meta Pages asociadas" class="w-72" />
                         <th class="w-72 text-left px-3 py-2 whitespace-nowrap">Acciones</th>
                     </tr>
                 </thead>
@@ -82,6 +85,21 @@
                             <td class="px-3 py-2">
                                 <div class="text-xs break-all rounded-lg border border-white/10 bg-white/5 px-2 py-1">
                                     {{ $customer->Meta_dataset_token ?: '—' }}
+                                </div>
+                            </td>
+                            <td class="px-3 py-2">
+                                <span class="inline-flex px-2 py-1 rounded-lg text-xs border {{ (int) $customer->Meta_whatsapp_dataset === 1 ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
+                                    {{ (int) $customer->Meta_whatsapp_dataset === 1 ? 'Activo' : 'Inactivo' }}
+                                </span>
+                            </td>
+                            <td class="px-3 py-2">
+                                <div class="text-xs break-all rounded-lg border border-white/10 bg-white/5 px-2 py-1">
+                                    {{ $customer->Meta_whatsapp_dataset_id ?: '—' }}
+                                </div>
+                            </td>
+                            <td class="px-3 py-2">
+                                <div class="text-xs break-all rounded-lg border border-white/10 bg-white/5 px-2 py-1">
+                                    {{ $customer->Meta_whatsapp_dataset_token ?: '—' }}
                                 </div>
                             </td>
                             <td class="px-3 py-2">{{ $customer->fb_test_event_code ?: '—' }}</td>
@@ -165,7 +183,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td class="px-3 py-8 text-center text-white/60" colspan="14">No hay customers.</td>
+                            <td class="px-3 py-8 text-center text-white/60" colspan="17">No hay customers.</td>
                         </tr>
                     @endforelse
                 </tbody>

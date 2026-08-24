@@ -41,10 +41,29 @@
                                     @php
                                         $display = $lead[$column['key']] ?? '';
                                         $display = $display === '' ? 'Sin Dato' : $display;
+                                        $integrationBadges = $column['key'] === 'integration_statuses_text'
+                                            ? ($lead['integration_statuses_badges'] ?? [])
+                                            : [];
                                     @endphp
-                                    <td class="max-w-xs truncate whitespace-nowrap px-3 py-2" title="{{ $display }}">
-                                        {{ $display }}
-                                    </td>
+
+                                    @if($column['key'] === 'integration_statuses_text' && count($integrationBadges) > 0)
+                                        <td class="max-w-sm px-3 py-2" title="{{ $display }}">
+                                            <div class="flex max-w-sm flex-wrap gap-1.5">
+                                                @foreach($integrationBadges as $badge)
+                                                    <span
+                                                        class="inline-flex max-w-full items-center rounded-lg border px-2 py-1 text-[11px] font-semibold leading-tight {{ ($badge['is_success'] ?? false) ? 'border-emerald-300/25 bg-emerald-500/20 text-emerald-100' : 'border-red-300/25 bg-red-500/20 text-red-100' }}"
+                                                        title="{{ $badge['text'] ?? '' }}"
+                                                    >
+                                                        <span class="truncate">{{ $badge['text'] ?? '' }}</span>
+                                                    </span>
+                                                @endforeach
+                                            </div>
+                                        </td>
+                                    @else
+                                        <td class="max-w-xs truncate whitespace-nowrap px-3 py-2" title="{{ $display }}">
+                                            {{ $display }}
+                                        </td>
+                                    @endif
                                 @endforeach
                             </tr>
                         @empty

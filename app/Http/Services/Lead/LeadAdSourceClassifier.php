@@ -15,6 +15,7 @@ class LeadAdSourceClassifier
         'meta',
         'ig',
         'wa',
+        'whatsapp',
         'mg',
         'fbm',
         'th',

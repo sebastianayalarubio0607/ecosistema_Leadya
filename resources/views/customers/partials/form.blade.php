@@ -8,6 +8,9 @@
     $metaDataset = old('Meta_dataset', isset($customer) ? (int) $customer->Meta_dataset : 0);
     $metaDatasetId = old('Meta_dataset_id', $customer?->Meta_dataset_id);
     $metaDatasetToken = old('Meta_dataset_token', $customer?->Meta_dataset_token);
+    $metaWhatsappDataset = old('Meta_whatsapp_dataset', isset($customer) ? (int) $customer->Meta_whatsapp_dataset : 0);
+    $metaWhatsappDatasetId = old('Meta_whatsapp_dataset_id', $customer?->Meta_whatsapp_dataset_id);
+    $metaWhatsappDatasetToken = old('Meta_whatsapp_dataset_token', $customer?->Meta_whatsapp_dataset_token);
     $idGads = old('id_Gads', $customer?->id_Gads);
     $selectedCurrencyId = old('default_currency_id', $customer?->default_currency_id ?? ($defaultCurrencyId ?? null));
     $defaultLeadValue = old('default_lead_value', $customer?->default_lead_value ?? 100000);
@@ -44,7 +47,7 @@
             <h3 class="text-base font-semibold text-white">Conjuntos de datos</h3>
         </div>
 
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="grid grid-cols-1 xl:grid-cols-3 gap-4">
             <section class="rounded-xl border border-white/10 bg-slate-900/40 p-4 space-y-4">
                 <div>
                     <h4 class="text-sm font-semibold text-white">Conjuntos de datos pixel</h4>
@@ -101,6 +104,42 @@
                            value="{{ $metaDatasetToken }}"
                            class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40" />
                     @error('Meta_dataset_token') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+                </div>
+            </section>
+
+            <section class="rounded-xl border border-white/10 bg-slate-900/40 p-4 space-y-4">
+                <div>
+                    <h4 class="text-sm font-semibold text-white">Conjunto de datos WhatsApp</h4>
+                    <p class="mt-1 text-sm text-white/60">Se usara para medir por separado los leads que llegan desde conversaciones de WhatsApp.</p>
+                </div>
+
+                <div>
+                    <input type="hidden" name="Meta_whatsapp_dataset" value="0">
+                    <x-toggle-switch
+                        name="Meta_whatsapp_dataset"
+                        value="1"
+                        label="Meta_dataset WhatsApp"
+                        :checked="(string) $metaWhatsappDataset === '1'"
+                    >
+                        Habilita el envio de conversiones de WhatsApp a un dataset independiente.
+                    </x-toggle-switch>
+                    @error('Meta_whatsapp_dataset') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+                </div>
+
+                <div>
+                    <label class="block mb-1 text-white/70">Meta_dataset_id</label>
+                    <input class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
+                           name="Meta_whatsapp_dataset_id"
+                           value="{{ $metaWhatsappDatasetId }}" />
+                    @error('Meta_whatsapp_dataset_id') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+                </div>
+
+                <div>
+                    <label class="block mb-1 text-white/70">Meta_dataset_token</label>
+                    <input name="Meta_whatsapp_dataset_token"
+                           value="{{ $metaWhatsappDatasetToken }}"
+                           class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40" />
+                    @error('Meta_whatsapp_dataset_token') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
                 </div>
             </section>
         </div>

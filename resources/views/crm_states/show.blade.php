@@ -39,7 +39,7 @@
             </div>
         </div>
 
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
             <div class="rounded-xl border border-white/10 bg-white/5 p-3">
                 <div class="text-xs text-white/50">Integration ID</div>
                 <div class="text-white">{{ $integrationId }}</div>
@@ -59,6 +59,13 @@
                 <div class="text-white">{{ $crmstate->metaEvent?->nombre ?? '--' }}</div>
                 <div class="text-xs text-white/50 mt-2">Estado Meta Event</div>
                 <div class="text-white">{{ $crmstate->metaEvent?->estados ?? '--' }}</div>
+            </div>
+
+            <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                <div class="text-xs text-white/50">WhatsApp Event</div>
+                <div class="text-white">{{ $crmstate->whatsappEvent?->event_name ?? '--' }}</div>
+                <div class="text-xs text-white/50 mt-2">Uso en funnel</div>
+                <div class="text-white">{{ $crmstate->whatsappEvent?->funnel_usefulness ?? '--' }}</div>
             </div>
         </div>
 

@@ -19,6 +19,7 @@ class CrmState extends Model
         'name',
         'qualification',
         'meta_event_id',
+        'whatsapp_event_id',
         'unmanaged',
         'google_ads_conversion_action_id',
         'google_ads_conversion_action_name',
@@ -47,6 +48,11 @@ class CrmState extends Model
     public function metaEvent(): BelongsTo
     {
         return $this->belongsTo(MetaEvent::class, 'meta_event_id');
+    }
+
+    public function whatsappEvent(): BelongsTo
+    {
+        return $this->belongsTo(WhatsAppEvent::class, 'whatsapp_event_id');
     }
 
     public function googleAdsConversions(): HasMany

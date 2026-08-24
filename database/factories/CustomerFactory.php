@@ -30,6 +30,9 @@ class CustomerFactory extends Factory
             'Meta_dataset' => false,
             'Meta_dataset_id' => null,
             'Meta_dataset_token' => null,
+            'Meta_whatsapp_dataset' => false,
+            'Meta_whatsapp_dataset_id' => null,
+            'Meta_whatsapp_dataset_token' => null,
             'created_at' => now(),
             'updated_at' => now(),
         ];

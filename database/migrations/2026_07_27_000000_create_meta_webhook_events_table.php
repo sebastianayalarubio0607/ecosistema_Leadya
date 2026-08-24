@@ -27,7 +27,7 @@ return new class extends Migration
             $table->string('sender_id')->nullable()->index();
             $table->string('recipient_id')->nullable()->index();
             $table->timestamp('meta_event_time')->nullable();
-            $table->timestamp('received_at')->index();
+            $table->timestamp('received_at')->nullable()->index();
             $table->string('processing_status')->default('received')->index();
             $table->longText('processing_error')->nullable();
             $table->json('value')->nullable();

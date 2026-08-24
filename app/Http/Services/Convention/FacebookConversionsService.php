@@ -22,15 +22,9 @@ class FacebookConversionsService
     {
         $customer = Customer::findOrFail($customerId);
         $isInstantForm = $this->isMetaInstantForm($lead);
-        $useMetaDataset = $isInstantForm && (bool) data_get($customer, 'Meta_dataset');
+        $isWhatsappDataset = $this->usesWhatsappDataset($lead, $customer);
 
-        $pixelId = $useMetaDataset
-            ? data_get($customer, 'Meta_dataset_id')
-            : data_get($customer, 'fb_pixel_id');
-
-        $accessToken = $useMetaDataset
-            ? data_get($customer, 'Meta_dataset_token')
-            : data_get($customer, 'fb_access_token');
+        [$pixelId, $accessToken] = $this->resolveMetaCredentials($lead, $customer);
 
         // ✅ test_event_code: intenta desde Lead, luego Customer, luego constante
         $testCode = trim((string) (
@@ -50,16 +44,40 @@ class FacebookConversionsService
         $event_name = 'Lead';
         $usedFallbackLeadEvent = true;
 
-        if (is_string($eventNameOverride) && trim($eventNameOverride) !== '') {
-            $event_name = trim($eventNameOverride);
-            $usedFallbackLeadEvent = false;
-        } elseif (! empty($lead->crm_state)) {
-            $lead->loadMissing('crmState.metaEvent');
-            $dbEventName = $lead->crmState?->metaEvent?->nombre;
+        if (! empty($lead->crm_state)) {
+            $lead->loadMissing('crmState.metaEvent', 'crmState.whatsappEvent');
+        }
+
+        if ($isWhatsappDataset) {
+            $dbEventName = $lead->crmState?->whatsappEvent?->event_name;
 
             if (is_string($dbEventName) && trim($dbEventName) !== '') {
                 $event_name = trim($dbEventName);
                 $usedFallbackLeadEvent = false;
+            } elseif (is_string($eventNameOverride) && trim($eventNameOverride) !== '') {
+                $event_name = trim($eventNameOverride);
+                $usedFallbackLeadEvent = false;
+            } elseif (! empty($lead->crm_state)) {
+                $dbEventName = $lead->crmState?->metaEvent?->nombre;
+
+                if (is_string($dbEventName) && trim($dbEventName) !== '') {
+                    $event_name = trim($dbEventName);
+                    $usedFallbackLeadEvent = false;
+                }
+            }
+
+            $event_name = $this->whatsappEventName($event_name);
+        } else {
+            if (is_string($eventNameOverride) && trim($eventNameOverride) !== '') {
+                $event_name = trim($eventNameOverride);
+                $usedFallbackLeadEvent = false;
+            } elseif (! empty($lead->crm_state)) {
+                $dbEventName = $lead->crmState?->metaEvent?->nombre;
+
+                if (is_string($dbEventName) && trim($dbEventName) !== '') {
+                    $event_name = trim($dbEventName);
+                    $usedFallbackLeadEvent = false;
+                }
             }
         }
 
@@ -67,6 +85,21 @@ class FacebookConversionsService
             return [
                 'ok' => false,
                 'error' => 'Faltan credenciales de Meta (pixel/dataset o access token).',
+                'request' => null,
+                'pixel_id' => $pixelId,
+                'test_event_code' => $testCode,
+                'event_name' => $event_name,
+                'lead_id' => $lead->id,
+            ];
+        }
+
+        if ($isWhatsappDataset && (
+            blank($lead->whatsapp_business_account_id)
+            || blank($lead->ctwa_clid)
+        )) {
+            return [
+                'ok' => false,
+                'error' => 'Faltan datos requeridos para conversiones WhatsApp (whatsapp_business_account_id o ctwa_clid).',
                 'request' => null,
                 'pixel_id' => $pixelId,
                 'test_event_code' => $testCode,
@@ -105,9 +138,25 @@ class FacebookConversionsService
             'event_name' => $event_name,
             'event_time' => $event_time,
             'event_id' => $event_id,
-            'action_source' => $isInstantForm ? 'system_generated' : 'website',
+        ];
 
-            'user_data' => $this->filterNulls([
+        if ($isWhatsappDataset) {
+            $event['action_source'] = 'business_messaging';
+            $event['messaging_channel'] = 'whatsapp';
+            $event['user_data'] = $this->filterNulls([
+                'whatsapp_business_account_id' => $lead->whatsapp_business_account_id,
+                'ctwa_clid' => $lead->ctwa_clid,
+            ]);
+
+            if ($event_name === 'Purchase') {
+                $event['custom_data'] = $this->filterNulls([
+                    'currency' => $this->currencyCode($customer),
+                    'value' => $this->conversionValue($lead, $customer),
+                ]);
+            }
+        } else {
+            $event['action_source'] = $isInstantForm ? 'system_generated' : 'website';
+            $event['user_data'] = $this->filterNulls([
                 'client_ip_address' => $customData['client_ip'] ?? null,
                 'client_user_agent' => $customData['agent'] ?? null,
 
@@ -124,9 +173,9 @@ class FacebookConversionsService
 
                 'external_id' => ! empty($userData['external_id']) ? [$userData['external_id']] : null,
                 'lead_id' => $isInstantForm ? (string) $lead->meta_lead_id : null,
-            ]),
+            ]);
 
-            'custom_data' => $this->filterNulls(array_merge(
+            $event['custom_data'] = $this->filterNulls(array_merge(
                 [
                     'content_name' => $lead->service ?? null,
                     'lead_source' => $lead->campaign_origin ?? $lead->utm_source ?? null,
@@ -149,10 +198,10 @@ class FacebookConversionsService
                 ],
                 // opcional (si vienen en fields_custom)
                 $this->extractStandardEventCustomData($lead)
-            )),
-        ];
+            ));
+        }
 
-        if (! $isInstantForm) {
+        if (! $isInstantForm && ! $isWhatsappDataset) {
             $event['event_source_url'] =  'https://leadsquality.leadsya.com/';
         }
 
@@ -166,7 +215,7 @@ class FacebookConversionsService
 
         $response = Http::asJson()
             ->timeout(15)
-            ->retry(3, 500)
+            ->retry(3, 500, null, false)
             ->post($endpoint, $payload);
 
         if ($response->successful()) {
@@ -261,6 +310,42 @@ class FacebookConversionsService
 
         return $this->normalizeInstantFormSource($lead->plataforma) === $instantForm
             || $this->normalizeInstantFormSource($lead->campaign_origin) === $instantForm;
+    }
+
+    protected function usesWhatsappDataset(Lead $lead, Customer $customer): bool
+    {
+        return (string) $lead->campaign_origin === 'whatsapp'
+            && (bool) data_get($customer, 'Meta_whatsapp_dataset');
+    }
+
+    protected function whatsappEventName(string $eventName): string
+    {
+        return match ($eventName) {
+            'Lead' => 'LeadSubmitted',
+            default => $eventName,
+        };
+    }
+
+    protected function resolveMetaCredentials(Lead $lead, Customer $customer): array
+    {
+        if ($this->usesWhatsappDataset($lead, $customer)) {
+            return [
+                data_get($customer, 'Meta_whatsapp_dataset_id'),
+                data_get($customer, 'Meta_whatsapp_dataset_token'),
+            ];
+        }
+
+        if ($this->isMetaInstantForm($lead) && (bool) data_get($customer, 'Meta_dataset')) {
+            return [
+                data_get($customer, 'Meta_dataset_id'),
+                data_get($customer, 'Meta_dataset_token'),
+            ];
+        }
+
+        return [
+            data_get($customer, 'fb_pixel_id'),
+            data_get($customer, 'fb_access_token'),
+        ];
     }
 
     protected function normalizeInstantFormSource(?string $value): string

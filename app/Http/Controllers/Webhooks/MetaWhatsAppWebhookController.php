@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Webhooks;
 
 use App\Http\Controllers\Controller;
+use App\Http\Services\Meta\MetaWhatsappReferralLeadService;
 use App\Models\MetaWhatsappMessage;
 use App\Services\Meta\MetaWebhookStorageService;
 use Carbon\Carbon;
@@ -27,7 +28,11 @@ class MetaWhatsAppWebhookController extends Controller
         return response((string) $request->query('hub_challenge', $request->query('hub.challenge')), Response::HTTP_OK);
     }
 
-    public function receive(Request $request, MetaWebhookStorageService $metaWebhookStorageService): JsonResponse
+    public function receive(
+        Request $request,
+        MetaWebhookStorageService $metaWebhookStorageService,
+        MetaWhatsappReferralLeadService $metaWhatsappReferralLeadService,
+    ): JsonResponse
     {
         try {
             $metaWebhookStorageService->storeFromRequest($request);
@@ -36,6 +41,17 @@ class MetaWhatsAppWebhookController extends Controller
                 'exception' => $exception::class,
                 'message' => $exception->getMessage(),
             ]);
+        }
+
+        try {
+            $referralLeads = $metaWhatsappReferralLeadService->dispatchRequest($request);
+        } catch (\Throwable $exception) {
+            Log::error('Meta WhatsApp referral lead webhook payload could not be dispatched', [
+                'exception' => $exception::class,
+                'message' => $exception->getMessage(),
+            ]);
+
+            $referralLeads = 0;
         }
 
         try {
@@ -52,6 +68,7 @@ class MetaWhatsAppWebhookController extends Controller
         return response()->json([
             'received' => true,
             'stored_messages' => $stored,
+            'referral_leads' => $referralLeads,
         ], Response::HTTP_OK);
     }
 

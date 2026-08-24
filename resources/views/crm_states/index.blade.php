@@ -102,6 +102,19 @@
             </div>
 
             <div class="md:col-span-2">
+                <label class="block mb-1 text-white/70">WhatsApp Event</label>
+                <select name="whatsapp_event_id" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+                    <option value="">Todos</option>
+                    <option value="none" @selected((string) ($whatsappEventId ?? request('whatsapp_event_id')) === 'none')>Sin WhatsApp Event</option>
+                    @foreach($whatsappEvents as $whatsappEvent)
+                        <option value="{{ $whatsappEvent->id }}" @selected((string) ($whatsappEventId ?? request('whatsapp_event_id')) === (string) $whatsappEvent->id)>
+                            {{ $whatsappEvent->event_name }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="md:col-span-2">
                 <label class="block mb-1 text-white/70">Google Ads</label>
                 <select name="google_ads_conversion_enabled" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
                     <option value="">Todos</option>
@@ -133,6 +146,7 @@
                         <th class="text-left px-3 py-2">Sin gestionar</th>
                         <th class="text-left px-3 py-2">Qualification</th>
                         <th class="text-left px-3 py-2">Meta Event</th>
+                        <th class="text-left px-3 py-2">WhatsApp Event</th>
                         <th class="text-left px-3 py-2">Google Ads</th>
                         <th class="text-left px-3 py-2 w-56">Acciones</th>
                     </tr>
@@ -159,6 +173,12 @@
                             <td class="px-3 py-2">{{ $it->unmanaged ? 'Si' : 'No' }}</td>
                             <td class="px-3 py-2">{{ $it->qualificationModel?->name ?? '--' }}</td>
                             <td class="px-3 py-2">{{ $it->metaEvent?->nombre ?? '--' }}</td>
+                            <td class="px-3 py-2">
+                                {{ $it->whatsappEvent?->event_name ?? '--' }}
+                                @if($it->whatsappEvent?->funnel_usefulness)
+                                    <div class="text-xs text-white/50">{{ $it->whatsappEvent->funnel_usefulness }}</div>
+                                @endif
+                            </td>
                             <td class="px-3 py-2">
                                 <span class="px-2 py-1 rounded-lg text-xs border {{ $it->google_ads_conversion_enabled ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
                                     {{ $it->google_ads_conversion_enabled ? 'Activa' : 'Inactiva' }}

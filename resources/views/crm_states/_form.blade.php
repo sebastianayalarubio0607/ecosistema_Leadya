@@ -101,7 +101,7 @@
             @error('qualification') <div class="text-rose-300 text-xs mt-1">{{ $message }}</div> @enderror
         </div>
 
-        <div class="md:col-span-6">
+        <div class="md:col-span-3">
             <label class="block mb-1 text-white/70">Meta Event (Conversion)</label>
             <select name="meta_event_id"
                     class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
@@ -113,6 +113,20 @@
                 @endforeach
             </select>
             @error('meta_event_id') <div class="text-rose-300 text-xs mt-1">{{ $message }}</div> @enderror
+        </div>
+
+        <div class="md:col-span-3">
+            <label class="block mb-1 text-white/70">WhatsApp Event</label>
+            <select name="whatsapp_event_id"
+                    class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+                <option value="">-- Sin asignar --</option>
+                @foreach(($whatsappEvents ?? collect()) as $we)
+                    <option value="{{ $we->id }}" @selected(old('whatsapp_event_id', $crmstate?->whatsapp_event_id) == $we->id)>
+                        {{ $we->event_name }} - {{ $we->description }}
+                    </option>
+                @endforeach
+            </select>
+            @error('whatsapp_event_id') <div class="text-rose-300 text-xs mt-1">{{ $message }}</div> @enderror
         </div>
     </div>
 

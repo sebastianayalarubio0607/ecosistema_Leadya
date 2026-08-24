@@ -217,24 +217,26 @@ class DashboardGerencialLeadsController extends Controller
         $exportUrl = route('dashboard.gerencial-leads.list.export', Arr::except($request->query(), ['page']));
         $periodLabel = $from->format('Y-m-d H:i').' -> '.$to->format('Y-m-d H:i');
 
-        return view('dashboard.gerencial_leads_list', compact(
-            'customers',
-            'customerId',
-            'integrationId',
-            'selectedCustomer',
-            'totalValueFormatted',
-            'groupType',
-            'groupId',
-            'groupLabel',
-            'tableColumns',
-            'leads',
-            'backUrl',
-            'exportUrl',
-            'periodLabel',
-            'from',
-            'to',
-            'nowMax'
-        ));
+        return response()
+            ->view('dashboard.gerencial_leads_list', compact(
+                'customers',
+                'customerId',
+                'integrationId',
+                'selectedCustomer',
+                'totalValueFormatted',
+                'groupType',
+                'groupId',
+                'groupLabel',
+                'tableColumns',
+                'leads',
+                'backUrl',
+                'exportUrl',
+                'periodLabel',
+                'from',
+                'to',
+                'nowMax'
+            ))
+            ->header('Content-Type', 'text/html; charset=UTF-8');
     }
 
     /**
@@ -645,7 +647,7 @@ class DashboardGerencialLeadsController extends Controller
                 ->where("{$leadTable}.crm_state", '!=', '')
                 ->leftJoin('crm_state as csq', 'csq.id', '=', "{$leadTable}.crm_state")
                 ->leftJoin('qualification as ql', 'ql.id', '=', 'csq.qualification')
-                ->selectRaw("\n                    ql.id as id,\n                    COALESCE(ql.name, 'Sin cualificaciÃ³n') as name,\n                    COUNT(*) as total\n                ")
+                ->selectRaw("\n                    ql.id as id,\n                    COALESCE(ql.name, 'Sin Calificación') as name,\n                    COUNT(*) as total\n                ")
                 ->groupBy('ql.id', 'ql.name')
                 ->orderByDesc('total')
                 ->get()
@@ -1119,7 +1121,7 @@ class DashboardGerencialLeadsController extends Controller
             ->selectRaw("COALESCE(NULLIF(source_list.name,''), 'Sin Source') as source_name")
             ->selectRaw("COALESCE(NULLIF(platform_list.name,''), NULLIF({$leadTable}.plataforma,''), 'Sin Medio') as type_name")
             ->selectRaw("{$funnelNameSelect} as funnel_name")
-            ->selectRaw("COALESCE(NULLIF(ql.name,''), 'Sin CualificaciÃ³n') as qualification_name");
+            ->selectRaw("COALESCE(NULLIF(ql.name,''), 'Sin Calificación') as qualification_name");
 
         // Orden: para histÃƒÂ³rico prioriza el ÃƒÂºltimo paso por ese funnel dentro de la ventana
         if ($isHistory) {
@@ -1245,7 +1247,7 @@ class DashboardGerencialLeadsController extends Controller
 
         if ($groupType === 'qualification') {
             if ($groupId === '__NULL__') {
-                return 'Sin CualificaciÃ³n';
+                return 'Sin Calificación';
             }
             $name = DB::table('qualification')->where('id', (int) $groupId)->value('name');
 
@@ -2232,7 +2234,7 @@ class DashboardGerencialLeadsController extends Controller
         $qualRaw = array_map(function ($q) {
             return [
                 'id' => ($q['id'] ?? null) === null ? '__NULL__' : $q['id'],
-                'name' => $q['name'] ?? 'Sin CualificaciÃ³n',
+                'name' => $q['name'] ?? 'Sin Calificación',
                 'count' => (int) ($q['count'] ?? 0),
             ];
         }, $metric['qualifications'] ?? []);
@@ -2522,9 +2524,9 @@ class DashboardGerencialLeadsController extends Controller
 
         $metaSections = [
             [
-                'title' => 'CampaÃ±a de Meta',
-                'empty_note' => 'Sin datos de campaÃ±as en el periodo.',
-                'footnote' => 'Mostrando hasta 200 campaÃ±as ordenadas por costo.',
+                'title' => 'Campaña de Meta',
+                'empty_note' => 'Sin datos de campañas en el periodo.',
+                'footnote' => 'Mostrando hasta 200 campañas ordenadas por costo.',
                 'table' => $metaCampaigns,
             ],
             [
@@ -2906,13 +2908,13 @@ class DashboardGerencialLeadsController extends Controller
 
                 // Ã¢Å“â€¦ Campos solicitados
                 $columns = [
-                    ['key' => 'nombre',              'label' => 'Nombre CampaÃ±a'],
-                    ['key' => 'costo',               'label' => 'Costo CampaÃ±a'],
-                    ['key' => 'leads',               'label' => 'Leads en LQ CampaÃ±a'],
-                    ['key' => 'leads_calificados',   'label' => 'Leads en LQ calificados CampaÃ±a'],
-                    ['key' => 'leads_no_calificados', 'label' => 'Leads en LQ no calificados CampaÃ±a'],
+                    ['key' => 'nombre',              'label' => 'Nombre Campaña'],
+                    ['key' => 'costo',               'label' => 'Costo Campaña'],
+                    ['key' => 'leads',               'label' => 'Leads en LQ Campaña'],
+                    ['key' => 'leads_calificados',   'label' => 'Leads en LQ calificados Campaña'],
+                    ['key' => 'leads_no_calificados', 'label' => 'Leads en LQ no calificados Campaña'],
                     ['key' => 'roas',                'label' => 'ROAS'],
-                    ['key' => 'CPL',                'label' => 'CPL CampaÃ±a'],
+                    ['key' => 'CPL',                'label' => 'CPL Campaña'],
                 ];
 
                 $outRows = [];
@@ -2946,7 +2948,7 @@ class DashboardGerencialLeadsController extends Controller
         } catch (\Throwable $e) {
             return [
                 'enabled' => false,
-                'note' => 'Error cargando CampaÃ±as: '.$e->getMessage(),
+                'note' => 'Error cargando Campañas: '.$e->getMessage(),
                 'columns' => [],
                 'rows' => [],
             ];
@@ -3582,11 +3584,15 @@ class DashboardGerencialLeadsController extends Controller
         $columns = $this->leadListColumns();
 
         $paginator->getCollection()->transform(function (Lead $lead) use ($columns) {
-            return collect($columns)
+            $row = collect($columns)
                 ->mapWithKeys(fn (array $column) => [
                     $column['key'] => $this->leadListColumnValue($lead, $column['key']),
                 ])
                 ->all();
+
+            $row['integration_statuses_badges'] = $this->leadIntegrationStatusBadges($lead);
+
+            return $row;
         });
 
         return $paginator;
@@ -3673,6 +3679,22 @@ class DashboardGerencialLeadsController extends Controller
                 return $status['integration'].': '.$status['status_label'].$answerCode;
             })
             ->implode(' | ');
+    }
+
+    private function leadIntegrationStatusBadges(Lead $lead): array
+    {
+        return collect($this->formatLeadIntegrationStatuses($lead))
+            ->map(function (array $status) {
+                $answerCode = $status['answer_code'] ? ' ('.$status['answer_code'].')' : '';
+                $rawAnswerCode = trim((string) ($status['answer_code'] ?? ''));
+
+                return [
+                    'text' => $status['integration'].': '.$status['status_label'].$answerCode,
+                    'is_success' => $rawAnswerCode !== '' && is_numeric($rawAnswerCode) && (int) $rawAnswerCode === 200,
+                ];
+            })
+            ->values()
+            ->all();
     }
 
     private function leadIntegrationStatusLabel(string $status): string
@@ -4088,9 +4110,9 @@ class DashboardGerencialLeadsController extends Controller
             ->orderByDesc('impressions')
             ->get();
 
-        return $this->formatGoogleSummaryTable('CampaÃ±a', $rows, [
+        return $this->formatGoogleSummaryTable('Campaña', $rows, [
             ['key' => 'customer_name', 'label' => 'Cliente'],
-            ['key' => 'campaign_name', 'label' => 'CampaÃ±a'],
+            ['key' => 'campaign_name', 'label' => 'Campaña'],
             ['key' => 'impressions', 'label' => 'Impresiones'],
             ['key' => 'clicks', 'label' => 'Clics'],
             ['key' => 'cost', 'label' => 'Costo'],
@@ -4292,7 +4314,7 @@ class DashboardGerencialLeadsController extends Controller
 
         return $this->formatGoogleSummaryTable('Anuncio', $rows, [
             ['key' => 'customer_name', 'label' => 'Cliente'],
-            ['key' => 'campaign_name', 'label' => 'CampaÃ±a'],
+            ['key' => 'campaign_name', 'label' => 'Campaña'],
             ['key' => 'ad_group_name', 'label' => 'Grupo de anuncios'],
             ['key' => 'ad_name', 'label' => 'Anuncio'],
             ['key' => 'impressions', 'label' => 'Impresiones'],
@@ -4311,7 +4333,7 @@ class DashboardGerencialLeadsController extends Controller
         $formattedRows = $rows->map(function ($row) {
             return [
                 'customer_name' => $row->customer_name ?: 'Sin cliente',
-                'campaign_name' => $row->campaign_name ?: 'Sin campaÃ±a',
+                'campaign_name' => $row->campaign_name ?: 'Sin campaña',
                 'ad_group_name' => $row->ad_group_name ?? '-',
                 'ad_name' => $row->ad_name ?? '-',
                 'impressions' => number_format((int) ($row->impressions ?? 0), 0, ',', '.'),

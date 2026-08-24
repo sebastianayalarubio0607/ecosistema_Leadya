@@ -33,6 +33,7 @@ class CustomerController extends Controller
                     $innerQuery->where('name', 'like', "%{$q}%")
                         ->orWhere('fb_pixel_id', 'like', "%{$q}%")
                         ->orWhere('Meta_dataset_id', 'like', "%{$q}%")
+                        ->orWhere('Meta_whatsapp_dataset_id', 'like', "%{$q}%")
                         ->orWhere('id_Gads', 'like', "%{$q}%")
                         ->orWhereHas('metaAdAccounts', function ($accountQuery) use ($q) {
                             $accountQuery->where('meta_account_id', 'like', "%{$q}%")
@@ -76,6 +77,9 @@ class CustomerController extends Controller
             'Meta_dataset' => ['nullable', 'boolean'],
             'Meta_dataset_id' => ['nullable', 'string', 'max:255'],
             'Meta_dataset_token' => ['nullable', 'string', 'max:500'],
+            'Meta_whatsapp_dataset' => ['nullable', 'boolean'],
+            'Meta_whatsapp_dataset_id' => ['nullable', 'string', 'max:255'],
+            'Meta_whatsapp_dataset_token' => ['nullable', 'string', 'max:500'],
             'id_Gads' => ['nullable', 'string', 'max:32', 'regex:/^[0-9]+$/'],
             'default_currency_id' => ['nullable', 'exists:currencies,id'],
             'default_lead_value' => ['nullable', 'numeric', 'min:0'],
@@ -103,6 +107,7 @@ class CustomerController extends Controller
         unset($data['new_meta_ad_account']);
         unset($data['new_meta_whatsapp']);
         $data['Meta_dataset'] = $request->boolean('Meta_dataset');
+        $data['Meta_whatsapp_dataset'] = $request->boolean('Meta_whatsapp_dataset');
         $data = $this->applyDefaultCustomerSettings($data);
         $data['status'] = (int) $data['status'];
 
@@ -184,6 +189,9 @@ class CustomerController extends Controller
             'Meta_dataset' => ['nullable', 'boolean'],
             'Meta_dataset_id' => ['nullable', 'string', 'max:255'],
             'Meta_dataset_token' => ['nullable', 'string', 'max:500'],
+            'Meta_whatsapp_dataset' => ['nullable', 'boolean'],
+            'Meta_whatsapp_dataset_id' => ['nullable', 'string', 'max:255'],
+            'Meta_whatsapp_dataset_token' => ['nullable', 'string', 'max:500'],
             'id_Gads' => ['nullable', 'string', 'max:32', 'regex:/^[0-9]+$/'],
             'default_currency_id' => ['nullable', 'exists:currencies,id'],
             'default_lead_value' => ['nullable', 'numeric', 'min:0'],
@@ -212,6 +220,7 @@ class CustomerController extends Controller
         unset($data['new_meta_ad_account']);
         unset($data['new_meta_whatsapp']);
         $data['Meta_dataset'] = $request->boolean('Meta_dataset');
+        $data['Meta_whatsapp_dataset'] = $request->boolean('Meta_whatsapp_dataset');
         $data = $this->applyDefaultCustomerSettings($data);
         $data['status'] = (int) $data['status'];
 

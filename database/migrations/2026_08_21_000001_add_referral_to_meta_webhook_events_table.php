@@ -9,6 +9,8 @@ return new class extends Migration
 {
     public function up(): void
     {
+        $this->normalizeReceivedAtDefault();
+
         Schema::table('meta_webhook_events', function (Blueprint $table) {
             if (! Schema::hasColumn('meta_webhook_events', 'referral')) {
                 $table->json('referral')->nullable()->after('value');
@@ -25,6 +27,15 @@ return new class extends Migration
                 $table->dropColumn('referral');
             }
         });
+    }
+
+    private function normalizeReceivedAtDefault(): void
+    {
+        if (! Schema::hasColumn('meta_webhook_events', 'received_at')) {
+            return;
+        }
+
+        DB::statement('ALTER TABLE `meta_webhook_events` MODIFY `received_at` TIMESTAMP NULL DEFAULT NULL');
     }
 
     private function backfillExistingReferrals(): void

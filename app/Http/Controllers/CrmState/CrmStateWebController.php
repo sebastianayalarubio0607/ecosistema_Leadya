@@ -9,6 +9,7 @@ use App\Models\Integration;
 use App\Models\Integrationtype;
 use App\Models\MetaEvent;
 use App\Models\Qualification;
+use App\Models\WhatsAppEvent;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
@@ -25,6 +26,7 @@ class CrmStateWebController extends Controller
         $unmanaged = $request->get('unmanaged');
         $qualificationId = $request->get('qualification');
         $metaEventId = $request->get('meta_event_id');
+        $whatsappEventId = $request->get('whatsapp_event_id');
         $googleAdsEnabled = $request->get('google_ads_conversion_enabled');
 
         $integrationFiltersActive = filled($customerId) || filled($typeId) || filled($integrationId);
@@ -33,6 +35,7 @@ class CrmStateWebController extends Controller
             ->with([
                 'qualificationModel:id,name',
                 'metaEvent:id,nombre',
+                'whatsappEvent:id,event_name,description,funnel_usefulness',
                 'googleAdsConversions.customer:id,name,id_Gads',
             ])
             ->when($q, function ($query) use ($q) {
@@ -48,6 +51,11 @@ class CrmStateWebController extends Controller
                 $metaEventId === 'none'
                     ? $query->whereNull('meta_event_id')
                     : $query->where('meta_event_id', $metaEventId);
+            })
+            ->when($whatsappEventId !== null && $whatsappEventId !== '', function ($query) use ($whatsappEventId) {
+                $whatsappEventId === 'none'
+                    ? $query->whereNull('whatsapp_event_id')
+                    : $query->where('whatsapp_event_id', $whatsappEventId);
             })
             ->when($googleAdsEnabled !== null && $googleAdsEnabled !== '', fn ($query) => $query->where('google_ads_conversion_enabled', (bool) $googleAdsEnabled))
             ->when($integrationFiltersActive, function ($query) use ($customerId, $typeId, $integrationId) {
@@ -86,6 +94,11 @@ class CrmStateWebController extends Controller
         $types = Integrationtype::orderBy('name')->get(['id', 'name']);
         $qualifications = Qualification::orderBy('name')->get(['id', 'name']);
         $metaEvents = MetaEvent::orderBy('nombre')->get(['id', 'nombre']);
+        $whatsappEvents = WhatsAppEvent::query()
+            ->where('active', true)
+            ->orderBy('sort_order')
+            ->orderBy('event_name')
+            ->get(['id', 'event_name', 'description', 'funnel_usefulness']);
 
         return view('crm_states.index', compact(
             'crmstates',
@@ -97,12 +110,14 @@ class CrmStateWebController extends Controller
             'unmanaged',
             'qualificationId',
             'metaEventId',
+            'whatsappEventId',
             'googleAdsEnabled',
             'customers',
             'types',
             'integrations',
             'qualifications',
-            'metaEvents'
+            'metaEvents',
+            'whatsappEvents'
         ));
     }
 
@@ -117,8 +132,9 @@ class CrmStateWebController extends Controller
         $customers = $this->googleAdsCustomers();
         $qualifications = Qualification::orderBy('name')->get(['id', 'name']);
         $metaEvents = MetaEvent::orderBy('nombre')->get(['id', 'nombre', 'estados']);
+        $whatsappEvents = $this->whatsappEvents();
 
-        return view('crm_states.create', compact('crmstate', 'integrations', 'customers', 'qualifications', 'metaEvents'));
+        return view('crm_states.create', compact('crmstate', 'integrations', 'customers', 'qualifications', 'metaEvents', 'whatsappEvents'));
     }
 
     public function store(Request $request)
@@ -148,6 +164,7 @@ class CrmStateWebController extends Controller
             'name' => $request->string('name'),
             'qualification' => $request->input('qualification'),
             'meta_event_id' => $request->input('meta_event_id'),
+            'whatsapp_event_id' => $request->input('whatsapp_event_id'),
             'unmanaged' => $request->boolean('unmanaged'),
             'google_ads_conversion_enabled' => $request->boolean('google_ads_conversion_enabled'),
             'google_ads_conversion_action_id' => $firstConversion['conversion_action_id'] ?? null,
@@ -169,6 +186,7 @@ class CrmStateWebController extends Controller
         $crmstate->load([
             'qualificationModel:id,name',
             'metaEvent:id,nombre,estados',
+            'whatsappEvent:id,event_name,description,funnel_usefulness',
             'googleAdsConversions.customer:id,name,id_Gads',
         ]);
 
@@ -182,6 +200,7 @@ class CrmStateWebController extends Controller
         $crmstate->load([
             'qualificationModel:id,name',
             'metaEvent:id,nombre,estados',
+            'whatsappEvent:id,event_name,description,funnel_usefulness',
             'googleAdsConversions.customer:id,name,id_Gads',
         ]);
 
@@ -190,6 +209,7 @@ class CrmStateWebController extends Controller
         $customers = $this->googleAdsCustomers();
         $qualifications = Qualification::orderBy('name')->get(['id', 'name']);
         $metaEvents = MetaEvent::orderBy('nombre')->get(['id', 'nombre', 'estados']);
+        $whatsappEvents = $this->whatsappEvents();
 
         return view('crm_states.edit', compact(
             'crmstate',
@@ -198,7 +218,8 @@ class CrmStateWebController extends Controller
             'integration',
             'customers',
             'qualifications',
-            'metaEvents'
+            'metaEvents',
+            'whatsappEvents'
         ));
     }
 
@@ -248,6 +269,7 @@ class CrmStateWebController extends Controller
             'name' => ['required', 'string', 'max:255'],
             'qualification' => ['required', 'exists:qualification,id'],
             'meta_event_id' => ['nullable', 'exists:meta_events,id'],
+            'whatsapp_event_id' => ['nullable', 'exists:whatsapp_events,id'],
             'unmanaged' => ['nullable', 'boolean'],
             'google_ads_conversion_enabled' => ['nullable', 'boolean'],
             'google_ads_conversions' => ['nullable', 'array'],
@@ -319,6 +341,15 @@ class CrmStateWebController extends Controller
             ->where('id_Gads', '!=', '')
             ->orderBy('name')
             ->get(['id', 'name', 'id_Gads']);
+    }
+
+    private function whatsappEvents()
+    {
+        return WhatsAppEvent::query()
+            ->where('active', true)
+            ->orderBy('sort_order')
+            ->orderBy('event_name')
+            ->get(['id', 'event_name', 'description', 'funnel_usefulness']);
     }
 
     private function splitId(string $id): array

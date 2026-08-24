@@ -381,9 +381,16 @@ class LeadCrmStateController extends Controller
             }
 
             $lead->unsetRelation('crmState');
-            $lead->load('crmState');
+            $lead->load('crmState.metaEvent', 'crmState.whatsappEvent', 'customer');
 
-            if (empty($lead->crmState?->meta_event_id)) {
+            $isWhatsappDataset = (string) $lead->campaign_origin === 'whatsapp'
+                && (bool) $lead->customer?->Meta_whatsapp_dataset;
+
+            $hasConversionEvent = $isWhatsappDataset
+                ? (! empty($lead->crmState?->whatsapp_event_id) || ! empty($lead->crmState?->meta_event_id))
+                : ! empty($lead->crmState?->meta_event_id);
+
+            if (! $hasConversionEvent) {
                 return;
             }
 
