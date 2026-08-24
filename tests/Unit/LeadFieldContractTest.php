@@ -15,4 +15,15 @@ test('lead exposes site url and custom text fields for mass assignment and mappi
         expect($fields)->toContain($field);
         expect($mappableFields)->toContain($field);
     }
+
+    foreach ([
+        'whasapp_user_id',
+        'ctwa_clid',
+        'whatsapp_business_account_id',
+        'number_whatsApp_companies',
+        'WhatsApp_username',
+    ] as $field) {
+        expect($fields)->toContain($field);
+        expect($mappableFields)->toContain($field);
+    }
 });

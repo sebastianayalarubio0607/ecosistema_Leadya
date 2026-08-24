@@ -5,8 +5,17 @@ namespace Tests\Feature;
 use App\Jobs\SyncMetaLeadsJob;
 use App\Jobs\SyncMetaAssetStatusesForCustomerJob;
 use App\Jobs\SyncMetaPageLeadsJob;
+use App\Jobs\ProcessLeadIntegrationsJob;
+use App\Jobs\ProcessMetaWhatsappReferralLeadJob;
+use App\Jobs\SendLeadToFacebook;
+use App\Http\Services\Meta\MetaWhatsappReferralLeadService;
 use App\Models\Customer;
+use App\Models\Lead;
+use App\Models\MetaAd;
 use App\Models\MetaAdAccount;
+use App\Models\MetaAdInsight;
+use App\Models\MetaAdSet;
+use App\Models\MetaCampaign;
 use App\Models\MetaWebhookEvent;
 use App\Services\Meta\MetaWebhookStorageService;
 use Illuminate\Http\Request;
@@ -36,6 +45,7 @@ class MetaLeadAdsWebhookTest extends TestCase
             '2026_01_27_000001_create_meta_ad_accounts_table.php',
             '2026_01_27_000006_add_customer_id_to_meta_ad_accounts_table.php',
             '2026_07_27_000000_create_meta_webhook_events_table.php',
+            '2026_08_21_000002_ensure_referral_on_meta_webhook_events_table.php',
         ] as $migrationPath) {
             $migration = require database_path('migrations/'.$migrationPath);
             $migration->up();
@@ -46,6 +56,24 @@ class MetaLeadAdsWebhookTest extends TestCase
 
     protected function tearDown(): void
     {
+        foreach ([
+            'lead_funnel_histories',
+            'funnels',
+            'leads',
+            'meta_ad_insights',
+            'meta_ads',
+            'meta_ad_sets',
+            'meta_campaigns',
+            'meta_forms',
+            'meta_pages',
+            'integrations',
+            'integrationtypes',
+            'crm_state',
+            'qualification',
+        ] as $table) {
+            Schema::dropIfExists($table);
+        }
+
         Schema::dropIfExists('meta_webhook_events');
         Schema::dropIfExists('meta_ad_accounts');
         Schema::dropIfExists('customers');
@@ -325,6 +353,195 @@ class MetaLeadAdsWebhookTest extends TestCase
         $this->assertSame('120252436486500589', data_get($event->value, 'id'));
     }
 
+    public function test_it_dispatches_a_meta_queue_job_for_whatsapp_referral_messages(): void
+    {
+        $payload = $this->whatsappReferralPayloadWithPhone();
+
+        $response = $this->postJson('/api/webhooks/meta/lead-ad', $payload);
+
+        $response->assertOk();
+        $response->assertExactJson(['received' => true]);
+
+        Queue::assertPushed(ProcessMetaWhatsappReferralLeadJob::class, function (ProcessMetaWhatsappReferralLeadJob $job) use ($payload): bool {
+            return $job->queue === 'meta'
+                && data_get($job->payload, 'object') === 'whatsapp_business_account'
+                && data_get($job->payload, 'entry.0.changes.0.value.messages.0.referral.ctwa_clid') === data_get($payload, 'entry.0.changes.0.value.messages.0.referral.ctwa_clid');
+        });
+        Queue::assertNotPushed(SyncMetaLeadsJob::class);
+
+        $event = MetaWebhookEvent::query()->firstOrFail();
+
+        $this->assertSame('whatsapp_business_account', $event->object);
+        $this->assertSame('messages', $event->field);
+        $this->assertSame(data_get($payload, 'entry.0.changes.0.value.messages.0.referral'), $event->referral);
+    }
+
+    public function test_meta_whatsapp_referral_job_creates_a_lead_and_only_dispatches_meta_conversion(): void
+    {
+        $this->migrateLeadCreationTables();
+        $customer = $this->createMetaAdInsightCustomer('120249117232250350', '893247768830003');
+        $payload = $this->whatsappReferralPayloadWithPhone();
+
+        $job = new ProcessMetaWhatsappReferralLeadJob($payload);
+
+        $this->assertSame('meta', $job->queue);
+
+        $job->handle(app(MetaWhatsappReferralLeadService::class));
+
+        $lead = Lead::query()->firstOrFail();
+
+        $this->assertSame($customer->id, $lead->customer_id);
+        $this->assertNull($lead->integration_id);
+        $this->assertSame('Gomelo', $lead->name);
+        $this->assertSame('Whastaapp', $lead->last_name);
+        $this->assertSame('573504230377', $lead->phone);
+        $this->assertTrue((bool) $lead->tc);
+        $this->assertSame("whatsapp - campa\u{00F1}a", $lead->effective_lead);
+        $this->assertSame('https://www.facebook.com/story.php?story_fbid=1690191008936685&id=100064511387170', $lead->page_url);
+        $this->assertSame('whatsapp', $lead->campaign_origin);
+        $this->assertSame('video', $lead->plataforma);
+        $this->assertSame('120249117232250350', $lead->meta_id_ad);
+        $this->assertSame('meta', $lead->gad_source);
+        $this->assertSame(data_get($payload, 'entry.0.changes.0.value.messages.0.referral'), $lead->meta_payload);
+        $this->assertSame('CO.3992682174198619', $lead->whasapp_user_id);
+        $this->assertSame('ctwa-phone-123', $lead->ctwa_clid);
+        $this->assertSame('623611940536083', $lead->whatsapp_business_account_id);
+        $this->assertSame('573206374059', $lead->number_whatsApp_companies);
+        $this->assertNull($lead->WhatsApp_username);
+
+        Queue::assertPushed(SendLeadToFacebook::class, function (SendLeadToFacebook $conversionJob) use ($lead, $customer): bool {
+            return $conversionJob->leadId === $lead->id
+                && $conversionJob->customerId === $customer->id
+                && $conversionJob->eventNameOverride === 'Lead';
+        });
+        Queue::assertNotPushed(ProcessLeadIntegrationsJob::class);
+
+        $job->handle(app(MetaWhatsappReferralLeadService::class));
+        $this->assertSame(1, Lead::query()->count());
+    }
+
+    public function test_meta_whatsapp_referral_job_extracts_phone_from_text_when_contact_has_no_wa_id(): void
+    {
+        $this->migrateLeadCreationTables();
+        $customer = $this->createMetaAdInsightCustomer('120252403258930589', '123456789');
+        $payload = $this->whatsappReferralPayloadWithoutContactPhone();
+
+        app(MetaWhatsappReferralLeadService::class)->processPayload($payload);
+
+        $lead = Lead::query()->firstOrFail();
+
+        $this->assertSame($customer->id, $lead->customer_id);
+        $this->assertSame('Diana', $lead->name);
+        $this->assertSame('+573148126114', $lead->phone);
+        $this->assertSame('CO.28095355356773302', $lead->whasapp_user_id);
+        $this->assertSame('ctwa-name-456', $lead->ctwa_clid);
+        $this->assertSame('546588055206122', $lead->whatsapp_business_account_id);
+        $this->assertSame('573216388040', $lead->number_whatsApp_companies);
+        $this->assertSame('mozura20', $lead->WhatsApp_username);
+        Queue::assertNotPushed(ProcessLeadIntegrationsJob::class);
+    }
+
+    public function test_meta_whatsapp_referral_job_can_resolve_customer_from_existing_lead_when_insight_is_missing(): void
+    {
+        $this->migrateLeadCreationTables();
+        $customer = Customer::query()->create([
+            'name' => 'Cliente Lead Existente',
+            'status' => true,
+        ]);
+        Lead::query()->create([
+            'customer_id' => $customer->id,
+            'name' => 'Lead anterior',
+            'phone' => '+570000000000',
+            'meta_id_ad' => '120252403258930589',
+            'campaign_origin' => 'meta',
+        ]);
+        $payload = $this->whatsappReferralPayloadWithoutContactPhone();
+
+        app(MetaWhatsappReferralLeadService::class)->processPayload($payload);
+
+        $lead = Lead::query()->whereNotNull('ctwa_clid')->firstOrFail();
+
+        $this->assertSame($customer->id, $lead->customer_id);
+        $this->assertSame('120252403258930589', $lead->meta_id_ad);
+        $this->assertSame('ctwa-name-456', $lead->ctwa_clid);
+        $this->assertSame('whatsapp', $lead->campaign_origin);
+        $this->assertSame('meta', $lead->gad_source);
+        $this->assertSame(2, Lead::query()->count());
+        Queue::assertPushed(SendLeadToFacebook::class);
+        Queue::assertNotPushed(ProcessLeadIntegrationsJob::class);
+    }
+
+    public function test_meta_whatsapp_referral_job_can_resolve_customer_from_existing_whatsapp_lead_when_source_is_new(): void
+    {
+        $this->migrateLeadCreationTables();
+        $customer = Customer::query()->create([
+            'name' => 'Cliente WhatsApp Existente',
+            'status' => true,
+        ]);
+        Lead::query()->create([
+            'customer_id' => $customer->id,
+            'name' => 'Lead WhatsApp anterior',
+            'phone' => '+573148126114',
+            'meta_id_ad' => 'old-source-id',
+            'whatsapp_business_account_id' => '546588055206122',
+            'number_whatsApp_companies' => '573216388040',
+            'campaign_origin' => 'whatsapp',
+        ]);
+        $payload = $this->whatsappReferralPayloadWithoutContactPhone();
+        data_set($payload, 'entry.0.changes.0.value.messages.0.referral.source_id', '120252402180310589');
+        data_set($payload, 'entry.0.changes.0.value.messages.0.referral.ctwa_clid', 'ctwa-new-source-789');
+
+        app(MetaWhatsappReferralLeadService::class)->processPayload($payload);
+
+        $lead = Lead::query()->where('ctwa_clid', 'ctwa-new-source-789')->firstOrFail();
+
+        $this->assertSame($customer->id, $lead->customer_id);
+        $this->assertSame('120252402180310589', $lead->meta_id_ad);
+        $this->assertSame('546588055206122', $lead->whatsapp_business_account_id);
+        $this->assertSame('573216388040', $lead->number_whatsApp_companies);
+        $this->assertSame('whatsapp', $lead->campaign_origin);
+        $this->assertSame('meta', $lead->gad_source);
+        Queue::assertPushed(SendLeadToFacebook::class);
+        Queue::assertNotPushed(ProcessLeadIntegrationsJob::class);
+    }
+
+    public function test_meta_whatsapp_referral_job_creates_phone_contact_lead_from_existing_whatsapp_customer(): void
+    {
+        $this->migrateLeadCreationTables();
+        $customer = Customer::query()->create([
+            'name' => 'Cliente WhatsApp Telefono',
+            'status' => true,
+        ]);
+        Lead::query()->create([
+            'customer_id' => $customer->id,
+            'name' => 'Lead WhatsApp anterior',
+            'phone' => '+573148126114',
+            'meta_id_ad' => 'old-source-id',
+            'whatsapp_business_account_id' => '546588055206122',
+            'number_whatsApp_companies' => '573216388040',
+            'campaign_origin' => 'whatsapp',
+        ]);
+        $payload = $this->whatsappReferralPayloadWithPhoneContactNewSource();
+
+        app(MetaWhatsappReferralLeadService::class)->processPayload($payload);
+
+        $lead = Lead::query()->where('ctwa_clid', 'ctwa-brandon-789')->firstOrFail();
+
+        $this->assertSame($customer->id, $lead->customer_id);
+        $this->assertSame('Brandon Gonzalez', $lead->name);
+        $this->assertSame('573217825312', $lead->phone);
+        $this->assertSame('CO.2292534954483843', $lead->whasapp_user_id);
+        $this->assertSame('120252320050420589', $lead->meta_id_ad);
+        $this->assertSame('546588055206122', $lead->whatsapp_business_account_id);
+        $this->assertSame('573216388040', $lead->number_whatsApp_companies);
+        $this->assertSame('https://www.instagram.com/p/DcCMs6gs3rT/', $lead->page_url);
+        $this->assertSame('image', $lead->plataforma);
+        $this->assertSame('whatsapp', $lead->campaign_origin);
+        $this->assertSame('meta', $lead->gad_source);
+        Queue::assertPushed(SendLeadToFacebook::class);
+        Queue::assertNotPushed(ProcessLeadIntegrationsJob::class);
+    }
+
     public function test_a_database_error_does_not_affect_the_expected_meta_response(): void
     {
         $this->app->instance(MetaWebhookStorageService::class, new class extends MetaWebhookStorageService
@@ -361,6 +578,243 @@ class MetaLeadAdsWebhookTest extends TestCase
                                 'ad_id' => 'ad-123',
                                 'adset_id' => 'adset-123',
                                 'campaign_id' => 'campaign-123',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    private function migrateLeadCreationTables(): void
+    {
+        foreach ([
+            '2025_04_25_205118_create_integrationtypes_table.php',
+            '2025_04_25_210715_create_integrations_table.php',
+            '2025_04_25_210757_create_leads_table.php',
+            '2026_01_09_090804_create_qualification_table.php',
+            '2026_01_09_090958_create_crm_state_table.php',
+            '2026_01_09_091030_add_crm_fields_to_leads_table.php',
+            '2026_01_30_000000_create_funnels_table.php',
+            '2026_01_30_000001_add_funnel_id_to_qualification_table.php',
+            '2026_02_23_131726_create_lead_funnel_histories_table.php.php',
+            '2026_02_10_094014_add_meta_fields_and_resize_page_url_agent_in_leads_table.php',
+            '2026_02_10_094954_add_meta_fields_and_resize_page_url_agent_in_leads_table2.php',
+            '2026_03_18_090100_create_meta_pages_table.php',
+            '2026_03_18_090200_create_meta_forms_table.php',
+            '2026_03_18_090400_add_meta_lead_tracking_to_leads_table.php',
+            '2026_04_27_170000_add_google_tracking_fields_to_leads_table.php',
+            '2026_05_04_000200_add_google_click_tracking_fields_to_leads_table.php',
+            '2026_08_21_000000_add_whatsapp_referral_fields_to_leads_table.php',
+            '2026_01_27_000002_create_meta_campaigns_table.php',
+            '2026_01_27_000003_create_meta_ad_sets_table.php',
+            '2026_01_27_000004_create_meta_ads_table.php',
+            '2026_01_27_000005_create_meta_ad_insights_table.php',
+        ] as $migrationPath) {
+            $migration = require database_path('migrations/'.$migrationPath);
+            $migration->up();
+        }
+    }
+
+    private function createMetaAdInsightCustomer(string $sourceId, string $accountId): Customer
+    {
+        $customer = Customer::query()->create([
+            'name' => 'Cliente WhatsApp '.$sourceId,
+            'status' => true,
+        ]);
+
+        $account = MetaAdAccount::withoutEvents(fn () => MetaAdAccount::query()->create([
+            'customer_id' => $customer->id,
+            'meta_account_id' => 'act_'.$accountId,
+            'name' => 'Cuenta WhatsApp',
+            'status' => 'active',
+        ]));
+
+        $campaign = MetaCampaign::query()->create([
+            'meta_ad_account_id' => $account->id,
+            'meta_campaign_id' => 'campaign-'.$sourceId,
+            'name' => 'Campaign '.$sourceId,
+            'status' => 'active',
+        ]);
+
+        $adSet = MetaAdSet::query()->create([
+            'meta_campaign_id' => $campaign->id,
+            'meta_ad_set_id' => 'adset-'.$sourceId,
+            'name' => 'Ad Set '.$sourceId,
+            'status' => 'active',
+        ]);
+
+        $ad = MetaAd::query()->create([
+            'meta_ad_set_id' => $adSet->id,
+            'meta_ad_id' => $sourceId,
+            'name' => 'Ad '.$sourceId,
+            'status' => 'active',
+        ]);
+
+        MetaAdInsight::query()->create([
+            'meta_ad_id' => $ad->id,
+            'account_id' => $accountId,
+            'campaign_id' => 'campaign-'.$sourceId,
+            'adset_id' => 'adset-'.$sourceId,
+            'ad_id' => $sourceId,
+            'date_start' => '2026-08-21',
+            'date_stop' => '2026-08-21',
+            'status' => 'active',
+        ]);
+
+        return $customer;
+    }
+
+    private function whatsappReferralPayloadWithPhone(): array
+    {
+        return [
+            'object' => 'whatsapp_business_account',
+            'entry' => [
+                [
+                    'id' => '623611940536083',
+                    'changes' => [
+                        [
+                            'field' => 'messages',
+                            'value' => [
+                                'contacts' => [
+                                    [
+                                        'wa_id' => '573504230377',
+                                        'profile' => ['name' => 'Gomelo'],
+                                        'user_id' => 'CO.3992682174198619',
+                                    ],
+                                ],
+                                'messages' => [
+                                    [
+                                        'id' => 'wamid.phone',
+                                        'from' => '573504230377',
+                                        'text' => ['body' => 'Hola, me interesa el Volvo EC40.'],
+                                        'type' => 'text',
+                                        'referral' => [
+                                            'body' => 'Texto del anuncio',
+                                            'headline' => 'Agenda tu Test Drive',
+                                            'ctwa_clid' => 'ctwa-phone-123',
+                                            'source_id' => '120249117232250350',
+                                            'video_url' => 'https://www.facebook.com/story.php?story_fbid=1690191008936685&id=100064511387170',
+                                            'media_type' => 'video',
+                                            'source_url' => 'https://fb.me/4Sn6jNKb5',
+                                            'source_type' => 'ad',
+                                        ],
+                                        'timestamp' => '1787323317',
+                                        'from_user_id' => 'CO.3992682174198619',
+                                    ],
+                                ],
+                                'metadata' => [
+                                    'phone_number_id' => '564661453400018',
+                                    'display_phone_number' => '573206374059',
+                                ],
+                                'messaging_product' => 'whatsapp',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    private function whatsappReferralPayloadWithoutContactPhone(): array
+    {
+        return [
+            'object' => 'whatsapp_business_account',
+            'entry' => [
+                [
+                    'id' => '546588055206122',
+                    'changes' => [
+                        [
+                            'field' => 'messages',
+                            'value' => [
+                                'contacts' => [
+                                    [
+                                        'profile' => [
+                                            'name' => 'Diana',
+                                            'username' => 'mozura20',
+                                        ],
+                                        'user_id' => 'CO.28095355356773302',
+                                    ],
+                                ],
+                                'messages' => [
+                                    [
+                                        'id' => 'wamid.name',
+                                        'text' => [
+                                            'body' => "Hola\n\nEmail: mozura20@gmail.com\nFull name: Diana Maria\nPhone number: +573148126114\nReferencia: T-Cross",
+                                        ],
+                                        'type' => 'text',
+                                        'referral' => [
+                                            'body' => 'Texto del anuncio Volkswagen',
+                                            'headline' => 'Massy Motors Volkswagen',
+                                            'ctwa_clid' => 'ctwa-name-456',
+                                            'source_id' => '120252403258930589',
+                                            'video_url' => 'https://www.facebook.com/reel/1500202618533538/',
+                                            'media_type' => 'video',
+                                            'source_url' => 'https://www.instagram.com/p/DcMkqNus7XH/',
+                                            'source_type' => 'ad',
+                                        ],
+                                        'timestamp' => '1787323544',
+                                        'from_user_id' => 'CO.28095355356773302',
+                                    ],
+                                ],
+                                'metadata' => [
+                                    'phone_number_id' => '543802255490035',
+                                    'display_phone_number' => '573216388040',
+                                ],
+                                'messaging_product' => 'whatsapp',
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ];
+    }
+
+    private function whatsappReferralPayloadWithPhoneContactNewSource(): array
+    {
+        return [
+            'object' => 'whatsapp_business_account',
+            'entry' => [
+                [
+                    'id' => '546588055206122',
+                    'changes' => [
+                        [
+                            'field' => 'messages',
+                            'value' => [
+                                'contacts' => [
+                                    [
+                                        'wa_id' => '573217825312',
+                                        'profile' => ['name' => 'Brandon Gonzalez'],
+                                        'user_id' => 'CO.2292534954483843',
+                                    ],
+                                ],
+                                'messages' => [
+                                    [
+                                        'id' => 'wamid.brandon',
+                                        'from' => '573217825312',
+                                        'text' => [
+                                            'body' => 'Quiero cotizar el Polo Track y conocer las opciones de financiacion.',
+                                        ],
+                                        'type' => 'text',
+                                        'referral' => [
+                                            'body' => 'Estrena con poliza por un ano.',
+                                            'headline' => 'Estrena con poliza por un ano.',
+                                            'ctwa_clid' => 'ctwa-brandon-789',
+                                            'image_url' => 'https://instagram.feoh3-1.fna.fbcdn.net/v/t45.1600-4/example.jpg',
+                                            'source_id' => '120252320050420589',
+                                            'media_type' => 'image',
+                                            'source_url' => 'https://www.instagram.com/p/DcCMs6gs3rT/',
+                                            'source_type' => 'ad',
+                                        ],
+                                        'timestamp' => '1787309895',
+                                        'from_user_id' => 'CO.2292534954483843',
+                                    ],
+                                ],
+                                'metadata' => [
+                                    'phone_number_id' => '543802255490035',
+                                    'display_phone_number' => '573216388040',
+                                ],
+                                'messaging_product' => 'whatsapp',
                             ],
                         ],
                     ],

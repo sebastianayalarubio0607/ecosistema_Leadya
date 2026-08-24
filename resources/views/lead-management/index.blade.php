@@ -107,11 +107,15 @@
                                 <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">Nombre Del Customer</th>
                                 <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">Nombre</th>
                                 <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">Apellido</th>
+                                <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">Telefono</th>
+                                <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">Email</th>
                                 <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">Estado</th>
                                 <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">Cualificacion</th>
                                 <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">Page URL</th>
                                 <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">Valor</th>
                                 <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">Fuente</th>
+                                <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">Origen</th>
+                               
                                 <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">Medio</th>
                                 <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">Campaign Objective</th>
                                 <th class="px-3 py-2 text-left font-semibold whitespace-nowrap">Guardado</th>
@@ -129,6 +133,8 @@
                                     <td class="max-w-56 truncate whitespace-nowrap px-3 py-2" title="{{ $lead->customer_name }}">{{ $lead->customer_name }}</td>
                                     <td class="max-w-44 truncate whitespace-nowrap px-3 py-2" title="{{ $lead->name ?: 'Sin Dato' }}">{{ $lead->name ?: 'Sin Dato' }}</td>
                                     <td class="max-w-44 truncate whitespace-nowrap px-3 py-2" title="{{ $lead->last_name ?: 'Sin Dato' }}">{{ $lead->last_name ?: 'Sin Dato' }}</td>
+                                    <td class="max-w-40 truncate whitespace-nowrap px-3 py-2" title="{{ $lead->phone ?: 'Sin Dato' }}">{{ $lead->phone ?: 'Sin Dato' }}</td>
+                                    <td class="max-w-56 truncate whitespace-nowrap px-3 py-2" title="{{ $lead->email ?: 'Sin Dato' }}">{{ $lead->email ?: 'Sin Dato' }}</td>
                                     <td class="min-w-64 px-3 py-2">
                                         <div class="relative" data-saving-control>
                                         <select
@@ -182,13 +188,14 @@
                                         </div>
                                     </td>
                                     <td class="max-w-44 truncate whitespace-nowrap px-3 py-2" title="{{ $lead->source_name }}">{{ $lead->source_name }}</td>
+                                    <td class="max-w-44 truncate whitespace-nowrap px-3 py-2" title="{{ $lead->origin_name }}">{{ $lead->origin_name }}</td>
                                     <td class="max-w-44 truncate whitespace-nowrap px-3 py-2" title="{{ $lead->medium_name }}">{{ $lead->medium_name }}</td>
                                     <td class="max-w-56 truncate whitespace-nowrap px-3 py-2" title="{{ $lead->campaign_objective_name }}">{{ $lead->campaign_objective_name }}</td>
                                     <td class="whitespace-nowrap px-3 py-2 text-white/50" data-row-status>Listo</td>
                                 </tr>
                             @empty
                                 <tr>
-                                    <td colspan="13" class="px-3 py-8 text-center text-white/50">Sin Leads Para Estos Filtros</td>
+                                    <td colspan="17" class="px-3 py-8 text-center text-white/50">Sin Leads Para Estos Filtros</td>
                                 </tr>
                             @endforelse
                         </tbody>

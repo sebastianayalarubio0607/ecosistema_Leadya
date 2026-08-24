@@ -29,6 +29,7 @@ class MetaWebhookEvent extends Model
         'processing_status',
         'processing_error',
         'value',
+        'referral',
         'payload',
         'request_headers',
         'ip_address',
@@ -37,6 +38,7 @@ class MetaWebhookEvent extends Model
 
     protected $casts = [
         'value' => 'array',
+        'referral' => 'array',
         'payload' => 'array',
         'meta_event_time' => 'datetime',
         'received_at' => 'datetime',

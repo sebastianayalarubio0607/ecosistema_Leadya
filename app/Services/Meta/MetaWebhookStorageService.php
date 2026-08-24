@@ -110,6 +110,7 @@ class MetaWebhookStorageService
         $field = $this->stringOrNull(data_get($change, 'field'));
         $entryId = $this->stringOrNull(data_get($entry, 'id'));
         $metaEventTime = $this->resolveMetaEventTime($entry, $change, $value);
+        $referral = $this->referralFromValue($value);
 
         $attributes = array_merge([
             'event_hash' => $this->eventHash($object, $entryId, $field, $value, $metaEventTime),
@@ -122,6 +123,7 @@ class MetaWebhookStorageService
             'processing_status' => 'received',
             'processing_error' => null,
             'value' => $this->jsonValueOrNull($value),
+            'referral' => $referral,
             'payload' => $payload,
             'request_headers' => $headers,
             'ip_address' => $request->ip(),
@@ -132,6 +134,10 @@ class MetaWebhookStorageService
             $existingEvent = MetaWebhookEvent::query()->where('event_hash', $attributes['event_hash'])->first();
 
             if ($existingEvent) {
+                if ($existingEvent->referral === null && $referral !== null) {
+                    $existingEvent->forceFill(['referral' => $referral])->save();
+                }
+
                 return $existingEvent;
             }
 
@@ -344,6 +350,35 @@ class MetaWebhookStorageService
     private function jsonValueOrNull(mixed $value): mixed
     {
         return $value === null ? null : $value;
+    }
+
+    private function referralFromValue(mixed $value): mixed
+    {
+        if (! is_array($value)) {
+            return null;
+        }
+
+        $directReferral = data_get($value, 'referral');
+
+        if (is_array($directReferral)) {
+            return $directReferral;
+        }
+
+        $referrals = [];
+
+        foreach ($this->listFromValue(data_get($value, 'messages')) as $message) {
+            $referral = is_array($message) ? data_get($message, 'referral') : null;
+
+            if (is_array($referral)) {
+                $referrals[] = $referral;
+            }
+        }
+
+        if (count($referrals) === 1) {
+            return $referrals[0];
+        }
+
+        return $referrals === [] ? null : $referrals;
     }
 
     private function stringOrNull(mixed $value): ?string

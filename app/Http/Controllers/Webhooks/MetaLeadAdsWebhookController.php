@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Webhooks;
 
 use App\Http\Controllers\Controller;
 use App\Http\Services\Meta\MetaAssetStatusSyncService;
+use App\Http\Services\Meta\MetaWhatsappReferralLeadService;
 use App\Jobs\SyncMetaAssetStatusesForCustomerJob;
 use App\Jobs\SyncMetaLeadsJob;
 use App\Jobs\SyncMetaPageLeadsJob;
@@ -33,6 +34,7 @@ class MetaLeadAdsWebhookController extends Controller
         Request $request,
         MetaWebhookStorageService $metaWebhookStorageService,
         MetaAssetStatusSyncService $metaAssetStatusSyncService,
+        MetaWhatsappReferralLeadService $metaWhatsappReferralLeadService,
     ): JsonResponse
     {
         $storedEvents = new Collection;
@@ -47,10 +49,21 @@ class MetaLeadAdsWebhookController extends Controller
             ]);
         }
 
+        $whatsappReferralJobs = 0;
+
+        try {
+            $whatsappReferralJobs = $metaWhatsappReferralLeadService->dispatchRequest($request);
+        } catch (\Throwable $exception) {
+            Log::error('Meta WhatsApp referral lead webhook payload could not be processed', [
+                'exception' => $exception::class,
+                'message' => $exception->getMessage(),
+            ]);
+        }
+
         $hasAssetStatusEvent = $this->hasMetaAssetStatusEvent($storedEvents);
         $this->dispatchMetaAssetStatusJobs($storedEvents, $metaAssetStatusSyncService);
 
-        if ($this->dispatchLeadgenPageSyncJobs($request) === 0 && ! $hasAssetStatusEvent) {
+        if ($this->dispatchLeadgenPageSyncJobs($request) === 0 && ! $hasAssetStatusEvent && $whatsappReferralJobs === 0) {
             SyncMetaLeadsJob::dispatch();
         }
 

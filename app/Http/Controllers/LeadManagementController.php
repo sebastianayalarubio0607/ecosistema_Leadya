@@ -133,15 +133,19 @@ class LeadManagementController extends Controller
                 'leads.customer_id',
                 'leads.name',
                 'leads.last_name',
+                'leads.phone',
+                'leads.email',
                 'leads.crm_id',
                 'leads.crm_state',
                 'leads.page_url',
+                'leads.campaign_origin',
                 'leads.value',
             ])
             ->selectRaw("COALESCE(NULLIF(c_management.name, ''), 'Sin Cliente') as customer_name")
             ->selectRaw("COALESCE(NULLIF(cs_management.name, ''), NULLIF(leads.crm_state, ''), 'Sin Estado') as crm_state_name")
             ->selectRaw("COALESCE(NULLIF(q_management.name, ''), 'Sin Calificacion') as qualification_name")
             ->selectRaw("COALESCE(NULLIF(source_management.name, ''), 'Sin Fuente') as source_name")
+            ->selectRaw("COALESCE(NULLIF(origin_management.name, ''), NULLIF(leads.campaign_origin, ''), 'Sin Origen') as origin_name")
             ->selectRaw("COALESCE(NULLIF(platform_management.name, ''), NULLIF(leads.plataforma, ''), 'Sin Medio') as medium_name")
             ->selectRaw("COALESCE(NULLIF(co_management.nombre, ''), 'Sin Campaign Objective') as campaign_objective_name")
             ->orderByDesc('leads.created_at')
