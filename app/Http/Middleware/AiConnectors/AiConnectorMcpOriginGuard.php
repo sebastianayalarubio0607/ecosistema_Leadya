@@ -8,6 +8,13 @@ use Symfony\Component\HttpFoundation\Response;
 
 class AiConnectorMcpOriginGuard
 {
+    private const DEFAULT_TRUSTED_ORIGINS = [
+        'https://claude.ai',
+        'https://claude.com',
+        'https://chatgpt.com',
+        'https://chat.openai.com',
+    ];
+
     public function handle(Request $request, Closure $next): Response
     {
         $origin = $request->header('Origin');
@@ -34,6 +41,10 @@ class AiConnectorMcpOriginGuard
             ->map(fn ($origin) => $this->normalizeOrigin((string) $origin))
             ->filter()
             ->values();
+
+        if ($origins->isEmpty()) {
+            $origins = collect(self::DEFAULT_TRUSTED_ORIGINS);
+        }
 
         $appOrigin = $this->normalizeOrigin((string) config('app.url'));
         if ($appOrigin !== '') {

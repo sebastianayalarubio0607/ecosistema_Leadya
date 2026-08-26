@@ -197,10 +197,10 @@ class MetaWhatsappReferralLeadService
         );
         $phone = $this->firstString(
             data_get($contact, 'wa_id'),
-            data_get($contact, 'user_id'),
             data_get($message, 'from'),
-            data_get($message, 'from_user_id'),
-            $this->extractPhoneFromText($messageBody)
+            $this->extractPhoneFromText($messageBody),
+            data_get($contact, 'user_id'),
+            data_get($message, 'from_user_id')
         );
 
         return [
@@ -219,10 +219,10 @@ class MetaWhatsappReferralLeadService
             'gad_source' => self::GAD_SOURCE,
             'meta_payload' => $referral,
             'whasapp_user_id' => $this->firstString(
-                data_get($contact, 'wa_id'),
                 data_get($contact, 'user_id'),
-                data_get($message, 'from'),
-                data_get($message, 'from_user_id')
+                data_get($message, 'from_user_id'),
+                data_get($contact, 'wa_id'),
+                data_get($message, 'from')
             ),
             'ctwa_clid' => $this->stringOrNull(data_get($referral, 'ctwa_clid')),
             'whatsapp_business_account_id' => $wabaId,

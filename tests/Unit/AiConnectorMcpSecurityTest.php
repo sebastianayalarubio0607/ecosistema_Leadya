@@ -3,10 +3,17 @@
 namespace Tests\Unit;
 
 use App\Http\Services\AiConnectors\AiConnectorGeneralLeadsToolService;
+use App\Http\Services\AiConnectors\AiConnectorMcpServerService;
 use App\Http\Services\AiConnectors\AiConnectorPayloadSanitizer;
+use App\Http\Services\AiConnectors\AiConnectorQueryAuditService;
+use App\Http\Services\AiConnectors\AiConnectorQueryCacheService;
+use App\Http\Services\AiConnectors\AiConnectorRateLimitService;
 use App\Http\Services\GeneralLeads\GeneralLeadsDashboardService;
 use App\Http\Services\GeneralLeads\GeneralLeadsLeadQuery;
+use App\Http\Middleware\AiConnectors\AiConnectorMcpOriginGuard;
 use App\Models\AiConnector;
+use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\Response;
 use Tests\TestCase;
 
 class AiConnectorMcpSecurityTest extends TestCase
@@ -94,6 +101,73 @@ class AiConnectorMcpSecurityTest extends TestCase
             'to' => '2026-08-02',
             'sql' => 'select * from leads',
         ]);
+    }
+
+    public function test_claude_origin_is_allowed_when_connector_has_no_custom_origin_list(): void
+    {
+        $request = Request::create('/api/ai-connectors/mcp', 'POST', [], [], [], [
+            'HTTP_ORIGIN' => 'https://claude.ai',
+        ]);
+        $request->attributes->set('ai_connector', new AiConnector([
+            'allowed_origins' => [],
+        ]));
+
+        $response = (new AiConnectorMcpOriginGuard())->handle(
+            $request,
+            fn (): Response => response('', 204)
+        );
+
+        $this->assertSame(204, $response->getStatusCode());
+    }
+
+    public function test_unknown_origin_is_rejected_by_default(): void
+    {
+        $request = Request::create('/api/ai-connectors/mcp', 'POST', [], [], [], [
+            'HTTP_ORIGIN' => 'https://example.invalid',
+        ]);
+        $request->attributes->set('ai_connector', new AiConnector([
+            'allowed_origins' => [],
+        ]));
+
+        $response = (new AiConnectorMcpOriginGuard())->handle(
+            $request,
+            fn (): Response => response('', 204)
+        );
+
+        $this->assertSame(403, $response->getStatusCode());
+    }
+
+    public function test_initialize_returns_the_protocol_requested_by_claude(): void
+    {
+        $server = new AiConnectorMcpServerService(
+            \Mockery::mock(AiConnectorGeneralLeadsToolService::class),
+            \Mockery::mock(AiConnectorQueryCacheService::class),
+            \Mockery::mock(AiConnectorRateLimitService::class),
+            \Mockery::mock(AiConnectorQueryAuditService::class),
+        );
+
+        $payload = [
+            'jsonrpc' => '2.0',
+            'id' => 1,
+            'method' => 'initialize',
+            'params' => [
+                'protocolVersion' => '2025-06-18',
+                'capabilities' => [],
+                'clientInfo' => ['name' => 'claude.ai', 'version' => 'test'],
+            ],
+        ];
+
+        $request = Request::create('/api/ai-connectors/mcp', 'POST', [], [], [], [
+            'CONTENT_TYPE' => 'application/json',
+            'HTTP_ACCEPT' => 'application/json, text/event-stream',
+            'HTTP_MCP_PROTOCOL_VERSION' => '2025-06-18',
+        ], json_encode($payload));
+
+        $response = $server->handle($request, new AiConnector());
+        $body = json_decode($response->getContent(), true);
+
+        $this->assertSame(200, $response->getStatusCode());
+        $this->assertSame('2025-06-18', data_get($body, 'result.protocolVersion'));
     }
 
     private function toolService(): AiConnectorGeneralLeadsToolService

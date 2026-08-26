@@ -11,6 +11,7 @@ class AiConnectorMcpServerService
 {
     private const SUPPORTED_PROTOCOL_VERSIONS = [
         '2026-07-28',
+        '2025-11-25',
         '2025-06-18',
         '2025-03-26',
     ];
@@ -37,6 +38,7 @@ class AiConnectorMcpServerService
 
         $id = $payload['id'] ?? null;
         $method = (string) ($payload['method'] ?? '');
+        $protocolVersion = $this->requestedProtocolVersion($request, $payload) ?: '2025-06-18';
 
         if (! array_key_exists('id', $payload)) {
             return response('', 202);
@@ -44,7 +46,7 @@ class AiConnectorMcpServerService
 
         return match ($method) {
             'initialize' => $this->result($id, [
-                'protocolVersion' => '2026-07-28',
+                'protocolVersion' => $protocolVersion,
                 'capabilities' => [
                     'tools' => ['listChanged' => false],
                 ],
@@ -129,8 +131,7 @@ class AiConnectorMcpServerService
     private function validateTransportHeaders(Request $request, array $payload): ?JsonResponse
     {
         $protocol = $request->header('MCP-Protocol-Version');
-        $bodyProtocol = data_get($payload, 'params._meta.io.modelcontextprotocol/protocolVersion')
-            ?: data_get($payload, 'params.protocolVersion');
+        $bodyProtocol = $this->bodyProtocolVersion($payload);
 
         if ($protocol && $bodyProtocol && $protocol !== $bodyProtocol) {
             return $this->error($payload['id'] ?? null, -32600, 'La version MCP del header no coincide con la version del cuerpo.', 400);
@@ -158,6 +159,21 @@ class AiConnectorMcpServerService
         }
 
         return null;
+    }
+
+    private function requestedProtocolVersion(Request $request, array $payload): ?string
+    {
+        return $request->header('MCP-Protocol-Version') ?: $this->bodyProtocolVersion($payload);
+    }
+
+    private function bodyProtocolVersion(array $payload): ?string
+    {
+        $meta = data_get($payload, 'params._meta');
+        $metaProtocol = is_array($meta)
+            ? ($meta['io.modelcontextprotocol/protocolVersion'] ?? null)
+            : null;
+
+        return $metaProtocol ?: data_get($payload, 'params.protocolVersion');
     }
 
     private function extraAllowedArguments(string $tool): array

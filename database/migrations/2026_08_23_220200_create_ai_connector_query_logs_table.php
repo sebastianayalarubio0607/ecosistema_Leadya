@@ -8,6 +8,10 @@ return new class extends Migration
 {
     public function up(): void
     {
+        if (Schema::hasTable('ai_connector_query_logs')) {
+            return;
+        }
+
         Schema::create('ai_connector_query_logs', function (Blueprint $table) {
             $table->id();
             $table->foreignId('ai_connector_id')->constrained('ai_connectors')->cascadeOnDelete();

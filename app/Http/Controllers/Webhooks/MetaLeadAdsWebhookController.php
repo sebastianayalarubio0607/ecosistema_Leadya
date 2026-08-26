@@ -35,8 +35,7 @@ class MetaLeadAdsWebhookController extends Controller
         MetaWebhookStorageService $metaWebhookStorageService,
         MetaAssetStatusSyncService $metaAssetStatusSyncService,
         MetaWhatsappReferralLeadService $metaWhatsappReferralLeadService,
-    ): JsonResponse
-    {
+    ): JsonResponse {
         $storedEvents = new Collection;
 
         try {
@@ -63,7 +62,12 @@ class MetaLeadAdsWebhookController extends Controller
         $hasAssetStatusEvent = $this->hasMetaAssetStatusEvent($storedEvents);
         $this->dispatchMetaAssetStatusJobs($storedEvents, $metaAssetStatusSyncService);
 
-        if ($this->dispatchLeadgenPageSyncJobs($request) === 0 && ! $hasAssetStatusEvent && $whatsappReferralJobs === 0) {
+        if (
+            $this->dispatchLeadgenPageSyncJobs($request) === 0
+            && ! $hasAssetStatusEvent
+            && $whatsappReferralJobs === 0
+            && $this->shouldDispatchGlobalLeadSyncFallback($request)
+        ) {
             SyncMetaLeadsJob::dispatch();
         }
 
@@ -146,6 +150,18 @@ class MetaLeadAdsWebhookController extends Controller
         }
 
         return count($targets);
+    }
+
+    private function shouldDispatchGlobalLeadSyncFallback(Request $request): bool
+    {
+        $payload = $this->payloadFromRequest($request);
+        $object = $this->stringOrNull(data_get($payload, 'object'));
+
+        if ($object === 'whatsapp_business_account' || $object === 'ad_account') {
+            return false;
+        }
+
+        return $object === null || $object === 'page';
     }
 
     private function payloadFromRequest(Request $request): array

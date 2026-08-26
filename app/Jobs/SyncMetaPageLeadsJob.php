@@ -50,6 +50,7 @@ class SyncMetaPageLeadsJob implements ShouldBeUnique, ShouldQueue
 
         $from = $this->resolveFromDate();
 
+        $service->syncForms($page);
         $service->syncLeadsForPage($page, $from, now(config('app.timezone')));
     }
 

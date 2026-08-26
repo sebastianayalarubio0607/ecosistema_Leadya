@@ -37,6 +37,11 @@ return [
         'Accept',
         'Origin',
         'Authorization',
+        'MCP-Protocol-Version',
+        'Mcp-Method',
+        'Mcp-Name',
+        'Mcp-Session-Id',
+        'Last-Event-ID',
     ],
 
     /*

@@ -2,13 +2,14 @@
 
 namespace Tests\Feature;
 
-use App\Jobs\SyncMetaLeadsJob;
-use App\Jobs\SyncMetaAssetStatusesForCustomerJob;
-use App\Jobs\SyncMetaPageLeadsJob;
+use App\Http\Services\Meta\MetaLeadAdsSyncService;
+use App\Http\Services\Meta\MetaWhatsappReferralLeadService;
 use App\Jobs\ProcessLeadIntegrationsJob;
 use App\Jobs\ProcessMetaWhatsappReferralLeadJob;
 use App\Jobs\SendLeadToFacebook;
-use App\Http\Services\Meta\MetaWhatsappReferralLeadService;
+use App\Jobs\SyncMetaAssetStatusesForCustomerJob;
+use App\Jobs\SyncMetaLeadsJob;
+use App\Jobs\SyncMetaPageLeadsJob;
 use App\Models\Customer;
 use App\Models\Lead;
 use App\Models\MetaAd;
@@ -16,6 +17,7 @@ use App\Models\MetaAdAccount;
 use App\Models\MetaAdInsight;
 use App\Models\MetaAdSet;
 use App\Models\MetaCampaign;
+use App\Models\MetaPage;
 use App\Models\MetaWebhookEvent;
 use App\Services\Meta\MetaWebhookStorageService;
 use Illuminate\Http\Request;
@@ -42,6 +44,7 @@ class MetaLeadAdsWebhookTest extends TestCase
 
         foreach ([
             '2025_04_25_210705_create_customers_table.php',
+            '2026_03_18_090100_create_meta_pages_table.php',
             '2026_01_27_000001_create_meta_ad_accounts_table.php',
             '2026_01_27_000006_add_customer_id_to_meta_ad_accounts_table.php',
             '2026_07_27_000000_create_meta_webhook_events_table.php',
@@ -145,6 +148,43 @@ class MetaLeadAdsWebhookTest extends TestCase
         $this->assertArrayNotHasKey('cookie', $event->request_headers);
     }
 
+    public function test_page_leadgen_job_syncs_forms_before_syncing_page_leads(): void
+    {
+        $page = MetaPage::withoutEvents(fn () => MetaPage::query()->create([
+            'customer_id' => null,
+            'meta_page_id' => 'page-123',
+            'name' => 'Lead Page',
+            'page_access_token' => 'page-token',
+            'status' => true,
+        ]));
+
+        $service = \Mockery::mock(MetaLeadAdsSyncService::class);
+        $service->shouldReceive('syncForms')
+            ->once()
+            ->ordered()
+            ->with(\Mockery::on(fn ($givenPage): bool => $givenPage instanceof MetaPage && $givenPage->is($page)))
+            ->andReturn(['pages_processed' => 1, 'forms_created' => 0, 'forms_updated' => 1]);
+        $service->shouldReceive('syncLeadsForPage')
+            ->once()
+            ->ordered()
+            ->withArgs(function ($givenPage, $from, $to) use ($page): bool {
+                return $givenPage instanceof MetaPage
+                    && $givenPage->is($page)
+                    && $from instanceof \Carbon\Carbon
+                    && $to instanceof \Carbon\Carbon
+                    && $from->timestamp === 1710000000 - (15 * 60);
+            })
+            ->andReturn([
+                'forms_processed' => 1,
+                'leads_created' => 1,
+                'leads_updated' => 0,
+                'from' => '2024-03-09 15:45:00',
+                'to' => '2024-03-09 16:00:00',
+            ]);
+
+        (new SyncMetaPageLeadsJob('page-123', '1710000000'))->handle($service);
+    }
+
     public function test_it_creates_one_record_for_every_change_in_every_entry(): void
     {
         $payload = [
@@ -182,7 +222,7 @@ class MetaLeadAdsWebhookTest extends TestCase
 
         $this->postJson('/api/webhooks/meta/lead-ads', $payload)->assertOk();
 
-        Queue::assertPushed(SyncMetaLeadsJob::class);
+        Queue::assertNotPushed(SyncMetaLeadsJob::class);
         Queue::assertNotPushed(SyncMetaPageLeadsJob::class);
 
         $this->assertSame(3, MetaWebhookEvent::query()->count());
@@ -611,9 +651,33 @@ class MetaLeadAdsWebhookTest extends TestCase
             '2026_01_27_000004_create_meta_ads_table.php',
             '2026_01_27_000005_create_meta_ad_insights_table.php',
         ] as $migrationPath) {
+            if ($this->migrationAlreadyApplied($migrationPath)) {
+                continue;
+            }
+
             $migration = require database_path('migrations/'.$migrationPath);
             $migration->up();
         }
+    }
+
+    private function migrationAlreadyApplied(string $migrationPath): bool
+    {
+        return match ($migrationPath) {
+            '2025_04_25_205118_create_integrationtypes_table.php' => Schema::hasTable('integrationtypes'),
+            '2025_04_25_210715_create_integrations_table.php' => Schema::hasTable('integrations'),
+            '2025_04_25_210757_create_leads_table.php' => Schema::hasTable('leads'),
+            '2026_01_09_090804_create_qualification_table.php' => Schema::hasTable('qualification'),
+            '2026_01_09_090958_create_crm_state_table.php' => Schema::hasTable('crm_state'),
+            '2026_01_30_000000_create_funnels_table.php' => Schema::hasTable('funnels'),
+            '2026_02_23_131726_create_lead_funnel_histories_table.php.php' => Schema::hasTable('lead_funnel_histories'),
+            '2026_03_18_090100_create_meta_pages_table.php' => Schema::hasTable('meta_pages'),
+            '2026_03_18_090200_create_meta_forms_table.php' => Schema::hasTable('meta_forms'),
+            '2026_01_27_000002_create_meta_campaigns_table.php' => Schema::hasTable('meta_campaigns'),
+            '2026_01_27_000003_create_meta_ad_sets_table.php' => Schema::hasTable('meta_ad_sets'),
+            '2026_01_27_000004_create_meta_ads_table.php' => Schema::hasTable('meta_ads'),
+            '2026_01_27_000005_create_meta_ad_insights_table.php' => Schema::hasTable('meta_ad_insights'),
+            default => false,
+        };
     }
 
     private function createMetaAdInsightCustomer(string $sourceId, string $accountId): Customer

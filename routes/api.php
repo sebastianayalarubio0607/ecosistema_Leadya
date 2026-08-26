@@ -55,6 +55,9 @@ Route::get('/prueba-sin-auth', function () {
 Route::prefix('ai-connectors')->name('api.ai-connectors.')->group(function () {
     Route::get('/.well-known/oauth-protected-resource', [AiConnectorOAuthMetadataController::class, 'protectedResource'])
         ->name('oauth.protected-resource');
+    Route::get('/.well-known/oauth-protected-resource/{path}', [AiConnectorOAuthMetadataController::class, 'protectedResource'])
+        ->where('path', '.*')
+        ->name('oauth.protected-resource.path');
     Route::get('/.well-known/oauth-authorization-server', [AiConnectorOAuthMetadataController::class, 'authorizationServer'])
         ->name('oauth.authorization-server');
     Route::post('/oauth/token', AiConnectorOAuthTokenController::class)

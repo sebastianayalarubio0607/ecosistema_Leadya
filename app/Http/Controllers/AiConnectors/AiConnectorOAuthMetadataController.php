@@ -4,16 +4,20 @@ namespace App\Http\Controllers\AiConnectors;
 
 use App\Http\Controllers\Controller;
 use App\Http\Services\AiConnectors\AiConnectorCredentialService;
+use App\Http\Services\AiConnectors\AiConnectorOAuthResourceService;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 class AiConnectorOAuthMetadataController extends Controller
 {
-    public function protectedResource(): JsonResponse
+    public function __construct(private readonly AiConnectorOAuthResourceService $resources) {}
+
+    public function protectedResource(Request $request): JsonResponse
     {
         return response()->json([
-            'resource' => route('api.ai-connectors.mcp', absolute: true),
+            'resource' => $this->resources->mcpResource(),
             'authorization_servers' => [
-                route('api.ai-connectors.oauth.authorization-server', absolute: true),
+                $this->resources->issuer($request),
             ],
             'scopes_supported' => [
                 AiConnectorCredentialService::READ_SCOPE,
@@ -22,12 +26,13 @@ class AiConnectorOAuthMetadataController extends Controller
         ]);
     }
 
-    public function authorizationServer(): JsonResponse
+    public function authorizationServer(Request $request): JsonResponse
     {
         return response()->json([
-            'issuer' => route('api.ai-connectors.oauth.authorization-server', absolute: true),
-            'token_endpoint' => route('api.ai-connectors.oauth.token', absolute: true),
-            'grant_types_supported' => ['client_credentials'],
+            'issuer' => $this->resources->issuer($request),
+            'authorization_endpoint' => route('ai-connectors.oauth.authorize.public', absolute: true),
+            'token_endpoint' => route('ai-connectors.oauth.token', absolute: true),
+            'grant_types_supported' => ['authorization_code', 'refresh_token'],
             'token_endpoint_auth_methods_supported' => [
                 'client_secret_post',
                 'client_secret_basic',
@@ -35,7 +40,8 @@ class AiConnectorOAuthMetadataController extends Controller
             'scopes_supported' => [
                 AiConnectorCredentialService::READ_SCOPE,
             ],
-            'response_types_supported' => [],
+            'response_types_supported' => ['code'],
+            'code_challenge_methods_supported' => ['S256', 'plain'],
         ]);
     }
 }

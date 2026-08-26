@@ -59,6 +59,10 @@ return new class extends Migration
             return;
         }
 
+        if (DB::connection()->getDriverName() === 'sqlite') {
+            return;
+        }
+
         DB::statement('ALTER TABLE `meta_webhook_events` MODIFY `received_at` TIMESTAMP NULL DEFAULT NULL');
     }
 

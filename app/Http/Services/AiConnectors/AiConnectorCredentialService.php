@@ -43,25 +43,59 @@ class AiConnectorCredentialService
         return $secret;
     }
 
-    public function issueAccessToken(AiConnector $connector, array $scopes): array
+    public function issueAccessToken(AiConnector $connector, array $scopes, ?string $resource = null): array
     {
         $accessToken = $this->generateAccessToken();
+        $refreshToken = $this->generateRefreshToken();
         $expiresAt = now()->addMinutes(max(5, (int) $connector->access_token_ttl_minutes));
+        $refreshExpiresAt = now()->addDays(30);
 
         AiConnectorAccessToken::query()->create([
             'ai_connector_id' => $connector->id,
             'access_token_encrypted' => $accessToken,
             'access_token_hash' => $this->hashAccessToken($accessToken),
+            'refresh_token_encrypted' => $refreshToken,
+            'refresh_token_hash' => $this->hashRefreshToken($refreshToken),
             'scopes' => $scopes,
+            'resource' => $resource ?: $this->defaultResource(),
             'expires_at' => $expiresAt,
+            'refresh_token_expires_at' => $refreshExpiresAt,
         ]);
 
         return [
             'access_token' => $accessToken,
             'token_type' => 'Bearer',
             'expires_in' => now()->diffInSeconds($expiresAt),
+            'refresh_token' => $refreshToken,
             'scope' => implode(' ', $scopes),
         ];
+    }
+
+    public function refreshAccessToken(string $refreshToken, AiConnector $connector): ?array
+    {
+        $existingToken = AiConnectorAccessToken::query()
+            ->with('connector')
+            ->where('refresh_token_hash', $this->hashRefreshToken($refreshToken))
+            ->first();
+
+        if (! $existingToken || ! $existingToken->refreshTokenIsUsable()) {
+            return null;
+        }
+
+        if ((int) $existingToken->ai_connector_id !== (int) $connector->id) {
+            return null;
+        }
+
+        $existingToken->forceFill([
+            'revoked_at' => now(),
+            'refresh_token_revoked_at' => now(),
+        ])->save();
+
+        return $this->issueAccessToken(
+            $connector,
+            $existingToken->scopes ?: [self::READ_SCOPE],
+            $existingToken->resource ?: $this->defaultResource(),
+        );
     }
 
     public function hashClientSecret(string $secret): string
@@ -72,6 +106,11 @@ class AiConnectorCredentialService
     public function hashAccessToken(string $token): string
     {
         return hash_hmac('sha256', 'access:'.$token, (string) config('app.key'));
+    }
+
+    public function hashRefreshToken(string $token): string
+    {
+        return hash_hmac('sha256', 'refresh:'.$token, (string) config('app.key'));
     }
 
     public function validScopes(?string $scope): array
@@ -109,6 +148,16 @@ class AiConnectorCredentialService
     private function generateAccessToken(): string
     {
         return 'lya_mcp_access_'.$this->randomUrlSafe(48);
+    }
+
+    private function generateRefreshToken(): string
+    {
+        return 'lya_mcp_refresh_'.$this->randomUrlSafe(56);
+    }
+
+    private function defaultResource(): string
+    {
+        return route('api.ai-connectors.mcp', absolute: true);
     }
 
     private function randomUrlSafe(int $bytes): string
