@@ -18,6 +18,17 @@
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div class="rounded-xl border border-white/10 bg-white/5 p-4 md:col-span-2">
+                <div class="text-white/60 text-xs">Credencial WhatsApp explicita</div>
+                <div class="text-white font-semibold break-all">
+                    @if($whatsapp->metaAccessToken)
+                        #{{ $whatsapp->metaAccessToken->id }} {{ $whatsapp->metaAccessToken->name ?: 'System user WhatsApp' }} / app {{ $whatsapp->metaAccessToken->meta_app_id ?: '-' }}
+                    @else
+                        Resolver por customer o default WhatsApp
+                    @endif
+                </div>
+            </div>
+
             <div class="rounded-xl border border-white/10 bg-white/5 p-4">
                 <div class="text-white/60 text-xs">WABA ID</div>
                 <div class="text-white font-semibold break-all">{{ $whatsapp->waba_id }}</div>
@@ -52,6 +63,23 @@
                 <div class="text-white font-semibold">
                     {{ is_null($whatsapp->token_can_view_account) ? 'Sin validar' : ($whatsapp->token_can_view_account ? 'Si' : 'No') }}
                 </div>
+            </div>
+
+            <div class="rounded-xl border border-white/10 bg-white/5 p-4">
+                <div class="text-white/60 text-xs">Token usado en ultima validacion</div>
+                <div class="text-white font-semibold break-all">
+                    @if($whatsapp->subscriptionMetaAccessToken)
+                        #{{ $whatsapp->subscriptionMetaAccessToken->id }} {{ $whatsapp->subscriptionMetaAccessToken->name ?: 'System user WhatsApp' }}
+                    @else
+                        -
+                    @endif
+                </div>
+                <div class="text-white/50 text-xs">{{ $whatsapp->subscription_token_source ?: '-' }}</div>
+            </div>
+
+            <div class="rounded-xl border border-white/10 bg-white/5 p-4">
+                <div class="text-white/60 text-xs">Meta App validada</div>
+                <div class="text-white font-semibold break-all">{{ $whatsapp->subscription_meta_app_id ?: '-' }}</div>
             </div>
 
             <div class="rounded-xl border border-white/10 bg-white/5 p-4 md:col-span-2">

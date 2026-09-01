@@ -78,23 +78,29 @@
 
             <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]" data-sortable-table-wrap>
                 <div class="hidden px-3 py-2 text-xs text-white/50" data-sort-status>Ordenando...</div>
-                <table class="w-full min-w-[1150px] text-sm" data-sortable-table>
+                <table class="w-full min-w-[1250px] text-sm" data-sortable-table>
                     <thead class="bg-white/5 text-white/70">
                         <tr>
                             <x-sort-header :index="0" label="ID" />
                             <x-sort-header :index="1" label="Accion" />
                             <x-sort-header :index="2" label="WABA" />
-                            <x-sort-header :index="3" label="Fallo" />
-                            <x-sort-header :index="4" label="Reintentado" />
-                            <x-sort-header :index="5" label="Acciones" class="w-40" />
+                            <x-sort-header :index="3" label="Credencial" />
+                            <x-sort-header :index="4" label="Fallo" />
+                            <x-sort-header :index="5" label="Reintentado" />
+                            <x-sort-header :index="6" label="Acciones" class="w-40" />
                         </tr>
                     </thead>
                     <tbody class="divide-y divide-white/10 text-white/80">
                         @forelse($failedJobs as $failed)
+                            @php($failedPayload = $failed->payload ?? [])
                             <tr class="hover:bg-white/5 align-top">
                                 <td class="px-3 py-2">{{ $failed->id }}</td>
                                 <td class="px-3 py-2">{{ $failed->action }}</td>
                                 <td class="px-3 py-2 break-all">{{ $failed->resource_identifier ?: $failed->resource_id ?: '-' }}</td>
+                                <td class="px-3 py-2">
+                                    <div>Token: {{ $failedPayload['meta_access_token_id'] ?? '-' }}</div>
+                                    <div class="text-xs text-white/50">Customer: {{ $failedPayload['customer_id'] ?? '-' }}</div>
+                                </td>
                                 <td class="px-3 py-2 max-w-xl">
                                     <div class="line-clamp-3">{{ $failed->exception }}</div>
                                     <div class="mt-1 text-xs text-white/50">{{ optional($failed->failed_at)->format('Y-m-d H:i') }}</div>
@@ -109,7 +115,7 @@
                             </tr>
                         @empty
                             <tr>
-                                <td colspan="6" class="px-3 py-8 text-center text-white/60">No hay jobs fallidos.</td>
+                                <td colspan="7" class="px-3 py-8 text-center text-white/60">No hay jobs fallidos.</td>
                             </tr>
                         @endforelse
                     </tbody>

@@ -25,7 +25,7 @@ return new class extends Migration
             $table->timestamp('used_at')->nullable()->index();
             $table->timestamps();
 
-            $table->index(['ai_connector_id', 'expires_at']);
+            $table->index(['ai_connector_id', 'expires_at'], 'ai_oauth_codes_connector_expires_idx');
         });
     }
 

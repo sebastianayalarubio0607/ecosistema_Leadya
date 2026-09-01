@@ -16,6 +16,7 @@ class MondayBoard extends Model
         'monday_board_id',
         'name',
         'status',
+        'is_default',
         'condition_lead_field',
         'condition_expected_value',
         'monday_group_id',
@@ -25,6 +26,7 @@ class MondayBoard extends Model
 
     protected $casts = [
         'status' => 'boolean',
+        'is_default' => 'boolean',
         'boards_synced_at' => 'datetime',
         'details_synced_at' => 'datetime',
     ];

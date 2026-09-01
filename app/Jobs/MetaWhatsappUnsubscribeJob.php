@@ -23,6 +23,8 @@ class MetaWhatsappUnsubscribeJob implements ShouldQueue
     public function __construct(
         public ?int $metaWhatsappId,
         public string $wabaId,
+        public ?int $metaAccessTokenId = null,
+        public ?int $customerId = null,
     ) {
         $this->onConnection(self::CONNECTION)->onQueue(self::QUEUE);
     }
@@ -30,7 +32,7 @@ class MetaWhatsappUnsubscribeJob implements ShouldQueue
     public function handle(MetaWhatsappSubscriptionService $service): void
     {
         $whatsapp = $this->metaWhatsappId ? MetaWhatsapp::find($this->metaWhatsappId) : null;
-        $service->unsubscribeByWabaId($this->wabaId, $whatsapp);
+        $service->unsubscribeByWabaId($this->wabaId, $whatsapp, $this->metaAccessTokenId, $this->customerId);
     }
 
     public function failed(\Throwable $exception): void
@@ -46,6 +48,8 @@ class MetaWhatsappUnsubscribeJob implements ShouldQueue
             'payload' => [
                 'meta_whatsapp_id' => $this->metaWhatsappId,
                 'waba_id' => $this->wabaId,
+                'meta_access_token_id' => $this->metaAccessTokenId,
+                'customer_id' => $this->customerId,
             ],
             'exception' => $exception->getMessage(),
             'failed_at' => now(),

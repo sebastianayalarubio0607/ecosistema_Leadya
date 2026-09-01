@@ -49,3 +49,47 @@ test('paginated get reuses the original access token when next url omits it', fu
     ]);
     expect($requests)->toHaveCount(2);
 });
+
+test('paginated get preserves query params when next url already includes an access token', function () {
+    config(['services.meta.graph_version' => 'v24.0']);
+
+    $requests = [];
+
+    Http::fake(function (Request $request) use (&$requests) {
+        $requests[] = $request;
+
+        parse_str(parse_url($request->url(), PHP_URL_QUERY) ?: '', $query);
+        $query = array_merge($query, $request->data());
+
+        if (count($requests) === 1) {
+            expect($query['access_token'] ?? null)->toBe('first-page-token');
+
+            return Http::response([
+                'data' => [['id' => 'lead_1']],
+                'paging' => [
+                    'next' => 'https://graph.facebook.com/v24.0/form_123/leads?fields=id&access_token=next-page-token&limit=500&after=cursor_1',
+                ],
+            ]);
+        }
+
+        expect($query['after'] ?? null)->toBe('cursor_1');
+        expect($query['limit'] ?? null)->toBe('500');
+        expect($query['access_token'] ?? null)->toBe('next-page-token');
+
+        return Http::response([
+            'data' => [['id' => 'lead_2']],
+        ]);
+    });
+
+    $items = app(MetaGraphService::class)->paginatedGet('form_123/leads', [
+        'fields' => 'id',
+        'access_token' => 'first-page-token',
+        'limit' => 500,
+    ]);
+
+    expect($items)->toBe([
+        ['id' => 'lead_1'],
+        ['id' => 'lead_2'],
+    ]);
+    expect($requests)->toHaveCount(2);
+});

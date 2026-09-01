@@ -25,7 +25,7 @@
             value="{{ old('code', $platform->code ?? '') }}"
             class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
             placeholder="Ej: search"
-            maxlength="20"
+            maxlength="100"
             required
         >
     </div>

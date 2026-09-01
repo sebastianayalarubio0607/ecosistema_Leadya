@@ -150,6 +150,7 @@
                             <tr>
                                 <th class="text-left px-3 py-2">Board</th>
                                 <th class="text-left px-3 py-2">Activa</th>
+                                <th class="text-left px-3 py-2">Por defecto</th>
                                 <th class="text-left px-3 py-2">Condicion</th>
                                 <th class="text-left px-3 py-2">Grupo</th>
                                 <th class="text-left px-3 py-2">Sync</th>
@@ -166,6 +167,11 @@
                                     <td class="px-3 py-2">
                                         <span class="px-2 py-1 rounded-lg text-xs border {{ $board->status ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
                                             {{ $board->status ? 'Si' : 'No' }}
+                                        </span>
+                                    </td>
+                                    <td class="px-3 py-2">
+                                        <span class="px-2 py-1 rounded-lg text-xs border {{ $board->is_default ? 'bg-sky-500/10 border-sky-300/20 text-sky-200' : 'bg-white/10 border-white/10 text-white/70' }}">
+                                            {{ $board->is_default ? 'Si' : 'No' }}
                                         </span>
                                     </td>
                                     <td class="px-3 py-2 text-sm">
@@ -190,7 +196,7 @@
                                 </tr>
                             @empty
                                 <tr>
-                                    <td class="px-3 py-8 text-center text-white/60" colspan="6">Aun no hay boards sincronizadas para esta integracion.</td>
+                                    <td class="px-3 py-8 text-center text-white/60" colspan="7">Aun no hay boards sincronizadas para esta integracion.</td>
                                 </tr>
                             @endforelse
                         </tbody>

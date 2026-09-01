@@ -27,10 +27,13 @@ class MetaGraphService
         $accessToken = $query['access_token'] ?? null;
 
         do {
-            $response = Http::retry(3, 1000)
+            $request = Http::retry(3, 1000)
                 ->acceptJson()
-                ->timeout(60)
-                ->get($nextUrl, $nextQuery);
+                ->timeout(60);
+
+            $response = $nextQuery === []
+                ? $request->get($nextUrl)
+                : $request->get($nextUrl, $nextQuery);
 
             $payload = $this->decode($response->throw());
             $items = array_merge($items, $payload['data'] ?? []);

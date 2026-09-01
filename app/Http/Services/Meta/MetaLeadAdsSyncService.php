@@ -28,6 +28,16 @@ use Illuminate\Support\Facades\Log;
  */
 class MetaLeadAdsSyncService
 {
+    private const DEFAULT_CAMPAIGN_ORIGIN = 'meta';
+
+    private const DEFAULT_PLATFORM = 'Formulario instantáneo Meta';
+
+    private const META_IDENTIFIER_FIELDS = ['id', 'ad_id', 'adset_id', 'campaign_id', 'form_id', 'page_id'];
+
+    private const PHONE_LEAD_FIELDS = ['phone', 'number_whatsApp_companies'];
+
+    private const META_IDENTIFIER_LEAD_FIELDS = ['meta_id_ad'];
+
     /**
      * MetaLeadAdsSyncService constructor.
      */
@@ -153,6 +163,10 @@ class MetaLeadAdsSyncService
         $query = MetaAccessToken::query()
             ->select(MetaAccessToken::SYNC_COLUMNS)
             ->where('is_active', true)
+            ->where(function ($query) {
+                $query->whereNull('purpose')
+                    ->orWhere('purpose', MetaAccessToken::PURPOSE_GENERAL);
+            })
             ->whereNotNull('long_lived_token')
             ->whereNotNull('expires_at')
             ->where('expires_at', '<=', now()->addDays(10));
@@ -180,7 +194,14 @@ class MetaLeadAdsSyncService
     public function syncPages(?MetaAccessToken $onlyToken = null): array
     {
         $tokens = $onlyToken
-            ? MetaAccessToken::query()->select(MetaAccessToken::SYNC_COLUMNS)->whereKey($onlyToken->id)->get()
+            ? MetaAccessToken::query()
+                ->select(MetaAccessToken::SYNC_COLUMNS)
+                ->where(function ($query) {
+                    $query->whereNull('purpose')
+                        ->orWhere('purpose', MetaAccessToken::PURPOSE_GENERAL);
+                })
+                ->whereKey($onlyToken->id)
+                ->get()
             : collect(array_filter([MetaAccessToken::activeByType(MetaAccessToken::TYPE_USER_ACCESS_TOKEN)]));
 
         $created = 0;
@@ -199,11 +220,18 @@ class MetaLeadAdsSyncService
                 ]);
 
                 foreach ($pages as $pageData) {
-                    $page = MetaPage::query()->firstWhere('meta_page_id', $pageData['id']);
+                    $metaPageId = $this->normalizeMetaIdentifier($pageData['id'] ?? null);
+
+                    if (blank($metaPageId)) {
+                        continue;
+                    }
+
+                    $page = $this->findPageByMetaId($pageData['id'] ?? null, $metaPageId);
 
                     if ($page) {
                         $page->fill([
                             'name' => $pageData['name'] ?? $page->name,
+                            'meta_page_id' => $metaPageId,
                             'page_access_token' => $pageData['access_token'] ?? $page->page_access_token,
                             'last_synced_at' => now(),
                             'last_token_refresh_at' => now(),
@@ -213,8 +241,8 @@ class MetaLeadAdsSyncService
                     } else {
                         MetaPage::create([
                             'customer_id' => null,
-                            'meta_page_id' => $pageData['id'],
-                            'name' => $pageData['name'] ?? $pageData['id'],
+                            'meta_page_id' => $metaPageId,
+                            'name' => $pageData['name'] ?? $metaPageId,
                             'page_access_token' => $pageData['access_token'] ?? null,
                             'status' => false,
                             'last_synced_at' => now(),
@@ -258,18 +286,34 @@ class MetaLeadAdsSyncService
                     throw new \RuntimeException('La página no tiene page_access_token para consultar formularios.');
                 }
 
-                $forms = $this->graphService->paginatedGet($page->meta_page_id.'/leadgen_forms', [
+                $metaPageId = $this->normalizeMetaIdentifier($page->meta_page_id);
+
+                if (blank($metaPageId)) {
+                    throw new \RuntimeException('La página no tiene meta_page_id utilizable para consultar formularios.');
+                }
+
+                if ((string) $page->meta_page_id !== $metaPageId) {
+                    $page->forceFill(['meta_page_id' => $metaPageId])->save();
+                }
+
+                $forms = $this->graphService->paginatedGet($metaPageId.'/leadgen_forms', [
                     'fields' => 'id,name,status,locale,questions',
                     'access_token' => $page->page_access_token,
                     'limit' => 9999,
                 ]);
 
                 foreach ($forms as $formData) {
-                    $form = MetaForm::query()->firstWhere('meta_form_id', $formData['id']);
+                    $metaFormId = $this->normalizeMetaIdentifier($formData['id'] ?? null);
+
+                    if (blank($metaFormId)) {
+                        continue;
+                    }
+
+                    $form = $this->findFormByMetaId($formData['id'] ?? null, $metaFormId);
                     $payload = [
                         'meta_page_id' => $page->id,
-                        'meta_form_id' => $formData['id'],
-                        'name' => $formData['name'] ?? $formData['id'],
+                        'meta_form_id' => $metaFormId,
+                        'name' => $formData['name'] ?? $metaFormId,
                         'locale' => $formData['locale'] ?? null,
                         'meta_status' => $formData['status'] ?? null,
                         'raw_payload' => $formData,
@@ -360,8 +404,19 @@ class MetaLeadAdsSyncService
                 if (blank($form->page?->page_access_token)) {
                     throw new \RuntimeException('La página asociada no tiene page_access_token para consultar leads.');
                 }
+
+                $metaFormId = $this->normalizeMetaIdentifier($form->meta_form_id);
+
+                if (blank($metaFormId)) {
+                    throw new \RuntimeException('El formulario no tiene meta_form_id utilizable para consultar leads.');
+                }
+
+                if ((string) $form->meta_form_id !== $metaFormId) {
+                    $form->forceFill(['meta_form_id' => $metaFormId])->save();
+                }
+
                 // Log::info('Syncing leads for form', ['meta_form_id' => $form->id, 'from' => $fromDate->toDateTimeString(), 'to' => $toDate->toDateTimeString()]);
-                $leads = $this->graphService->paginatedGet($form->meta_form_id.'/leads', [
+                $leads = $this->graphService->paginatedGet($metaFormId.'/leads', [
                     'fields' => 'id,created_time,ad_id,form_id,field_data,campaign_id',
                     'access_token' => $form->page->page_access_token,
                     'from_date' => $fromDate->toDateTimeString(),
@@ -418,10 +473,14 @@ class MetaLeadAdsSyncService
         $questions = collect(data_get($form->raw_payload, 'questions', []));
 
         return $questions
-            ->map(fn ($question) => [
-                'name' => $question['key'] ?? $question['name'] ?? null,
-                'label' => $question['label'] ?? $question['key'] ?? $question['name'] ?? null,
-            ])
+            ->map(function ($question): array {
+                $name = $this->normalizeMetaFieldName($question['key'] ?? $question['name'] ?? null);
+
+                return [
+                    'name' => $name,
+                    'label' => $question['label'] ?? $name,
+                ];
+            })
             ->filter(fn ($question) => filled($question['name']))
             ->values()
             ->all();
@@ -450,6 +509,15 @@ class MetaLeadAdsSyncService
             }
         }
 
+        if (blank($leadData['id'] ?? null)) {
+            Log::warning('Meta lead skipped because it does not have a usable id', [
+                'meta_form_id' => $form->id,
+                'meta_payload' => $leadData,
+            ]);
+
+            return ['created' => 0, 'updated' => 0];
+        }
+
         $payload = [
             'customer_id' => $form->page->customer_id,
             'meta_page_id' => $form->page->id,
@@ -458,10 +526,9 @@ class MetaLeadAdsSyncService
             'meta_created_time' => filled($leadData['created_time'] ?? null) ? Carbon::parse($leadData['created_time']) : null,
             'meta_payload' => $leadData,
             'meta_id_ad' => isset($leadData['ad_id']) ? (string) $leadData['ad_id'] : null,
-            'reference' => isset($leadData['campaign_id']) ? (string) $leadData['campaign_id'] : null,
             'page' => $form->page->name,
-            'campaign_origin' => (string) data_get($leadData, 'platform', 'meta'),
-            'plataforma' => 'Formulario instantáneo Meta',
+            'campaign_origin' => self::DEFAULT_CAMPAIGN_ORIGIN,
+            'plataforma' => self::DEFAULT_PLATFORM,
             'fields_custom' => $this->buildUnmappedFieldsPayload($normalizedFields, $mappings),
         ];
 
@@ -475,7 +542,9 @@ class MetaLeadAdsSyncService
             $payload[$mapping->lead_field_name] = $mappedValue;
         }
 
-        $existingLead = Lead::query()->firstWhere('meta_lead_id', $leadData['id']);
+        $existingLead = Lead::query()
+            ->where('meta_lead_id', $leadData['id'])
+            ->first();
 
         if ($existingLead) {
             Log::info('Meta lead skipped because it already exists', [
@@ -529,7 +598,11 @@ class MetaLeadAdsSyncService
             }
 
             $values = $item['values'] ?? [];
-            $normalized[$name] = $this->normalizeFieldValue($values);
+            $normalizedName = $this->normalizeMetaFieldName($name);
+
+            if (filled($normalizedName)) {
+                $normalized[$normalizedName] = $this->normalizeFieldValue($values);
+            }
         }
 
         return $normalized;
@@ -565,9 +638,9 @@ class MetaLeadAdsSyncService
 
     private function normalizeMetaLeadData(array $leadData): array
     {
-        foreach (['id', 'ad_id', 'adset_id', 'campaign_id', 'form_id'] as $field) {
+        foreach (self::META_IDENTIFIER_FIELDS as $field) {
             if (array_key_exists($field, $leadData)) {
-                $leadData[$field] = $this->stripMetaPrefix($leadData[$field]);
+                $leadData[$field] = $this->normalizeMetaIdentifier($leadData[$field]);
             }
         }
 
@@ -578,6 +651,7 @@ class MetaLeadAdsSyncService
     {
         $mappedNames = $mappings
             ->pluck('meta_field_name')
+            ->map(fn ($fieldName) => $this->normalizeMetaFieldName($fieldName))
             ->filter()
             ->all();
 
@@ -596,15 +670,92 @@ class MetaLeadAdsSyncService
 
     private function resolveMappingValue(MetaFormFieldMapping $mapping, array $normalizedFields): mixed
     {
-        if (filled($mapping->meta_field_name) && array_key_exists($mapping->meta_field_name, $normalizedFields) && filled($normalizedFields[$mapping->meta_field_name])) {
-            return $normalizedFields[$mapping->meta_field_name];
+        $metaFieldName = $this->normalizeMetaFieldName($mapping->meta_field_name);
+
+        if (filled($metaFieldName) && array_key_exists($metaFieldName, $normalizedFields) && filled($normalizedFields[$metaFieldName])) {
+            return $this->normalizeMappedValue($normalizedFields[$metaFieldName], $mapping->lead_field_name);
         }
 
         if (filled($mapping->static_value)) {
-            return $mapping->static_value;
+            return $this->normalizeMappedValue($mapping->static_value, $mapping->lead_field_name);
         }
 
         return null;
+    }
+
+    private function normalizeMappedValue(mixed $value, string $leadFieldName): mixed
+    {
+        if (in_array($leadFieldName, self::META_IDENTIFIER_LEAD_FIELDS, true)) {
+            return $this->normalizeMetaIdentifier($value);
+        }
+
+        if (in_array($leadFieldName, self::PHONE_LEAD_FIELDS, true)) {
+            return $this->normalizePhoneValue($value);
+        }
+
+        return $value;
+    }
+
+    private function normalizeMetaFieldName(mixed $value): ?string
+    {
+        if (! is_scalar($value)) {
+            return null;
+        }
+
+        $value = $this->stripMetaPrefix(trim((string) $value));
+
+        return filled($value) ? $value : null;
+    }
+
+    private function normalizeMetaIdentifier(mixed $value): ?string
+    {
+        if (! is_scalar($value)) {
+            return null;
+        }
+
+        $value = $this->stripMetaPrefix(trim((string) $value));
+        $value = preg_replace('/[^A-Za-z0-9]+/', '', $value) ?? $value;
+
+        return filled($value) ? $value : null;
+    }
+
+    private function normalizePhoneValue(mixed $value): mixed
+    {
+        if (! is_scalar($value)) {
+            return $value;
+        }
+
+        $value = $this->stripMetaPrefix(trim((string) $value));
+        $digits = preg_replace('/\D+/', '', $value) ?? '';
+
+        return $digits !== '' ? $digits : $value;
+    }
+
+    private function findPageByMetaId(mixed $rawValue, string $normalizedValue): ?MetaPage
+    {
+        return $this->findModelByMetaId(MetaPage::query(), 'meta_page_id', $rawValue, $normalizedValue);
+    }
+
+    private function findFormByMetaId(mixed $rawValue, string $normalizedValue): ?MetaForm
+    {
+        return $this->findModelByMetaId(MetaForm::query(), 'meta_form_id', $rawValue, $normalizedValue);
+    }
+
+    private function findModelByMetaId($query, string $column, mixed $rawValue, string $normalizedValue)
+    {
+        $model = (clone $query)->where($column, $normalizedValue)->first();
+
+        if ($model || ! is_scalar($rawValue)) {
+            return $model;
+        }
+
+        $rawValue = trim((string) $rawValue);
+
+        if ($rawValue === '' || $rawValue === $normalizedValue) {
+            return null;
+        }
+
+        return (clone $query)->where($column, $rawValue)->first();
     }
 
     private function stripMetaPrefix(mixed $value): mixed
@@ -613,8 +764,14 @@ class MetaLeadAdsSyncService
             return $value;
         }
 
-        if (preg_match('/^[a-zA-Z]+:(.+)$/', $value, $matches) === 1) {
-            return $matches[1];
+        $value = trim($value);
+
+        if (preg_match('/^[a-z][a-z0-9+.-]*:\/\//i', $value) === 1) {
+            return $value;
+        }
+
+        if (preg_match('/^[A-Za-z]+:\s*(.*)$/', $value, $matches) === 1) {
+            return trim($matches[1]);
         }
 
         return $value;
@@ -636,6 +793,10 @@ class MetaLeadAdsSyncService
         $token = MetaAccessToken::query()
             ->select(['meta_app_id', 'meta_app_secret'])
             ->where('token_type', MetaAccessToken::TYPE_USER_ACCESS_TOKEN)
+            ->where(function ($query) {
+                $query->whereNull('purpose')
+                    ->orWhere('purpose', MetaAccessToken::PURPOSE_GENERAL);
+            })
             ->where('is_active', true)
             ->whereNotNull('meta_app_id')
             ->whereNotNull('meta_app_secret')

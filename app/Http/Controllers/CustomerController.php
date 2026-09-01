@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Jobs\EnsureGoogleAdsConversionTemplatesJob;
 use App\Models\Customer;
 use App\Models\Currency;
 use App\Models\MetaPage;
@@ -134,11 +135,13 @@ class CustomerController extends Controller
             return $customer;
         });
 
+        $this->dispatchGoogleAdsTemplateSync($customer);
+
         // ✅ 4) Redirigir al show y enviar el token PLANO por sesión (flash)
         return redirect()
             ->route('customers.show', $customer)
             ->with('created_token', $plainToken)
-            ->with('success', 'Customer creado correctamente. Copia el token ahora.');
+            ->with('success', 'Customer creado correctamente. Copia el token ahora.'.$this->googleAdsQueueMessage($customer));
     }
 
     public function show(Customer $customer)
@@ -148,6 +151,8 @@ class CustomerController extends Controller
             'metaPages' => fn ($query) => $query->orderBy('name'),
             'metaAdAccounts' => fn ($query) => $query->orderBy('name')->orderBy('meta_account_id'),
             'metaWhatsapps' => fn ($query) => $query->orderBy('waba_id'),
+            'actionHistories' => fn ($query) => $query->latest('id')->limit(20),
+            'googleAdsConversionTemplateHistories' => fn ($query) => $query->latest('id')->limit(20),
         ]);
 
         return view('customers.show', compact('customer'));
@@ -238,10 +243,12 @@ class CustomerController extends Controller
                 $this->createCustomerMetaWhatsapp($customer, $newMetaWhatsapp);
             });
 
+            $this->dispatchGoogleAdsTemplateSync($customer);
+
             return redirect()
                 ->route('customers.show', $customer)
                 ->with('created_token', $plainToken)
-                ->with('success', 'Token regenerado. Copia el token ahora.');
+                ->with('success', 'Token regenerado. Copia el token ahora.'.$this->googleAdsQueueMessage($customer));
         }
 
         unset($data['regenerate_token']);
@@ -254,7 +261,9 @@ class CustomerController extends Controller
             $this->createCustomerMetaWhatsapp($customer, $newMetaWhatsapp);
         });
 
-        return redirect()->route('customers.show', $customer)->with('success', 'Customer actualizado correctamente.');
+        $this->dispatchGoogleAdsTemplateSync($customer);
+
+        return redirect()->route('customers.show', $customer)->with('success', 'Customer actualizado correctamente.'.$this->googleAdsQueueMessage($customer));
 
     }
 
@@ -371,5 +380,28 @@ class CustomerController extends Controller
         }
 
         return $data;
+    }
+
+    private function dispatchGoogleAdsTemplateSync(Customer $customer): void
+    {
+        if (trim((string) $customer->id_Gads) === '') {
+            return;
+        }
+
+        $user = auth()->user();
+
+        EnsureGoogleAdsConversionTemplatesJob::dispatch(
+            $customer->id,
+            'user',
+            $user?->id,
+            $user?->name
+        );
+    }
+
+    private function googleAdsQueueMessage(Customer $customer): string
+    {
+        return trim((string) $customer->id_Gads) !== ''
+            ? ' La revision de plantillas Google Ads quedo en cola tracking.'
+            : '';
     }
 }

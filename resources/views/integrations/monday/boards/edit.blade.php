@@ -42,6 +42,17 @@
                 </div>
 
                 <div>
+                    <label class="block mb-1 text-white/70">Board por defecto</label>
+                    <select name="is_default"
+                            class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white"
+                            data-default-board-toggle>
+                        <option value="0" @selected((string) old('is_default', (int) $board->is_default) === '0')>No</option>
+                        <option value="1" @selected((string) old('is_default', (int) $board->is_default) === '1')>Si</option>
+                    </select>
+                    @error('is_default') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+                </div>
+
+                <div>
                     <label class="block mb-1 text-white/70">Grupo destino *</label>
                     <select name="monday_group_id" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
                         <option value="">Seleccione...</option>
@@ -54,8 +65,8 @@
                     @error('monday_group_id') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
                 </div>
 
-                <div>
-                    <label class="block mb-1 text-white/70">Campo Lead que activa el board *</label>
+                <div data-conditional-setting>
+                    <label class="block mb-1 text-white/70">Campo Lead que activa el board</label>
                     <select name="condition_lead_field" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
                         <option value="">Seleccione...</option>
                         @foreach($leadFields as $field)
@@ -65,8 +76,8 @@
                     @error('condition_lead_field') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
                 </div>
 
-                <div>
-                    <label class="block mb-1 text-white/70">Valor esperado *</label>
+                <div data-conditional-setting>
+                    <label class="block mb-1 text-white/70">Valor esperado</label>
                     <input name="condition_expected_value"
                            value="{{ old('condition_expected_value', $board->condition_expected_value) }}"
                            class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white"
@@ -152,6 +163,23 @@
 
     <script>
     document.addEventListener('DOMContentLoaded', () => {
+        const defaultToggle = document.querySelector('[data-default-board-toggle]');
+        const conditionalSettings = document.querySelectorAll('[data-conditional-setting]');
+
+        const refreshConditionalSettings = () => {
+            const isDefault = defaultToggle?.value === '1';
+
+            conditionalSettings.forEach((setting) => {
+                setting.classList.toggle('hidden', isDefault);
+                setting.querySelectorAll('input, select, textarea').forEach((input) => {
+                    input.disabled = isDefault;
+                });
+            });
+        };
+
+        defaultToggle?.addEventListener('change', refreshConditionalSettings);
+        refreshConditionalSettings();
+
         document.querySelectorAll('[data-mapping-row]').forEach((row) => {
             const sourceSelect = row.querySelector('[data-mapping-source]');
             const panels = row.querySelectorAll('[data-source-panel]');

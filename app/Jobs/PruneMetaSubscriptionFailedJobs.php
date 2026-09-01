@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\MetaAdAccountSubscriptionFailedJob;
 use App\Models\MetaPageSubscriptionFailedJob;
+use App\Models\MetaWhatsappSubscriptionFailedJob;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -25,6 +26,10 @@ class PruneMetaSubscriptionFailedJobs implements ShouldQueue
             ->delete();
 
         MetaPageSubscriptionFailedJob::query()
+            ->where('failed_at', '<', $threshold)
+            ->delete();
+
+        MetaWhatsappSubscriptionFailedJob::query()
             ->where('failed_at', '<', $threshold)
             ->delete();
     }

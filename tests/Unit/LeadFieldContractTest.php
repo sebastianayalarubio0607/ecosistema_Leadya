@@ -3,9 +3,11 @@
 use App\Models\Lead;
 
 test('lead exposes site url and custom text fields for mass assignment and mappings', function () {
-    $fields = (new Lead())->getFillable();
+    $fields = (new Lead)->getFillable();
     $mappableFields = Lead::integrationMappableFields();
 
+    expect($mappableFields)->toEqual($fields);
+    expect($mappableFields)->toContain('id', 'customer_id', 'integration_id', 'meta_payload');
     expect($fields)->toContain('site_url');
     expect($mappableFields)->toContain('site_url');
 

@@ -13,9 +13,9 @@ use GuzzleHttp\Psr7\Response as Psr7Response;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Carbon;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use RuntimeException;
 
@@ -43,19 +43,37 @@ class MondayIntegrationService
         }
 
         $lastResponse = null;
+        $defaultBoard = null;
+        $matchedConditionalBoard = false;
 
         foreach ($boards as $board) {
-            if (!$this->boardIsReadyForDispatch($board)) {
+            if ($board->is_default) {
+                if ($defaultBoard === null && $this->boardIsReadyForDefaultDispatch($board)) {
+                    $defaultBoard = $board;
+                } else {
+                    Log::info('MONDAY DEFAULT BOARD NOT READY', [
+                        'integration_id' => $integration->id,
+                        'lead_id' => $lead->id,
+                        'monday_board_id' => $board->monday_board_id,
+                        'board_id' => $board->id,
+                    ]);
+                }
+
+                continue;
+            }
+
+            if (! $this->boardIsReadyForConditionalDispatch($board)) {
                 Log::info('MONDAY BOARD NOT READY', [
                     'integration_id' => $integration->id,
                     'lead_id' => $lead->id,
                     'monday_board_id' => $board->monday_board_id,
                     'board_id' => $board->id,
                 ]);
+
                 continue;
             }
 
-            if (!$this->evaluateCondition($board, $lead)) {
+            if (! $this->evaluateCondition($board, $lead)) {
                 Log::info('MONDAY BOARD CONDITION NOT MATCHED', [
                     'integration_id' => $integration->id,
                     'lead_id' => $lead->id,
@@ -63,9 +81,11 @@ class MondayIntegrationService
                     'condition_lead_field' => $board->condition_lead_field,
                     'condition_expected_value' => $board->condition_expected_value,
                 ]);
+
                 continue;
             }
 
+            $matchedConditionalBoard = true;
             $lastResponse = $this->createItem($integration, $board, $lead);
 
             if ($lastResponse->successful()) {
@@ -73,8 +93,23 @@ class MondayIntegrationService
             }
         }
 
+        if (! $matchedConditionalBoard && $defaultBoard !== null) {
+            Log::info('MONDAY DEFAULT BOARD SELECTED', [
+                'integration_id' => $integration->id,
+                'lead_id' => $lead->id,
+                'monday_board_id' => $defaultBoard->monday_board_id,
+                'board_id' => $defaultBoard->id,
+            ]);
+
+            $lastResponse = $this->createItem($integration, $defaultBoard, $lead);
+
+            if ($lastResponse->successful()) {
+                return $lastResponse;
+            }
+        }
+
         return $lastResponse ?? $this->makeSyntheticResponse([
-            'message' => 'Ningun board de Monday cumplio las condiciones para este lead.',
+            'message' => 'Ningun board de Monday cumplio las condiciones para este lead y no hay board por defecto listo.',
         ], 202);
     }
 
@@ -89,8 +124,8 @@ class MondayIntegrationService
         );
 
         $boards = $result['response']['data']['boards'] ?? null;
-        if (!is_array($boards)) {
-            throw new RuntimeException('Monday devolvio una respuesta invalida para syncBoards: ' . $result['body']);
+        if (! is_array($boards)) {
+            throw new RuntimeException('Monday devolvio una respuesta invalida para syncBoards: '.$result['body']);
         }
 
         $summary = [
@@ -109,7 +144,7 @@ class MondayIntegrationService
             $board->name = (string) ($payload['name'] ?? 'Board sin nombre');
             $board->boards_synced_at = now();
 
-            if (!$exists) {
+            if (! $exists) {
                 $board->status = false;
             }
 
@@ -131,7 +166,7 @@ class MondayIntegrationService
     {
         $board->loadMissing('integration');
 
-        if (!$board->status) {
+        if (! $board->status) {
             throw ValidationException::withMessages([
                 'status' => 'Solo se pueden sincronizar grupos y columnas en boards activas.',
             ]);
@@ -146,8 +181,8 @@ class MondayIntegrationService
         );
 
         $boardPayload = $result['response']['data']['boards'][0] ?? null;
-        if (!is_array($boardPayload)) {
-            throw new RuntimeException('Monday devolvio una respuesta invalida para syncBoardDetails: ' . $result['body']);
+        if (! is_array($boardPayload)) {
+            throw new RuntimeException('Monday devolvio una respuesta invalida para syncBoardDetails: '.$result['body']);
         }
 
         $board->name = (string) ($boardPayload['name'] ?? $board->name);
@@ -203,14 +238,24 @@ class MondayIntegrationService
     public function updateBoardConfiguration(MondayBoard $board, array $payload): MondayBoard
     {
         $board->loadMissing('integration');
+        $status = (bool) ($payload['status'] ?? false);
+        $isDefault = $status && (bool) ($payload['is_default'] ?? false);
 
         $board->fill([
-            'status' => (bool) ($payload['status'] ?? false),
-            'condition_lead_field' => $payload['condition_lead_field'] ?? null,
-            'condition_expected_value' => $payload['condition_expected_value'] ?? null,
+            'status' => $status,
+            'is_default' => $isDefault,
+            'condition_lead_field' => $isDefault ? null : ($payload['condition_lead_field'] ?? null),
+            'condition_expected_value' => $isDefault ? null : ($payload['condition_expected_value'] ?? null),
             'monday_group_id' => $payload['monday_group_id'] ?? null,
         ]);
         $board->save();
+
+        if ($board->is_default) {
+            $board->newQuery()
+                ->where('integration_id', $board->integration_id)
+                ->whereKeyNot($board->id)
+                ->update(['is_default' => false]);
+        }
 
         if ($board->status && ($board->details_synced_at === null || $board->groups()->count() === 0 || $board->columns()->count() === 0)) {
             $board = $this->syncBoardDetails($board);
@@ -224,7 +269,7 @@ class MondayIntegrationService
         foreach ($board->columns as $column) {
             $mappingPayload = $mappings->get($column->id, []);
             $sourceType = $mappingPayload['source_type'] ?? ($column->mapping->source_type ?? 'lead_field');
-            if (!in_array($sourceType, ['lead_field', 'fixed_value'], true)) {
+            if (! in_array($sourceType, ['lead_field', 'fixed_value'], true)) {
                 $sourceType = 'lead_field';
             }
 
@@ -249,6 +294,7 @@ class MondayIntegrationService
             'integration_id' => $board->integration_id,
             'board_id' => $board->id,
             'status' => $board->status,
+            'is_default' => $board->is_default,
             'condition_lead_field' => $board->condition_lead_field,
             'condition_expected_value' => $board->condition_expected_value,
             'monday_group_id' => $board->monday_group_id,
@@ -333,7 +379,7 @@ class MondayIntegrationService
                 'message' => $exception->getMessage(),
             ]);
 
-            throw new RuntimeException('No fue posible conectar con Monday para la operacion ' . ($logLabel ?: 'graphql') . '.', 0, $exception);
+            throw new RuntimeException('No fue posible conectar con Monday para la operacion '.($logLabel ?: 'graphql').'.', 0, $exception);
         } catch (\Throwable $exception) {
             Log::error('MONDAY GRAPHQL TRANSPORT ERROR', [
                 'integration_id' => $integration->id,
@@ -344,7 +390,7 @@ class MondayIntegrationService
                 'message' => $exception->getMessage(),
             ]);
 
-            throw new RuntimeException('Fallo el transporte HTTP hacia Monday para la operacion ' . ($logLabel ?: 'graphql') . '.', 0, $exception);
+            throw new RuntimeException('Fallo el transporte HTTP hacia Monday para la operacion '.($logLabel ?: 'graphql').'.', 0, $exception);
         }
 
         $rawBody = $response->body();
@@ -364,16 +410,16 @@ class MondayIntegrationService
             'body_preview' => mb_substr($rawBody, 0, 500),
         ]);
 
-        if (!is_array($decoded)) {
-            throw new RuntimeException('Monday devolvio una respuesta no JSON valida en la operacion ' . ($logLabel ?: 'graphql') . ': ' . $rawBody);
+        if (! is_array($decoded)) {
+            throw new RuntimeException('Monday devolvio una respuesta no JSON valida en la operacion '.($logLabel ?: 'graphql').': '.$rawBody);
         }
 
-        if (!$response->successful()) {
-            throw new RuntimeException('Monday devolvio HTTP ' . $response->status() . ' en la operacion ' . ($logLabel ?: 'graphql') . ': ' . $rawBody);
+        if (! $response->successful()) {
+            throw new RuntimeException('Monday devolvio HTTP '.$response->status().' en la operacion '.($logLabel ?: 'graphql').': '.$rawBody);
         }
 
         if (isset($decoded['errors']) && is_array($decoded['errors']) && $decoded['errors'] !== []) {
-            throw new RuntimeException('Monday devolvio errores GraphQL en la operacion ' . ($logLabel ?: 'graphql') . ': ' . $rawBody);
+            throw new RuntimeException('Monday devolvio errores GraphQL en la operacion '.($logLabel ?: 'graphql').': '.$rawBody);
         }
 
         return [
@@ -409,7 +455,7 @@ class MondayIntegrationService
 
         foreach ($board->columns as $column) {
             $mapping = $column->mapping;
-            if (!$mapping || strtolower((string) $column->type) === 'name') {
+            if (! $mapping || strtolower((string) $column->type) === 'name') {
                 continue;
             }
 
@@ -461,8 +507,8 @@ class MondayIntegrationService
         );
 
         $mondayItemId = $result['response']['data']['create_item']['id'] ?? null;
-        if (!filled($mondayItemId)) {
-            throw new RuntimeException('Monday respondio create_item sin id. Body: ' . $result['body']);
+        if (! filled($mondayItemId)) {
+            throw new RuntimeException('Monday respondio create_item sin id. Body: '.$result['body']);
         }
 
         $this->persistMondayItemId($lead, $integration, (string) $mondayItemId);
@@ -481,17 +527,28 @@ class MondayIntegrationService
 
     protected function persistMondayItemId(Lead $lead, Integration $integration, string $itemId): void
     {
-        $lead->crm_id = $integration->id . '-' . $itemId;
+        $lead->crm_id = $integration->id.'-'.$itemId;
         $lead->save();
     }
 
-    private function boardIsReadyForDispatch(MondayBoard $board): bool
+    private function boardIsReadyForConditionalDispatch(MondayBoard $board): bool
+    {
+        return $this->boardHasDispatchBaseConfiguration($board)
+            && filled($board->condition_lead_field)
+            && filled($board->condition_expected_value);
+    }
+
+    private function boardIsReadyForDefaultDispatch(MondayBoard $board): bool
+    {
+        return $board->is_default
+            && $this->boardHasDispatchBaseConfiguration($board);
+    }
+
+    private function boardHasDispatchBaseConfiguration(MondayBoard $board): bool
     {
         $board->loadMissing(['groups', 'columns.mapping']);
 
         return $board->status
-            && filled($board->condition_lead_field)
-            && filled($board->condition_expected_value)
             && filled($board->monday_group_id)
             && $board->details_synced_at !== null
             && $board->groups->contains(fn ($group) => (string) $group->monday_group_id === (string) $board->monday_group_id)
@@ -523,7 +580,7 @@ class MondayIntegrationService
             $lead->name,
             $lead->email,
             $lead->company,
-            'Lead ' . $lead->id
+            'Lead '.$lead->id
         );
     }
 
@@ -637,13 +694,13 @@ class MondayIntegrationService
                 'address' => 'Bogotá, Colombia',
                 'lat' => 4.7110,
                 'lng' => -74.0721,
-                'aliases' => ['bogota', 'bogota dc', 'bogota d c', 'bogota d.c','Bogotá', 'Bogotá D.C.', 'Bogotá DC'],
+                'aliases' => ['bogota', 'bogota dc', 'bogota d c', 'bogota d.c', 'Bogotá', 'Bogotá D.C.', 'Bogotá DC'],
             ],
             [
                 'address' => 'Medellín, Colombia',
                 'lat' => 6.2442,
                 'lng' => -75.5812,
-                'aliases' => ['medellin','medellín','Medellin', 'Medellín'],
+                'aliases' => ['medellin', 'medellín', 'Medellin', 'Medellín'],
             ],
             [
                 'address' => 'Cali, Colombia',
@@ -685,13 +742,13 @@ class MondayIntegrationService
                 'address' => 'Ciudad de México, México',
                 'lat' => 19.4326,
                 'lng' => -99.1332,
-                'aliases' => ['ciudad de mexico', 'cdmx', 'mexico city','Ciudad de México', 'Ciudad de México', 'CDMX', 'Mexico City'],
+                'aliases' => ['ciudad de mexico', 'cdmx', 'mexico city', 'Ciudad de México', 'Ciudad de México', 'CDMX', 'Mexico City'],
             ],
             [
                 'address' => 'Guadalajara, México',
                 'lat' => 20.6597,
                 'lng' => -103.3496,
-                'aliases' => ['guadalajara','Guadalajara'],
+                'aliases' => ['guadalajara', 'Guadalajara'],
             ],
         ];
 
@@ -737,7 +794,7 @@ class MondayIntegrationService
     {
         $normalized = ltrim(preg_replace('/#[^\r\n]*/', '', $query));
 
-        if (!preg_match('/^(query|mutation|subscription)\s+([_A-Za-z][_0-9A-Za-z]*)\b/s', $normalized, $matches)) {
+        if (! preg_match('/^(query|mutation|subscription)\s+([_A-Za-z][_0-9A-Za-z]*)\b/s', $normalized, $matches)) {
             return null;
         }
 
@@ -751,14 +808,14 @@ class MondayIntegrationService
             $normalized = (string) config('monday.base_url', 'https://api.monday.com/v2');
         }
 
-        if (!preg_match('#^https?://#i', $normalized)) {
-            $normalized = 'https://' . ltrim($normalized, '/');
+        if (! preg_match('#^https?://#i', $normalized)) {
+            $normalized = 'https://'.ltrim($normalized, '/');
         }
 
         $normalized = rtrim($normalized, '/');
 
         if (filter_var($normalized, FILTER_VALIDATE_URL) === false) {
-            throw new RuntimeException('La URL configurada para Monday no es valida: ' . $normalized);
+            throw new RuntimeException('La URL configurada para Monday no es valida: '.$normalized);
         }
 
         return $normalized;
@@ -784,8 +841,3 @@ class MondayIntegrationService
         return null;
     }
 }
-
-
-
-
-

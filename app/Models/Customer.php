@@ -26,6 +26,50 @@ class Customer extends Model
         'default_lead_value' => 'decimal:2',
     ];
 
+    protected static function booted(): void
+    {
+        static::created(function (Customer $customer): void {
+            CustomerActionHistory::recordForCustomer(
+                $customer,
+                'created',
+                [],
+                $customer->historyValues($customer->getAttributes())
+            );
+        });
+
+        static::updated(function (Customer $customer): void {
+            $changes = collect($customer->getChanges())
+                ->except(['updated_at'])
+                ->all();
+
+            if ($changes === []) {
+                return;
+            }
+
+            $oldValues = [];
+
+            foreach (array_keys($changes) as $field) {
+                $oldValues[$field] = $customer->getOriginal($field);
+            }
+
+            CustomerActionHistory::recordForCustomer(
+                $customer,
+                'updated',
+                $customer->historyValues($oldValues),
+                $customer->historyValues($changes)
+            );
+        });
+
+        static::deleted(function (Customer $customer): void {
+            CustomerActionHistory::recordForCustomer(
+                $customer,
+                'deleted',
+                $customer->historyValues($customer->getOriginal()),
+                []
+            );
+        });
+    }
+
     // Método para generar un token hasheado
     public static function generateToken()
     {
@@ -77,6 +121,16 @@ public function googleAdsAds(): HasMany
     return $this->hasMany(GoogleAdsAd::class, 'customer_id');
 }
 
+public function actionHistories(): HasMany
+{
+    return $this->hasMany(CustomerActionHistory::class, 'customer_id');
+}
+
+public function googleAdsConversionTemplateHistories(): HasMany
+{
+    return $this->hasMany(GoogleAdsConversionTemplateHistory::class, 'customer_id');
+}
+
 public function getIdGadsAttribute(): ?string
 {
     return $this->attributes['id_Gads'] ?? null;
@@ -85,5 +139,12 @@ public function getIdGadsAttribute(): ?string
 public function setIdGadsAttribute(?string $value): void
 {
     $this->attributes['id_Gads'] = $value;
+}
+
+private function historyValues(array $values): array
+{
+    return collect($values)
+        ->except(['created_at', 'updated_at'])
+        ->all();
 }
 }

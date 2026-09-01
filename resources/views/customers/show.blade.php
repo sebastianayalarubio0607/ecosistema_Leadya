@@ -15,6 +15,15 @@
 @endsection
 
 @section('content')
+    @php
+        $actorLabels = [
+            'user' => 'Usuario',
+            'job' => 'Job',
+            'ai_connector' => 'Conector IA',
+            'system' => 'Sistema',
+        ];
+    @endphp
+
     @if (session('created_token'))
         <div id="tokenModalBackdrop" class="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
             <div class="w-full max-w-lg rounded-2xl border border-white/10 bg-zinc-950/95 p-6 shadow-xl shadow-black/30">
@@ -194,8 +203,7 @@
             </div>
 
             <div>
-                <div class="text-sm text-white/50">ID Google Ads</div>
-                <div class="mt-1">{{ $customer->id_Gads ?: '—' }}</div>
+                <livewire:google-ads-customer-account-select :selected-account-id="$customer->id_Gads" :readonly="true" />
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -334,6 +342,94 @@
                             Sin Meta WhatsApp asociadas.
                         </div>
                     @endforelse
+                </div>
+            </div>
+
+            <div>
+                <div class="text-sm text-white/50">Historial Customer</div>
+                <div class="mt-2 overflow-x-auto rounded-xl border border-white/10">
+                    <table class="w-full min-w-[900px] text-xs">
+                        <thead class="bg-white/5 text-white/70">
+                            <tr>
+                                <th class="px-3 py-2 text-left">Fecha</th>
+                                <th class="px-3 py-2 text-left">Acción</th>
+                                <th class="px-3 py-2 text-left">Origen</th>
+                                <th class="px-3 py-2 text-left">Anterior</th>
+                                <th class="px-3 py-2 text-left">Actualizado</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-white/10 text-white/80">
+                            @forelse($customer->actionHistories as $history)
+                                <tr class="align-top">
+                                    <td class="px-3 py-2 whitespace-nowrap">{{ optional($history->created_at)->format('Y-m-d H:i') }}</td>
+                                    <td class="px-3 py-2">{{ $history->action }}</td>
+                                    <td class="px-3 py-2">
+                                        {{ $actorLabels[$history->actor_type] ?? $history->actor_type }}
+                                        <div class="text-white/50">{{ $history->actor_name ?: '—' }}</div>
+                                    </td>
+                                    <td class="px-3 py-2">
+                                        <pre class="max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-900/60 p-2">{{ json_encode($history->old_values ?? [], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) }}</pre>
+                                    </td>
+                                    <td class="px-3 py-2">
+                                        <pre class="max-h-40 overflow-auto whitespace-pre-wrap rounded-lg bg-slate-900/60 p-2">{{ json_encode($history->new_values ?? [], JSON_UNESCAPED_UNICODE | JSON_PRETTY_PRINT) }}</pre>
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="5" class="px-3 py-6 text-center text-white/60">Sin historial de Customer.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div>
+                <div class="text-sm text-white/50">Historial plantillas Google Ads</div>
+                <div class="mt-2 overflow-x-auto rounded-xl border border-white/10">
+                    <table class="w-full min-w-[1000px] text-xs">
+                        <thead class="bg-white/5 text-white/70">
+                            <tr>
+                                <th class="px-3 py-2 text-left">Fecha</th>
+                                <th class="px-3 py-2 text-left">Plantilla</th>
+                                <th class="px-3 py-2 text-left">Acción</th>
+                                <th class="px-3 py-2 text-left">Origen</th>
+                                <th class="px-3 py-2 text-left">Resultado</th>
+                                <th class="px-3 py-2 text-left">Detalle</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-white/10 text-white/80">
+                            @forelse($customer->googleAdsConversionTemplateHistories as $history)
+                                <tr class="align-top">
+                                    <td class="px-3 py-2 whitespace-nowrap">{{ optional($history->created_at)->format('Y-m-d H:i') }}</td>
+                                    <td class="px-3 py-2">{{ $history->template_name ?: '—' }}</td>
+                                    <td class="px-3 py-2">{{ $history->action }}</td>
+                                    <td class="px-3 py-2">
+                                        {{ $actorLabels[$history->actor_type] ?? $history->actor_type }}
+                                        <div class="text-white/50">{{ $history->actor_name ?: '—' }}</div>
+                                    </td>
+                                    <td class="px-3 py-2">
+                                        <span class="rounded-lg border px-2 py-1 {{ $history->success ? 'border-emerald-300/20 bg-emerald-500/10 text-emerald-200' : 'border-rose-300/20 bg-rose-500/10 text-rose-200' }}">
+                                            {{ $history->success ? 'OK' : 'Error' }}
+                                        </span>
+                                    </td>
+                                    <td class="px-3 py-2">
+                                        @if($history->error_message)
+                                            <div class="text-rose-200">{{ $history->error_message }}</div>
+                                        @endif
+                                        <div class="text-white/50">Google Ads ID: {{ $history->google_ads_customer_id ?: '—' }}</div>
+                                        @if($history->request_id)
+                                            <div class="text-white/50">Request: {{ $history->request_id }}</div>
+                                        @endif
+                                    </td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td colspan="6" class="px-3 py-6 text-center text-white/60">Sin historial de plantillas Google Ads.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
                 </div>
             </div>
         </div>

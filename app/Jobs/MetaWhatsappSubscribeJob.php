@@ -21,8 +21,13 @@ class MetaWhatsappSubscribeJob implements ShouldQueue
     private const CONNECTION = 'meta_whatsapp_subscriptions';
     private const QUEUE = 'meta-whatsapp-subscriptions';
 
-    public function __construct(public int $metaWhatsappId)
+    public ?int $metaAccessTokenId = null;
+    public ?int $customerId = null;
+
+    public function __construct(public int $metaWhatsappId, ?int $metaAccessTokenId = null, ?int $customerId = null)
     {
+        $this->metaAccessTokenId = $metaAccessTokenId;
+        $this->customerId = $customerId;
         $this->onConnection(self::CONNECTION)->onQueue(self::QUEUE);
     }
 
@@ -34,7 +39,7 @@ class MetaWhatsappSubscribeJob implements ShouldQueue
             throw new RuntimeException('No existe la cuenta WhatsApp local '.$this->metaWhatsappId.'.');
         }
 
-        $service->subscribe($whatsapp);
+        $service->subscribe($whatsapp, $this->metaAccessTokenId, $this->customerId);
     }
 
     public function failed(\Throwable $exception): void
@@ -49,7 +54,11 @@ class MetaWhatsappSubscribeJob implements ShouldQueue
             'action' => 'subscribe',
             'resource_id' => $this->metaWhatsappId,
             'resource_identifier' => $whatsapp?->waba_id,
-            'payload' => ['meta_whatsapp_id' => $this->metaWhatsappId],
+            'payload' => [
+                'meta_whatsapp_id' => $this->metaWhatsappId,
+                'meta_access_token_id' => $this->metaAccessTokenId,
+                'customer_id' => $this->customerId,
+            ],
             'exception' => $exception->getMessage(),
             'failed_at' => now(),
         ]);

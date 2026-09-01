@@ -155,11 +155,7 @@
     </div>
 
     <div>
-        <label class="block mb-1 text-white/70">ID Google Ads</label>
-        <input name="id_Gads"
-               value="{{ $idGads }}"
-               class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
-               placeholder="ID de la cuenta publicitaria de Google Ads. Solo números. Ej: 1234567890" />
+        <livewire:google-ads-customer-account-select :selected-account-id="$idGads" />
         @error('id_Gads') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
     </div>
 

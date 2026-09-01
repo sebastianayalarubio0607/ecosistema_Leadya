@@ -19,6 +19,7 @@ class MondayBoardRequest extends FormRequest
     {
         return [
             'status' => ['required', 'boolean'],
+            'is_default' => ['nullable', 'boolean'],
             'condition_lead_field' => ['nullable', 'string', Rule::in(Lead::integrationMappableFields())],
             'condition_expected_value' => ['nullable', 'string', 'max:255'],
             'monday_group_id' => ['nullable', 'string', 'max:100'],
@@ -34,11 +35,12 @@ class MondayBoardRequest extends FormRequest
     {
         $validator->after(function ($validator) {
             $board = $this->route('board');
-            if (!$board) {
+            if (! $board) {
                 return;
             }
 
             $status = $this->boolean('status');
+            $isDefault = $this->boolean('is_default');
             $mappings = collect($this->input('mappings', []));
             $hasMappedColumns = $mappings->contains(function ($mapping) {
                 $sourceType = $mapping['source_type'] ?? 'lead_field';
@@ -50,6 +52,7 @@ class MondayBoardRequest extends FormRequest
             $isAttemptingConfiguration = filled($this->input('condition_lead_field'))
                 || filled($this->input('condition_expected_value'))
                 || filled($this->input('monday_group_id'))
+                || $isDefault
                 || $hasMappedColumns;
 
             foreach ($mappings as $index => $mapping) {
@@ -63,24 +66,24 @@ class MondayBoardRequest extends FormRequest
                     ->where('monday_board_id', $board->id)
                     ->exists();
 
-                if (!$columnExists) {
+                if (! $columnExists) {
                     $validator->errors()->add("mappings.{$index}.column_id", 'La columna seleccionada no pertenece a este board.');
                 }
             }
 
-            if (!$status) {
+            if (! $status) {
                 return;
             }
 
-            if (!($hasSyncData || $isAttemptingConfiguration)) {
+            if (! ($hasSyncData || $isAttemptingConfiguration)) {
                 return;
             }
 
-            if (blank($this->input('condition_lead_field'))) {
+            if (! $isDefault && blank($this->input('condition_lead_field'))) {
                 $validator->errors()->add('condition_lead_field', 'Debes seleccionar el campo Lead que activa el board.');
             }
 
-            if (blank($this->input('condition_expected_value'))) {
+            if (! $isDefault && blank($this->input('condition_expected_value'))) {
                 $validator->errors()->add('condition_expected_value', 'Debes indicar el valor esperado para activar el board.');
             }
 
@@ -94,7 +97,7 @@ class MondayBoardRequest extends FormRequest
                     ->where('monday_group_id', $this->input('monday_group_id'))
                     ->exists();
 
-                if (!$groupExists) {
+                if (! $groupExists) {
                     $validator->errors()->add('monday_group_id', 'El grupo seleccionado no pertenece a este board.');
                 }
             }

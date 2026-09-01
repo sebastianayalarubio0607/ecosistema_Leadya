@@ -5,6 +5,7 @@ use App\Jobs\RefreshMetaLongLivedTokenJob;
 use App\Jobs\MetaAdAccountSubscriptionScanJob;
 use App\Jobs\MetaPageSubscriptionScanJob;
 use App\Jobs\MetaWhatsappSubscriptionScanJob;
+use App\Jobs\PruneCustomerAndGoogleAdsHistoriesJob;
 use App\Jobs\PruneMetaSubscriptionFailedJobs;
 use App\Jobs\SyncGoogleAdsDailyMetricsJob;
 use App\Jobs\SyncMetaAssetStatusesJob;
@@ -77,6 +78,11 @@ Schedule::job(new MetaPageSubscriptionScanJob())
 
 Schedule::job(new PruneMetaSubscriptionFailedJobs())
     ->dailyAt('08:00')
+    ->timezone('America/Bogota')
+    ->withoutOverlapping();
+
+Schedule::job(new PruneCustomerAndGoogleAdsHistoriesJob())
+    ->dailyAt('08:30')
     ->timezone('America/Bogota')
     ->withoutOverlapping();
 

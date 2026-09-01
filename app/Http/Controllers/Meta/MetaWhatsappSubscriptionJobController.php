@@ -85,12 +85,21 @@ class MetaWhatsappSubscriptionJobController extends Controller
 
     private function dispatchFailedJob(MetaWhatsappSubscriptionFailedJob $failedJob): void
     {
+        $payload = $failedJob->payload ?? [];
+        $metaAccessTokenId = isset($payload['meta_access_token_id']) ? (int) $payload['meta_access_token_id'] : null;
+        $customerId = isset($payload['customer_id']) ? (int) $payload['customer_id'] : null;
+
         match ($failedJob->action) {
             'scan' => MetaWhatsappSubscriptionScanJob::dispatch(),
-            'check' => $failedJob->resource_id ? MetaWhatsappSubscriptionCheckJob::dispatch((int) $failedJob->resource_id) : null,
-            'subscribe' => $failedJob->resource_id ? MetaWhatsappSubscribeJob::dispatch((int) $failedJob->resource_id) : null,
+            'check' => $failedJob->resource_id ? MetaWhatsappSubscriptionCheckJob::dispatch((int) $failedJob->resource_id, $metaAccessTokenId, $customerId) : null,
+            'subscribe' => $failedJob->resource_id ? MetaWhatsappSubscribeJob::dispatch((int) $failedJob->resource_id, $metaAccessTokenId, $customerId) : null,
             'unsubscribe' => filled($failedJob->resource_identifier)
-                ? MetaWhatsappUnsubscribeJob::dispatch($failedJob->resource_id ? (int) $failedJob->resource_id : null, (string) $failedJob->resource_identifier)
+                ? MetaWhatsappUnsubscribeJob::dispatch(
+                    $failedJob->resource_id ? (int) $failedJob->resource_id : null,
+                    (string) $failedJob->resource_identifier,
+                    $metaAccessTokenId,
+                    $customerId,
+                )
                 : null,
             default => null,
         };

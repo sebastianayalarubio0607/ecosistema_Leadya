@@ -2,6 +2,30 @@
 
 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
     <div class="md:col-span-2">
+        <label class="block mb-1 text-white/70">Credencial WhatsApp explicita</label>
+        @php($selectedAccessTokenId = old('meta_access_token_id', $whatsapp->meta_access_token_id ?? ''))
+        <select name="meta_access_token_id"
+                class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+            <option value="">Resolver por customer o default WhatsApp</option>
+            @foreach(($whatsappAccessTokens ?? collect()) as $token)
+                <option value="{{ $token->id }}" @selected((string) $selectedAccessTokenId === (string) $token->id)>
+                    #{{ $token->id }}
+                    {{ $token->name ?: 'System user WhatsApp' }}
+                    @if($token->is_default)
+                        / default
+                    @endif
+                    / app {{ $token->meta_app_id ?: '-' }}
+                    @if($token->customer)
+                        / {{ $token->customer->name }}
+                    @endif
+                </option>
+            @endforeach
+        </select>
+        <p class="mt-1 text-xs text-white/50">Si se selecciona, esta WABA usara siempre esa Meta App y ese system user para subscribed_apps.</p>
+        @error('meta_access_token_id') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+    </div>
+
+    <div class="md:col-span-2">
         <label class="block mb-2 text-white/70">Customers</label>
         <div class="rounded-2xl border border-white/10 bg-white/5 p-3 space-y-2">
             @forelse($customers as $customer)
@@ -65,6 +89,20 @@
     <div>
         <label class="block mb-1 text-white/70">Token puede consultar WABA</label>
         <input value="{{ is_null($whatsapp->token_can_view_account) ? 'Sin validar' : ($whatsapp->token_can_view_account ? 'Si' : 'No') }}"
+               disabled
+               class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/40 text-white/70">
+    </div>
+
+    <div>
+        <label class="block mb-1 text-white/70">Ultima App validada</label>
+        <input value="{{ $whatsapp->subscription_meta_app_id ?: 'Sin validar' }}"
+               disabled
+               class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/40 text-white/70">
+    </div>
+
+    <div>
+        <label class="block mb-1 text-white/70">Fuente de token</label>
+        <input value="{{ $whatsapp->subscription_token_source ?: 'Sin validar' }}"
                disabled
                class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/40 text-white/70">
     </div>

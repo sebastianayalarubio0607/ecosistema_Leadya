@@ -74,6 +74,18 @@
             </div>
 
             <div class="md:col-span-3">
+                <label class="block mb-1 text-white/70">Credencial WhatsApp</label>
+                <select name="meta_access_token_id" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+                    <option value="">-- Todas --</option>
+                    @foreach($whatsappAccessTokens as $token)
+                        <option value="{{ $token->id }}" @selected((string) request('meta_access_token_id') === (string) $token->id)>
+                            #{{ $token->id }} {{ $token->name ?: 'System user' }} / app {{ $token->meta_app_id ?: '-' }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="md:col-span-3">
                 <label class="block mb-1 text-white/70">Buscar general</label>
                 <input name="search" value="{{ request('search') }}"
                        class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40">
@@ -87,7 +99,7 @@
 
         <div class="w-full max-w-full overflow-x-auto rounded-xl border border-white/10 [scrollbar-gutter:stable]" data-sortable-table-wrap>
             <div class="hidden px-3 py-2 text-xs text-white/50" data-sort-status>Ordenando...</div>
-            <table class="w-full min-w-[1150px] text-sm" data-sortable-table>
+            <table class="w-full min-w-[1450px] text-sm" data-sortable-table>
                 <thead class="bg-white/5 text-white/70">
                     <tr>
                         <x-sort-header :index="0" label="Customers" />
@@ -97,7 +109,9 @@
                         <x-sort-header :index="4" label="Estado" />
                         <x-sort-header :index="5" label="Suscripcion" />
                         <x-sort-header :index="6" label="Token ve WABA" />
-                        <x-sort-header :index="7" label="Acciones" class="w-56" />
+                        <x-sort-header :index="7" label="Credencial" />
+                        <x-sort-header :index="8" label="App validada" />
+                        <x-sort-header :index="9" label="Acciones" class="w-56" />
                     </tr>
                 </thead>
 
@@ -120,6 +134,13 @@
                                 {{ is_null($item->token_can_view_account) ? 'Sin validar' : ($item->token_can_view_account ? 'Si' : 'No') }}
                             </td>
                             <td class="px-3 py-2">
+                                {{ $item->metaAccessToken?->name ?: ($item->meta_access_token_id ? '#'.$item->meta_access_token_id : '-') }}
+                                @if($item->subscription_token_source)
+                                    <div class="text-xs text-white/50">Ultima: {{ $item->subscription_token_source }}</div>
+                                @endif
+                            </td>
+                            <td class="px-3 py-2 break-all">{{ $item->subscription_meta_app_id ?: '-' }}</td>
+                            <td class="px-3 py-2">
                                 <div class="flex items-center gap-2">
                                     <a class="px-3 py-1.5 rounded-lg bg-white/10 hover:bg-white/15 border border-white/10 text-xs"
                                        href="{{ route('meta.whatsapps.show', $item) }}">Ver</a>
@@ -137,7 +158,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="8" class="px-3 py-8 text-center text-white/60">No hay cuentas WhatsApp para mostrar.</td>
+                            <td colspan="10" class="px-3 py-8 text-center text-white/60">No hay cuentas WhatsApp para mostrar.</td>
                         </tr>
                     @endforelse
                 </tbody>

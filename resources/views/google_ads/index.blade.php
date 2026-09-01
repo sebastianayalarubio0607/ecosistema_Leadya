@@ -42,6 +42,13 @@
                 'icon' => 'conversion_actions',
             ],
             [
+                'title' => 'Plantillas conversiones',
+                'description' => 'Administra las plantillas estado LQ que se crean automaticamente por customer.',
+                'route' => 'google-ads.conversion-templates.index',
+                'label' => 'Abrir plantillas',
+                'icon' => 'conversion_actions',
+            ],
+            [
                 'title' => 'Conversion jobs',
                 'description' => 'Monitorea envios, fallos y reintentos de conversiones offline.',
                 'route' => 'google-ads.conversion-jobs.index',

@@ -98,7 +98,7 @@ class PlatformController extends Controller
             'code' => [
                 'required',
                 'string',
-                'max:20',
+                'max:100',
                 'alpha_dash',
                 Rule::unique('platforms', 'code')->ignore($platform?->id),
             ],

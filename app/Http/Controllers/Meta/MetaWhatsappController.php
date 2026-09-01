@@ -3,7 +3,9 @@
 namespace App\Http\Controllers\Meta;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\MetaWhatsappSubscriptionCheckJob;
 use App\Models\Customer;
+use App\Models\MetaAccessToken;
 use App\Models\MetaWhatsapp;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
@@ -12,7 +14,7 @@ class MetaWhatsappController extends Controller
 {
     public function index(Request $request)
     {
-        $query = MetaWhatsapp::with('customers');
+        $query = MetaWhatsapp::with(['customers', 'metaAccessToken', 'subscriptionMetaAccessToken']);
 
         if ($request->filled('customer_id')) {
             $query->whereHas('customers', fn ($customers) => $customers->whereKey($request->integer('customer_id')));
@@ -48,6 +50,10 @@ class MetaWhatsappController extends Controller
             }
         }
 
+        if ($request->filled('meta_access_token_id')) {
+            $query->where('meta_access_token_id', $request->integer('meta_access_token_id'));
+        }
+
         if ($request->filled('search')) {
             $search = $request->string('search')->toString();
 
@@ -61,6 +67,7 @@ class MetaWhatsappController extends Controller
         return view('meta.whatsapps.index', [
             'items' => $query->orderByDesc('id')->paginate(15)->withQueryString(),
             'customers' => Customer::orderBy('name')->get(['id', 'name']),
+            'whatsappAccessTokens' => $this->whatsappAccessTokens(),
         ]);
     }
 
@@ -74,6 +81,7 @@ class MetaWhatsappController extends Controller
 
         return view('meta.whatsapps.create', [
             'customers' => Customer::orderBy('name')->get(['id', 'name']),
+            'whatsappAccessTokens' => $this->whatsappAccessTokens(),
             'whatsapp' => new MetaWhatsapp(['status' => true]),
             'selectedCustomerIds' => $selectedCustomerIds,
         ]);
@@ -84,6 +92,14 @@ class MetaWhatsappController extends Controller
         $data = $request->validate([
             'customer_ids' => ['sometimes', 'array'],
             'customer_ids.*' => ['integer', 'exists:customers,id'],
+            'meta_access_token_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('meta_access_tokens', 'id')->where(function ($query) {
+                    $query->where('purpose', MetaAccessToken::PURPOSE_WHATSAPP)
+                        ->where('token_type', MetaAccessToken::TYPE_SYSTEM_ACCESS_TOKEN);
+                }),
+            ],
             'waba_id' => ['required', 'string', 'max:64', 'unique:meta_whatsapps,waba_id'],
             'phone_number_id' => ['nullable', 'string', 'max:64'],
             'wa_id' => ['nullable', 'string', 'max:64'],
@@ -92,17 +108,19 @@ class MetaWhatsappController extends Controller
 
         $customerIds = $data['customer_ids'] ?? [];
         unset($data['customer_ids']);
+        $data['meta_access_token_id'] = $data['meta_access_token_id'] ?? null;
         $data['status'] = (bool) $data['status'];
 
         $whatsapp = MetaWhatsapp::create($data);
         $whatsapp->customers()->sync($customerIds);
+        MetaWhatsappSubscriptionCheckJob::dispatch($whatsapp->id, $whatsapp->meta_access_token_id);
 
         return redirect()->route('meta.whatsapps.index')->with('success', 'Cuenta WhatsApp creada.');
     }
 
     public function show(MetaWhatsapp $whatsapp)
     {
-        $whatsapp->load('customers');
+        $whatsapp->load(['customers', 'metaAccessToken', 'subscriptionMetaAccessToken']);
 
         return view('meta.whatsapps.show', compact('whatsapp'));
     }
@@ -114,6 +132,7 @@ class MetaWhatsappController extends Controller
         return view('meta.whatsapps.edit', [
             'whatsapp' => $whatsapp,
             'customers' => Customer::orderBy('name')->get(['id', 'name']),
+            'whatsappAccessTokens' => $this->whatsappAccessTokens(),
             'selectedCustomerIds' => old('customer_ids', $whatsapp->customers->pluck('id')->all()),
         ]);
     }
@@ -123,6 +142,14 @@ class MetaWhatsappController extends Controller
         $data = $request->validate([
             'customer_ids' => ['sometimes', 'array'],
             'customer_ids.*' => ['integer', 'exists:customers,id'],
+            'meta_access_token_id' => [
+                'nullable',
+                'integer',
+                Rule::exists('meta_access_tokens', 'id')->where(function ($query) {
+                    $query->where('purpose', MetaAccessToken::PURPOSE_WHATSAPP)
+                        ->where('token_type', MetaAccessToken::TYPE_SYSTEM_ACCESS_TOKEN);
+                }),
+            ],
             'waba_id' => ['required', 'string', 'max:64', Rule::unique('meta_whatsapps', 'waba_id')->ignore($whatsapp->id)],
             'phone_number_id' => ['nullable', 'string', 'max:64'],
             'wa_id' => ['nullable', 'string', 'max:64'],
@@ -130,11 +157,19 @@ class MetaWhatsappController extends Controller
         ]);
 
         $customerIds = $data['customer_ids'] ?? [];
+        $originalCustomerIds = $whatsapp->customers()->pluck('customers.id')->map(fn ($id) => (int) $id)->sort()->values()->all();
         unset($data['customer_ids']);
+        $data['meta_access_token_id'] = $data['meta_access_token_id'] ?? null;
         $data['status'] = (bool) $data['status'];
 
         $whatsapp->update($data);
         $whatsapp->customers()->sync($customerIds);
+
+        $newCustomerIds = collect($customerIds)->map(fn ($id) => (int) $id)->sort()->values()->all();
+
+        if ($whatsapp->wasChanged('meta_access_token_id') || $originalCustomerIds !== $newCustomerIds) {
+            MetaWhatsappSubscriptionCheckJob::dispatch($whatsapp->id, $whatsapp->meta_access_token_id);
+        }
 
         return redirect()->route('meta.whatsapps.index')->with('success', 'Cuenta WhatsApp actualizada.');
     }
@@ -144,5 +179,16 @@ class MetaWhatsappController extends Controller
         $whatsapp->delete();
 
         return redirect()->route('meta.whatsapps.index')->with('success', 'Cuenta WhatsApp eliminada.');
+    }
+
+    private function whatsappAccessTokens()
+    {
+        return MetaAccessToken::query()
+            ->with('customer')
+            ->whatsappSystemUsers()
+            ->orderByDesc('is_default')
+            ->orderBy('name')
+            ->orderByDesc('id')
+            ->get(MetaAccessToken::SYNC_COLUMNS);
     }
 }

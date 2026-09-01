@@ -4,7 +4,6 @@ namespace App\Http\Services\Meta\Subscription\Whatsapp;
 
 use App\Jobs\MetaWhatsappSubscribeJob;
 use App\Jobs\MetaWhatsappUnsubscribeJob;
-use App\Models\MetaAccessToken;
 use App\Models\MetaWhatsapp;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -23,6 +22,10 @@ class MetaWhatsappSubscriptionService
         'whatsapp_business_messaging',
     ];
 
+    public function __construct(
+        private readonly MetaWhatsappCredentialResolver $credentials,
+    ) {}
+
     public function syncAll(): array
     {
         $stats = [
@@ -32,24 +35,12 @@ class MetaWhatsappSubscriptionService
             'not_visible' => 0,
         ];
 
-        try {
-            $this->validateRequiredPermissions();
-        } catch (\Throwable $exception) {
-            $stats['not_visible'] = $this->markAllWhatsappsError($exception->getMessage());
-            $stats['global_error'] = $exception->getMessage();
-
-            Log::warning('Meta WhatsApp subscription scan skipped', [
-                'message' => $exception->getMessage(),
-            ]);
-
-            return $stats;
-        }
-
         MetaWhatsapp::query()
+            ->with(['customers', 'metaAccessToken'])
             ->orderBy('id')
             ->chunkById(100, function ($whatsapps) use (&$stats) {
                 foreach ($whatsapps as $whatsapp) {
-                    $result = $this->inspectAndQueue($whatsapp, false);
+                    $result = $this->inspectAndQueue($whatsapp);
 
                     $stats['whatsapps_checked']++;
                     $stats['subscribe_jobs_dispatched'] += (int) ($result['subscribe_job_dispatched'] ?? false);
@@ -61,35 +52,45 @@ class MetaWhatsappSubscriptionService
         return $stats;
     }
 
-    public function inspectAndQueue(MetaWhatsapp $whatsapp, bool $validatePermissions = true): array
-    {
-        if ($validatePermissions) {
-            try {
-                $this->validateRequiredPermissions();
-            } catch (\Throwable $exception) {
-                $this->markWhatsappError($whatsapp, $exception->getMessage(), false);
+    public function inspectAndQueue(
+        MetaWhatsapp $whatsapp,
+        bool $validatePermissions = true,
+        ?int $metaAccessTokenId = null,
+        ?int $customerId = null,
+    ): array {
+        try {
+            $credential = $this->credentials->resolve($whatsapp, $customerId, $metaAccessTokenId);
 
-                Log::warning('Meta WhatsApp subscription check skipped', [
-                    'meta_whatsapp_id' => $whatsapp->id,
-                    'waba_id' => $whatsapp->waba_id,
-                    'message' => $exception->getMessage(),
-                ]);
-
-                return [
-                    'token_can_view_account' => false,
-                    'is_subscribed' => false,
-                    'subscribe_job_dispatched' => false,
-                    'unsubscribe_job_dispatched' => false,
-                    'error' => $exception->getMessage(),
-                ];
+            if ($validatePermissions) {
+                $this->validateRequiredPermissions($credential);
             }
+        } catch (\Throwable $exception) {
+            $this->markWhatsappError($whatsapp, $exception->getMessage(), false);
+
+            Log::warning('Meta WhatsApp subscription check skipped', [
+                'meta_whatsapp_id' => $whatsapp->id,
+                'waba_id' => $whatsapp->waba_id,
+                'message' => $exception->getMessage(),
+            ]);
+
+            return [
+                'token_can_view_account' => false,
+                'is_subscribed' => false,
+                'subscribe_job_dispatched' => false,
+                'unsubscribe_job_dispatched' => false,
+                'error' => $exception->getMessage(),
+            ];
         }
 
-        if (! $this->tokenCanViewWhatsapp($whatsapp)) {
+        if (! $this->tokenCanViewWhatsapp($whatsapp, $credential)) {
             $subscribeJobDispatched = false;
 
             if ($whatsapp->status) {
-                MetaWhatsappSubscribeJob::dispatch($whatsapp->id);
+                MetaWhatsappSubscribeJob::dispatch(
+                    $whatsapp->id,
+                    $credential->accessToken->id,
+                    $credential->customerId,
+                );
                 $subscribeJobDispatched = true;
             }
 
@@ -98,20 +99,31 @@ class MetaWhatsappSubscriptionService
                 'is_subscribed' => false,
                 'subscribe_job_dispatched' => $subscribeJobDispatched,
                 'unsubscribe_job_dispatched' => false,
+                'meta_access_token_id' => $credential->accessToken->id,
+                'meta_app_id' => $credential->metaAppId,
             ];
         }
 
-        $isSubscribed = $this->refreshSubscriptionStatus($whatsapp);
+        $isSubscribed = $this->refreshSubscriptionStatus($whatsapp, $credential);
         $subscribeJobDispatched = false;
         $unsubscribeJobDispatched = false;
 
         if ($whatsapp->status && ! $isSubscribed) {
-            MetaWhatsappSubscribeJob::dispatch($whatsapp->id);
+            MetaWhatsappSubscribeJob::dispatch(
+                $whatsapp->id,
+                $credential->accessToken->id,
+                $credential->customerId,
+            );
             $subscribeJobDispatched = true;
         }
 
         if (! $whatsapp->status && $isSubscribed) {
-            MetaWhatsappUnsubscribeJob::dispatch($whatsapp->id, $whatsapp->waba_id);
+            MetaWhatsappUnsubscribeJob::dispatch(
+                $whatsapp->id,
+                $whatsapp->waba_id,
+                $credential->accessToken->id,
+                $credential->customerId,
+            );
             $unsubscribeJobDispatched = true;
         }
 
@@ -120,53 +132,61 @@ class MetaWhatsappSubscriptionService
             'is_subscribed' => $isSubscribed,
             'subscribe_job_dispatched' => $subscribeJobDispatched,
             'unsubscribe_job_dispatched' => $unsubscribeJobDispatched,
+            'meta_access_token_id' => $credential->accessToken->id,
+            'meta_app_id' => $credential->metaAppId,
         ];
     }
 
-    public function subscribe(MetaWhatsapp $whatsapp): array
-    {
-        $this->validateRequiredPermissions();
+    public function subscribe(
+        MetaWhatsapp $whatsapp,
+        ?int $metaAccessTokenId = null,
+        ?int $customerId = null,
+    ): array {
+        $credential = $this->credentials->resolve($whatsapp, $customerId, $metaAccessTokenId);
+        $this->validateRequiredPermissions($credential);
 
-        if (! $this->tokenCanViewWhatsapp($whatsapp)) {
+        if (! $this->tokenCanViewWhatsapp($whatsapp, $credential)) {
             Log::warning('Meta WhatsApp subscription will be attempted without prior visibility confirmation', [
                 'meta_whatsapp_id' => $whatsapp->id,
                 'waba_id' => $whatsapp->waba_id,
+                'meta_access_token_id' => $credential->accessToken->id,
+                'meta_app_id' => $credential->metaAppId,
             ]);
         }
 
-        $systemToken = $this->resolveSystemUserToken();
-
         try {
-            $response = $this->metaRequest('post', $this->wabaId($whatsapp).'/subscribed_apps', $systemToken);
-
+            $response = $this->metaRequest('post', $this->wabaId($whatsapp).'/subscribed_apps', $credential->token);
             $payload = $this->decodeResponse($response);
 
             if (($payload['success'] ?? false) !== true) {
                 throw new RuntimeException('Meta no confirmo la suscripcion WhatsApp: '.json_encode($payload, JSON_UNESCAPED_UNICODE));
             }
 
-            $whatsapp->forceFill([
-                'subscribed_apps' => $payload,
-                'is_subscribed_to_meta_app' => true,
-                'token_can_view_account' => true,
-                'subscription_checked_at' => now(),
-                'subscription_updated_at' => now(),
-                'subscription_last_error' => null,
-            ])->saveQuietly();
+            $whatsapp->forceFill($this->subscriptionAttributes(
+                credential: $credential,
+                payload: $payload,
+                isSubscribed: true,
+                tokenCanViewAccount: true,
+                updated: true,
+            ))->saveQuietly();
 
             Log::info('Meta WhatsApp subscription created', [
                 'meta_whatsapp_id' => $whatsapp->id,
                 'waba_id' => $whatsapp->waba_id,
+                'meta_access_token_id' => $credential->accessToken->id,
+                'meta_app_id' => $credential->metaAppId,
                 'response' => $payload,
             ]);
 
             return $payload;
         } catch (\Throwable $exception) {
-            $this->markWhatsappError($whatsapp, $exception->getMessage());
+            $this->markWhatsappError($whatsapp, $exception->getMessage(), null, $credential);
 
             Log::error('Meta WhatsApp subscription failed', [
                 'meta_whatsapp_id' => $whatsapp->id,
                 'waba_id' => $whatsapp->waba_id,
+                'meta_access_token_id' => $credential->accessToken->id,
+                'meta_app_id' => $credential->metaAppId,
                 'message' => $exception->getMessage(),
             ]);
 
@@ -176,17 +196,27 @@ class MetaWhatsappSubscriptionService
 
     public function unsubscribe(MetaWhatsapp $whatsapp): array
     {
-        return $this->unsubscribeByWabaId($whatsapp->waba_id, $whatsapp);
+        return $this->unsubscribeByWabaId(
+            $whatsapp->waba_id,
+            $whatsapp,
+            $whatsapp->subscription_meta_access_token_id ?: $whatsapp->meta_access_token_id,
+        );
     }
 
-    public function unsubscribeByWabaId(string $wabaId, ?MetaWhatsapp $whatsapp = null): array
-    {
-        $this->validateRequiredPermissions();
+    public function unsubscribeByWabaId(
+        string $wabaId,
+        ?MetaWhatsapp $whatsapp = null,
+        ?int $metaAccessTokenId = null,
+        ?int $customerId = null,
+    ): array {
+        $credential = $whatsapp
+            ? $this->credentials->resolve($whatsapp, $customerId, $metaAccessTokenId)
+            : $this->credentials->resolve(new MetaWhatsapp(['waba_id' => $wabaId]), $customerId, $metaAccessTokenId);
 
-        $systemToken = $this->resolveSystemUserToken();
+        $this->validateRequiredPermissions($credential);
 
         try {
-            $response = $this->metaRequest('delete', $this->cleanWabaId($wabaId).'/subscribed_apps', $systemToken);
+            $response = $this->metaRequest('delete', $this->cleanWabaId($wabaId).'/subscribed_apps', $credential->token);
             $payload = $this->decodeResponse($response);
 
             if (($payload['success'] ?? false) !== true) {
@@ -194,30 +224,33 @@ class MetaWhatsappSubscriptionService
             }
 
             if ($whatsapp) {
-                $whatsapp->forceFill([
-                    'subscribed_apps' => $payload,
-                    'is_subscribed_to_meta_app' => false,
-                    'subscription_checked_at' => now(),
-                    'subscription_updated_at' => now(),
-                    'subscription_last_error' => null,
-                ])->saveQuietly();
+                $whatsapp->forceFill($this->subscriptionAttributes(
+                    credential: $credential,
+                    payload: $payload,
+                    isSubscribed: false,
+                    updated: true,
+                ))->saveQuietly();
             }
 
             Log::info('Meta WhatsApp subscription cancelled', [
                 'meta_whatsapp_id' => $whatsapp?->id,
                 'waba_id' => $wabaId,
+                'meta_access_token_id' => $credential->accessToken->id,
+                'meta_app_id' => $credential->metaAppId,
                 'response' => $payload,
             ]);
 
             return $payload;
         } catch (\Throwable $exception) {
             if ($whatsapp) {
-                $this->markWhatsappError($whatsapp, $exception->getMessage());
+                $this->markWhatsappError($whatsapp, $exception->getMessage(), null, $credential);
             }
 
             Log::error('Meta WhatsApp unsubscribe failed', [
                 'meta_whatsapp_id' => $whatsapp?->id,
                 'waba_id' => $wabaId,
+                'meta_access_token_id' => $credential->accessToken->id,
+                'meta_app_id' => $credential->metaAppId,
                 'message' => $exception->getMessage(),
             ]);
 
@@ -225,19 +258,26 @@ class MetaWhatsappSubscriptionService
         }
     }
 
-    public function validateRequiredPermissions(): void
+    public function validateRequiredPermissions(MetaWhatsappCredential $credential): void
     {
         try {
-            $systemToken = $this->resolveSystemUserToken();
-            $response = $this->metaRequest('get', 'me/permissions', $systemToken);
+            $response = $this->metaRequest('get', 'me/permissions', $credential->token);
             $payload = $this->decodeResponse($response);
         } catch (\Throwable $exception) {
             Log::warning('Meta WhatsApp token permissions could not be validated before subscription', [
+                'meta_access_token_id' => $credential->accessToken->id,
+                'meta_app_id' => $credential->metaAppId,
                 'message' => $exception->getMessage(),
             ]);
 
             return;
         }
+
+        $credential->accessToken->forceFill([
+            'permissions_payload' => $payload,
+            'last_validated_at' => now(),
+            'last_error' => null,
+        ])->saveQuietly();
 
         $granted = collect($payload['data'] ?? [])
             ->filter(fn (array $item) => ($item['status'] ?? null) === 'granted')
@@ -248,47 +288,45 @@ class MetaWhatsappSubscriptionService
 
         if ($missing !== []) {
             Log::warning('Meta WhatsApp token permissions are missing from me/permissions; subscription will be attempted anyway', [
+                'meta_access_token_id' => $credential->accessToken->id,
+                'meta_app_id' => $credential->metaAppId,
                 'missing_permissions' => $missing,
             ]);
         }
     }
 
-    private function tokenCanViewWhatsapp(MetaWhatsapp $whatsapp): bool
+    private function tokenCanViewWhatsapp(MetaWhatsapp $whatsapp, MetaWhatsappCredential $credential): bool
     {
-        $systemToken = $this->resolveSystemUserToken();
-        $appId = $this->resolveMetaAppId();
-
         try {
-            $response = $this->metaRequest('get', $this->wabaId($whatsapp).'/subscribed_apps', $systemToken);
+            $response = $this->metaRequest('get', $this->wabaId($whatsapp).'/subscribed_apps', $credential->token);
             $payload = $this->decodeResponse($response);
             $isSubscribed = collect($payload['data'] ?? [])
-                ->contains(fn (array $item) => (string) $this->subscribedAppId($item) === (string) $appId);
+                ->contains(fn (array $item) => (string) $this->subscribedAppId($item) === (string) $credential->metaAppId);
 
-            $whatsapp->forceFill([
-                'subscribed_apps' => $payload,
-                'is_subscribed_to_meta_app' => $isSubscribed,
-                'token_can_view_account' => true,
-                'subscription_checked_at' => now(),
-                'subscription_last_error' => null,
-            ])->saveQuietly();
+            $whatsapp->forceFill($this->subscriptionAttributes(
+                credential: $credential,
+                payload: $payload,
+                isSubscribed: $isSubscribed,
+                tokenCanViewAccount: true,
+            ))->saveQuietly();
 
             Log::info('Meta WhatsApp visibility validated', [
                 'meta_whatsapp_id' => $whatsapp->id,
                 'waba_id' => $whatsapp->waba_id,
+                'meta_access_token_id' => $credential->accessToken->id,
+                'meta_app_id' => $credential->metaAppId,
                 'response' => $payload,
             ]);
 
             return true;
         } catch (\Throwable $exception) {
-            $whatsapp->forceFill([
-                'token_can_view_account' => false,
-                'subscription_checked_at' => now(),
-                'subscription_last_error' => $exception->getMessage(),
-            ])->saveQuietly();
+            $this->markWhatsappError($whatsapp, $exception->getMessage(), false, $credential);
 
             Log::warning('Meta WhatsApp is not visible for token', [
                 'meta_whatsapp_id' => $whatsapp->id,
                 'waba_id' => $whatsapp->waba_id,
+                'meta_access_token_id' => $credential->accessToken->id,
+                'meta_app_id' => $credential->metaAppId,
                 'message' => $exception->getMessage(),
             ]);
 
@@ -296,31 +334,29 @@ class MetaWhatsappSubscriptionService
         }
     }
 
-    private function refreshSubscriptionStatus(MetaWhatsapp $whatsapp): bool
+    private function refreshSubscriptionStatus(MetaWhatsapp $whatsapp, MetaWhatsappCredential $credential): bool
     {
-        $systemToken = $this->resolveSystemUserToken();
-        $appId = $this->resolveMetaAppId();
-
         try {
-            $response = $this->metaRequest('get', $this->wabaId($whatsapp).'/subscribed_apps', $systemToken);
+            $response = $this->metaRequest('get', $this->wabaId($whatsapp).'/subscribed_apps', $credential->token);
             $payload = $this->decodeResponse($response);
             $isSubscribed = collect($payload['data'] ?? [])
-                ->contains(fn (array $item) => (string) $this->subscribedAppId($item) === (string) $appId);
+                ->contains(fn (array $item) => (string) $this->subscribedAppId($item) === (string) $credential->metaAppId);
 
-            $whatsapp->forceFill([
-                'subscribed_apps' => $payload,
-                'is_subscribed_to_meta_app' => $isSubscribed,
-                'subscription_checked_at' => now(),
-                'subscription_last_error' => null,
-            ])->saveQuietly();
+            $whatsapp->forceFill($this->subscriptionAttributes(
+                credential: $credential,
+                payload: $payload,
+                isSubscribed: $isSubscribed,
+            ))->saveQuietly();
 
             return $isSubscribed;
         } catch (\Throwable $exception) {
-            $this->markWhatsappError($whatsapp, $exception->getMessage());
+            $this->markWhatsappError($whatsapp, $exception->getMessage(), null, $credential);
 
             Log::error('Meta WhatsApp subscription validation failed', [
                 'meta_whatsapp_id' => $whatsapp->id,
                 'waba_id' => $whatsapp->waba_id,
+                'meta_access_token_id' => $credential->accessToken->id,
+                'meta_app_id' => $credential->metaAppId,
                 'message' => $exception->getMessage(),
             ]);
 
@@ -328,12 +364,22 @@ class MetaWhatsappSubscriptionService
         }
     }
 
-    private function markWhatsappError(MetaWhatsapp $whatsapp, string $message, ?bool $tokenCanViewAccount = null): void
-    {
+    private function markWhatsappError(
+        MetaWhatsapp $whatsapp,
+        string $message,
+        ?bool $tokenCanViewAccount = null,
+        ?MetaWhatsappCredential $credential = null,
+    ): void {
         $attributes = [
             'subscription_checked_at' => now(),
             'subscription_last_error' => $message,
         ];
+
+        if ($credential) {
+            $attributes['subscription_meta_access_token_id'] = $credential->accessToken->id;
+            $attributes['subscription_meta_app_id'] = $credential->metaAppId;
+            $attributes['subscription_token_source'] = $credential->source;
+        }
 
         if ($tokenCanViewAccount !== null) {
             $attributes['token_can_view_account'] = $tokenCanViewAccount;
@@ -342,14 +388,32 @@ class MetaWhatsappSubscriptionService
         $whatsapp->forceFill($attributes)->saveQuietly();
     }
 
-    private function markAllWhatsappsError(string $message): int
-    {
-        return MetaWhatsapp::query()->update([
-            'token_can_view_account' => false,
+    private function subscriptionAttributes(
+        MetaWhatsappCredential $credential,
+        array $payload,
+        bool $isSubscribed,
+        ?bool $tokenCanViewAccount = null,
+        bool $updated = false,
+    ): array {
+        $attributes = [
+            'subscribed_apps' => $payload,
+            'is_subscribed_to_meta_app' => $isSubscribed,
+            'subscription_meta_access_token_id' => $credential->accessToken->id,
+            'subscription_meta_app_id' => $credential->metaAppId,
+            'subscription_token_source' => $credential->source,
             'subscription_checked_at' => now(),
-            'subscription_last_error' => $message,
-            'updated_at' => now(),
-        ]);
+            'subscription_last_error' => null,
+        ];
+
+        if ($updated) {
+            $attributes['subscription_updated_at'] = now();
+        }
+
+        if ($tokenCanViewAccount !== null) {
+            $attributes['token_can_view_account'] = $tokenCanViewAccount;
+        }
+
+        return $attributes;
     }
 
     private function subscribedAppId(array $item): ?string
@@ -366,43 +430,6 @@ class MetaWhatsappSubscriptionService
         $appId = trim((string) $appId);
 
         return $appId === '' ? null : $appId;
-    }
-
-    private function resolveMetaAppId(): string
-    {
-        $appId = MetaAccessToken::query()
-            ->where('token_type', MetaAccessToken::TYPE_USER_ACCESS_TOKEN)
-            ->where('is_active', true)
-            ->whereNotNull('meta_app_id')
-            ->latest('id')
-            ->value('meta_app_id');
-
-        if (blank($appId)) {
-            throw new RuntimeException('No hay meta_app_id activo en meta_access_tokens con token_type=user_access_token para crear la suscripcion WhatsApp.');
-        }
-
-        return (string) $appId;
-    }
-
-    private function resolveSystemUserToken(): string
-    {
-        $activeLongLivedTokens = MetaAccessToken::query()
-            ->where('is_active', true)
-            ->whereNotNull('long_lived_token')
-            ->where('long_lived_token', '<>', '');
-
-        $token = (clone $activeLongLivedTokens)
-            ->where('token_type', MetaAccessToken::TYPE_SYSTEM_ACCESS_TOKEN)
-            ->latest('id')
-            ->value('long_lived_token') ?: (clone $activeLongLivedTokens)
-                ->latest('id')
-                ->value('long_lived_token');
-
-        if (blank($token)) {
-            throw new RuntimeException('No hay system_user_token activo en meta_access_tokens.long_lived_token para consultar suscripciones WhatsApp.');
-        }
-
-        return (string) $token;
     }
 
     private function metaRequest(string $method, string $path, string $token, array $params = []): Response

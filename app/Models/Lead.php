@@ -194,7 +194,7 @@ class Lead extends Model
 
     public static function metaMappableFields(): array
     {
-        return collect((new static())->getFillable())
+        return collect((new static)->getFillable())
             ->reject(fn ($field) => in_array($field, [
                 'id',
                 'customer_id',
@@ -211,6 +211,9 @@ class Lead extends Model
 
     public static function integrationMappableFields(): array
     {
-        return static::metaMappableFields();
+        return collect((new static)->getFillable())
+            ->unique()
+            ->values()
+            ->all();
     }
 }
