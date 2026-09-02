@@ -656,6 +656,7 @@ class GeneralLeadsDashboardService
                 'cpm_value' => (float) ($cost->cpm_value ?? 0),
                 'conversions_value' => (float) ($cost->conversions_value ?? 0),
                 'roas_value' => $cost->roas_value !== null ? (float) $cost->roas_value : null,
+                'conversion_events_value' => (array) ($cost->conversion_events_value ?? []),
                 'leads_value' => $count,
                 'qualified_value' => $qualified,
                 'unqualified_value' => max(0, $count - $qualified),
@@ -679,6 +680,7 @@ class GeneralLeadsDashboardService
         $totalCost = array_sum(array_column($rows, 'cost_value'));
         $totalImpressions = array_sum(array_column($rows, 'impressions_value'));
         $totalClicks = array_sum(array_column($rows, 'clicks_value'));
+        $totalConversionEvents = $this->sumConversionEvents($rows);
 
         return [
             'title' => $title,
@@ -696,6 +698,7 @@ class GeneralLeadsDashboardService
                 'cpm_value' => $totalImpressions > 0 ? ($totalCost / $totalImpressions) * 1000 : 0,
                 'conversions_value' => array_sum(array_column($rows, 'conversions_value')),
                 'roas_value' => $validRoas === [] ? null : array_sum($validRoas) / count($validRoas),
+                'conversion_events_value' => $totalConversionEvents,
                 'leads_value' => $totalLeads,
                 'qualified_value' => array_sum(array_column($rows, 'qualified_value')),
                 'unqualified_value' => array_sum(array_column($rows, 'unqualified_value')),
@@ -745,7 +748,60 @@ class GeneralLeadsDashboardService
             $formatted['url'] = $row['url'];
         }
 
+        $conversionEvents = $this->formatConversionEvents($row['conversion_events_value'] ?? []);
+        if ($conversionEvents !== []) {
+            $formatted['conversion_events'] = $conversionEvents;
+        }
+
         return $formatted;
+    }
+
+    private function sumConversionEvents(array $rows): array
+    {
+        $events = [];
+
+        foreach ($rows as $row) {
+            foreach ((array) ($row['conversion_events_value'] ?? []) as $event) {
+                $eventId = (string) ($event['event_id'] ?? '');
+                $name = (string) ($event['name'] ?? '');
+                $key = $eventId !== '' ? $eventId : $name;
+
+                if ($key === '') {
+                    continue;
+                }
+
+                $events[$key] ??= [
+                    'event_id' => $eventId,
+                    'name' => $name,
+                    'conversions_value' => 0.0,
+                ];
+                $events[$key]['conversions_value'] += (float) ($event['conversions_value'] ?? 0);
+            }
+        }
+
+        return $events;
+    }
+
+    private function formatConversionEvents(array $events): array
+    {
+        return collect($events)
+            ->map(function (array $event) {
+                $conversions = (float) ($event['conversions_value'] ?? 0);
+
+                return [
+                    'event_id' => (string) ($event['event_id'] ?? ''),
+                    'name' => GeneralLeadsPresentation::title($event['name'] ?? null, 'Evento Sin Nombre'),
+                    'quantity' => number_format($conversions, 2, ',', '.'),
+                    'quantity_value' => $conversions,
+                ];
+            })
+            ->filter(fn (array $event) => $event['quantity_value'] > 0)
+            ->sortBy([
+                ['quantity_value', 'desc'],
+                ['name', 'asc'],
+            ])
+            ->values()
+            ->all();
     }
 
     private function catalogOptions(GeneralLeadsFilters $filters, string $dimension): array

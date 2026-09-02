@@ -15,6 +15,8 @@
     $selectedCurrencyId = old('default_currency_id', $customer?->default_currency_id ?? ($defaultCurrencyId ?? null));
     $defaultLeadValue = old('default_lead_value', $customer?->default_lead_value ?? 100000);
     $selectedMetaPageIds = old('meta_page_ids', $selectedMetaPageIds ?? []);
+    $selectedMetaAdAccountIds = old('meta_ad_account_ids', $selectedMetaAdAccountIds ?? []);
+    $defaultMetaAdAccountIds = old('default_meta_ad_account_ids', $defaultMetaAdAccountIds ?? []);
     $selectedMetaWhatsappIds = old('meta_whatsapp_ids', $selectedMetaWhatsappIds ?? []);
 @endphp
 
@@ -185,7 +187,12 @@
         </div>
     </div>
 
-    @include('customers.partials.meta-ad-accounts', ['customer' => $customer])
+    @include('customers.partials.meta-ad-accounts', [
+        'customer' => $customer,
+        'metaAdAccountsOptions' => $metaAdAccounts ?? collect(),
+        'selectedMetaAdAccountIds' => $selectedMetaAdAccountIds,
+        'defaultMetaAdAccountIds' => $defaultMetaAdAccountIds,
+    ])
 
     @include('customers.partials.meta-whatsapps', [
         'customer' => $customer,

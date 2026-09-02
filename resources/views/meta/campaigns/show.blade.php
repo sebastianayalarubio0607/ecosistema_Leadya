@@ -11,9 +11,11 @@
 @endsection
 
 @section('content')
+    @php($customerNames = ($campaign->account?->customers ?? collect())->pluck('name')->implode(', '))
+
     <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 space-y-3">
         <div class="text-sm text-white/60">
-            Customer: <span class="text-white/85 font-semibold">{{ $campaign->account?->customer?->name ?? '—' }}</span>
+            Clientes: <span class="text-white/85 font-semibold">{{ $customerNames !== '' ? $customerNames : 'Sin asignar' }}</span>
         </div>
         <div class="text-sm text-white/60">
             Account:

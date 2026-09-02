@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Integration;
 
 use App\Http\Controllers\Controller;
+use App\Http\Services\Integration\HubspotPipelineSyncService;
 use App\Http\Services\Integration\KommoPipelineSyncService;
 use App\Models\Customer;
 use App\Models\Integration;
@@ -19,7 +20,7 @@ use Illuminate\Validation\ValidationException;
 class IntegrationWebController extends Controller
 {
     private const DEFAULT_GOHIGHLEVEL_URL = 'https://services.leadconnectorhq.com/contacts/upsert';
-    private const VARIABLE_MAPPING_INTEGRATION_TYPES = ['atom', 'zoho', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel'];
+    private const VARIABLE_MAPPING_INTEGRATION_TYPES = ['atom', 'zoho', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad'];
 
     public function index(Request $request)
     {
@@ -261,6 +262,34 @@ class IntegrationWebController extends Controller
             );
     }
 
+    public function syncHubspotDealStages(Integration $integration, HubspotPipelineSyncService $service): RedirectResponse
+    {
+        $integration->loadMissing('integrationtype:id,name');
+
+        if ($this->normalizeIntegrationTypeName(optional($integration->integrationtype)->name) !== 'hubspot') {
+            return redirect()
+                ->route('integrations.show', $integration)
+                ->withErrors(['sync' => 'Esta integracion no permite sincronizar etapas de HubSpot.']);
+        }
+
+        try {
+            $result = $service->syncCrmStates($integration);
+        } catch (\Throwable $exception) {
+            Log::error('HUBSPOT CRM STATES SYNC FAILED', [
+                'integration_id' => $integration->id,
+                'message' => $exception->getMessage(),
+            ]);
+
+            return redirect()
+                ->route('integrations.show', $integration)
+                ->withErrors(['sync' => $exception->getMessage()]);
+        }
+
+        return redirect()
+            ->route('integrations.show', $integration)
+            ->with('success', "Etapas de HubSpot sincronizadas. Estados creados: {$result['created']}. Estados actualizados: {$result['updated']}.");
+    }
+
     private function rules(Request $request, bool $updating = false, ?Integration $integration = null): array
     {
         $typeName = $this->normalizeIntegrationTypeName(
@@ -272,7 +301,7 @@ class IntegrationWebController extends Controller
             'description' => 'nullable|string',
             'integrationtype_id' => 'required|exists:integrationtypes,id',
             'customer_id' => 'required|exists:customers,id',
-            'url' => (in_array($typeName, ['hubspot', 'gohighlevel', 'atom', 'lety'], true) ? 'nullable' : 'required').'|url',
+            'url' => (in_array($typeName, ['gohighlevel', 'gohighlevel_oportunidad', 'atom', 'lety'], true) ? 'nullable' : 'required').'|url',
             'urldestino' => ['nullable', 'url', 'max:2048'],
             'status' => 'required|boolean',
             'crm_Id_phone' => ['nullable', 'string', 'max:255'],
@@ -301,6 +330,7 @@ class IntegrationWebController extends Controller
             'username' => ['nullable', 'string', 'max:255'],
             'password' => ['nullable', 'string'],
             'body' => ['nullable', 'string'],
+            'body_oportunidad' => ['nullable', 'string'],
             'url_consulta_lead' => ['nullable', 'url', 'max:255'],
             'url_negocio' => ['nullable', 'url', 'max:255'],
             'url_creacionlead' => ['nullable', 'url', 'max:255'],
@@ -387,17 +417,16 @@ class IntegrationWebController extends Controller
 
         if ($typeName === 'hubspot') {
             $rules['access_token'] = $this->sensitiveValueRule($updating, $integration, $typeName, 'access_token');
-            $rules['url_consulta_lead'] = ['required', 'url', 'max:255'];
-            $rules['url_negocio'] = ['required', 'url', 'max:255'];
-            $rules['url_creacionlead'] = ['required', 'url', 'max:255'];
-            $rules['dealname'] = ['required', 'string'];
-            $rules['dealstage'] = ['required', 'string', 'max:255'];
             $rules['body'] = ['required', 'string'];
+            $rules['body_oportunidad'] = ['required', 'string'];
         }
 
-        if ($typeName === 'gohighlevel') {
+        if (in_array($typeName, ['gohighlevel', 'gohighlevel_oportunidad'], true)) {
             $rules['tokent'] = $this->sensitiveValueRule($updating, $integration, $typeName, 'tokent');
             $rules['body'] = ['required', 'string'];
+            if ($typeName === 'gohighlevel_oportunidad') {
+                $rules['body_oportunidad'] = ['required', 'string'];
+            }
         }
 
         if ($typeName === 'kommopipeline') {
@@ -436,7 +465,7 @@ class IntegrationWebController extends Controller
             Integrationtype::whereKey($validated['integrationtype_id'])->value('name')
         );
 
-        if (!in_array($typeName, ['hubspot', 'gohighlevel', 'atom', 'lety'], true) && empty($validated['url'])) {
+        if (!in_array($typeName, ['hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'atom', 'lety'], true) && empty($validated['url'])) {
             throw ValidationException::withMessages([
                 'url' => 'El campo URL es obligatorio.',
             ]);
@@ -539,17 +568,28 @@ class IntegrationWebController extends Controller
             $validated = $this->validateCrmIdPrefixPayload($validated, 'HubSpot');
         }
 
-        if ($typeName === 'gohighlevel') {
+        if (in_array($typeName, ['gohighlevel', 'gohighlevel_oportunidad'], true)) {
             $validated = $this->clearKommoFields($validated);
             $validated = $this->clearZohoFieldsPreservingToken($validated);
             $validated = $this->clearFreshworksFields($validated);
             $validated = $this->clearSalesforceCredentialFields($validated);
-            $validated = $this->clearHubspotFields($validated);
+            if ($typeName === 'gohighlevel_oportunidad') {
+                $validated['url_consulta_lead'] = null;
+                $validated['url_negocio'] = null;
+                $validated['url_creacionlead'] = null;
+                $validated['dealname'] = null;
+                $validated['dealstage'] = null;
+            } else {
+                $validated = $this->clearHubspotFields($validated);
+            }
             $validated = $this->validateGohighlevelPayload($validated);
+            if ($typeName === 'gohighlevel_oportunidad') {
+                $validated = $this->validateGohighlevelOpportunityPayload($validated);
+            }
             $validated = $this->validateCrmIdPrefixPayload($validated, 'GoHighLevel');
         }
 
-        if (!in_array($typeName, ['google_sheets', 'kommo', 'kommopipeline', 'atom', 'lety', 'zoho', 'freshworks', 'salesforce', 'monday', 'hubspot', 'gohighlevel'], true)) {
+        if (!in_array($typeName, ['google_sheets', 'kommo', 'kommopipeline', 'atom', 'lety', 'zoho', 'freshworks', 'salesforce', 'monday', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad'], true)) {
             $validated = $this->clearHubspotFields($validated);
             $validated = $this->clearCrmIdPrefixFields($validated);
         }
@@ -640,6 +680,7 @@ class IntegrationWebController extends Controller
 
         return match ($normalized) {
             'go_high_level', 'leadconnector', 'lead_connector' => 'gohighlevel',
+            'gohighleve_oportunidad', 'gohighlevel_opportunity' => 'gohighlevel_oportunidad',
             'kommo_pipeline' => 'kommopipeline',
             'atom_webhook', 'atom_webhooks' => 'atom',
             'lety_webhook', 'lety_webhooks' => 'lety',
@@ -849,12 +890,9 @@ class IntegrationWebController extends Controller
     {
         $required = [
             'tokent' => 'access_token',
-            'url_consulta_lead' => 'url_consulta_lead',
-            'url_negocio' => 'url_negocio',
-            'url_creacionlead' => 'url_creacionlead',
-            'dealname' => 'dealname',
-            'dealstage' => 'dealstage',
+            'url' => 'URL base HubSpot',
             'body' => 'body',
+            'body_oportunidad' => 'body_oportunidad',
         ];
 
         $messages = [];
@@ -864,12 +902,18 @@ class IntegrationWebController extends Controller
             }
         }
 
-        if (empty($payload['url'])) {
-            $payload['url'] = (string) ($payload['url_consulta_lead'] ?? '');
-        }
+        $baseUrl = $this->normalizeHubspotBaseUrl((string) ($payload['url'] ?? ''));
+        $payload['url'] = $baseUrl;
+        $payload['url_consulta_lead'] = $baseUrl . '/crm/v3/objects/contacts/search';
+        $payload['url_creacionlead'] = $baseUrl . '/crm/v3/objects/contacts';
+        $payload['url_negocio'] = $baseUrl . '/crm/v3/objects/deals';
 
         if (!empty($payload['body']) && !$this->isValidJsonTemplate($payload['body'])) {
             $messages['body'] = 'body debe ser un JSON valido.';
+        }
+
+        if (!empty($payload['body_oportunidad']) && !$this->isValidJsonTemplate($payload['body_oportunidad'])) {
+            $messages['body_oportunidad'] = 'body_oportunidad debe ser un JSON valido.';
         }
 
         if ($messages !== []) {
@@ -877,6 +921,19 @@ class IntegrationWebController extends Controller
         }
 
         return $payload;
+    }
+
+    private function normalizeHubspotBaseUrl(string $url): string
+    {
+        $parts = parse_url(trim($url));
+
+        if (!isset($parts['scheme'], $parts['host'])) {
+            throw ValidationException::withMessages([
+                'url' => 'La URL base de HubSpot debe incluir protocolo y dominio.',
+            ]);
+        }
+
+        return $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
     }
 
     private function validateGohighlevelPayload(array $payload): array
@@ -903,6 +960,23 @@ class IntegrationWebController extends Controller
 
         if ($messages !== []) {
             throw ValidationException::withMessages($messages);
+        }
+
+        return $payload;
+    }
+
+    private function validateGohighlevelOpportunityPayload(array $payload): array
+    {
+        if (empty($payload['body_oportunidad'])) {
+            throw ValidationException::withMessages([
+                'body_oportunidad' => 'Para GoHighLevel-Oportunidad el campo body_oportunidad es obligatorio.',
+            ]);
+        }
+
+        if (! $this->isValidGohighlevelJsonTemplate($payload['body_oportunidad'])) {
+            throw ValidationException::withMessages([
+                'body_oportunidad' => 'body_oportunidad debe ser un JSON valido y solo acepta variables {{$lead->campo}} simples.',
+            ]);
         }
 
         return $payload;
@@ -1352,6 +1426,7 @@ class IntegrationWebController extends Controller
 
     private function clearHubspotFields(array $payload): array
     {
+        $payload['body_oportunidad'] = null;
         $payload['url_consulta_lead'] = null;
         $payload['url_negocio'] = null;
         $payload['url_creacionlead'] = null;

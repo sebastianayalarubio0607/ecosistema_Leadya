@@ -1,13 +1,14 @@
 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
     <div class="md:col-span-2">
-        <label class="block mb-1 text-white/70">Ad Account (Customer → Account)</label>
+        <label class="block mb-1 text-white/70">Ad Account (Clientes -> Account)</label>
         @php($selected = old('meta_ad_account_id', $campaign->meta_ad_account_id ?? ''))
         <select name="meta_ad_account_id" required
                 class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
             <option value="">-- Seleccionar --</option>
             @foreach($accounts as $a)
+                @php($customerNames = ($a->customers ?? collect())->pluck('name')->implode(', '))
                 <option value="{{ $a->id }}" @selected((string)$selected === (string)$a->id)>
-                    {{ $a->customer?->name ?? '—' }} — {{ $a->name }} ({{ $a->meta_account_id }})
+                    {{ $customerNames !== '' ? $customerNames : 'Sin asignar' }} - {{ $a->name }} ({{ $a->meta_account_id }})
                 </option>
             @endforeach
         </select>

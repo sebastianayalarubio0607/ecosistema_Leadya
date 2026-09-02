@@ -15,7 +15,7 @@ class MetaAdAccountObserver
 
     public function updated(MetaAdAccount $metaAdAccount): void
     {
-        if ($metaAdAccount->wasChanged(['customer_id', 'meta_account_id', 'name', 'status'])) {
+        if ($metaAdAccount->wasChanged(['meta_account_id', 'name', 'status'])) {
             MetaAdAccountSubscriptionCheckJob::dispatch($metaAdAccount->id)->afterCommit();
         }
     }

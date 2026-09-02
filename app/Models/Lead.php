@@ -46,6 +46,7 @@ class Lead extends Model
         'lenguaje',
         'geo',
         'crm_id',
+        'crm_id_oportunidad',
         'crm_state',
         'meta_id_ad',
         'g_ad',

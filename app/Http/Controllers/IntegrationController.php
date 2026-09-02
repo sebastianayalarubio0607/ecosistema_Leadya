@@ -77,7 +77,7 @@ class IntegrationController extends Controller
                 : null;
         }
 
-        if ($typeName === 'gohighlevel' && empty($validated['url'])) {
+        if (in_array($typeName, ['gohighlevel', 'gohighlevel_oportunidad'], true) && empty($validated['url'])) {
             $validated['url'] = self::DEFAULT_GOHIGHLEVEL_URL;
         }
 
@@ -153,12 +153,13 @@ class IntegrationController extends Controller
             'name' => 'required|string|max:255',
             'description' => 'nullable|string',
             'integrationtype_id' => 'required|exists:integrationtypes,id',
-            'url' => ($typeName === 'gohighlevel' ? 'nullable' : 'required').'|url',
+            'url' => (in_array($typeName, ['gohighlevel', 'gohighlevel_oportunidad'], true) ? 'nullable' : 'required').'|url',
             'urldestino' => ['nullable', 'url', 'max:2048'],
             'status' => 'required|boolean',
             'priority' => ['nullable', 'integer', 'min:0'],
             'tokent' => 'nullable|string',
             'body' => ['nullable', 'string'],
+            'body_oportunidad' => ['nullable', 'string'],
             'crm_Id_phone' => ['nullable', 'string', 'max:255'],
             'crm_Id_service' => ['nullable', 'string', 'max:255'],
             'crm_Id_fuente' => ['nullable', 'string', 'max:255'],
@@ -179,6 +180,12 @@ class IntegrationController extends Controller
             $rules['body'] = ['required', 'string'];
         }
 
+        if ($typeName === 'gohighlevel_oportunidad') {
+            $rules['tokent'] = ['required', 'string'];
+            $rules['body'] = ['required', 'string'];
+            $rules['body_oportunidad'] = ['required', 'string'];
+        }
+
         return $rules;
     }
 
@@ -194,6 +201,7 @@ class IntegrationController extends Controller
 
         return match ($normalized) {
             'go_high_level', 'leadconnector', 'lead_connector' => 'gohighlevel',
+            'gohighleve_oportunidad', 'gohighlevel_opportunity' => 'gohighlevel_oportunidad',
             default => $normalized,
         };
     }

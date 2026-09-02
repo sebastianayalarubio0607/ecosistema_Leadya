@@ -1,6 +1,7 @@
 @php
     $columns = ['name' => 'Nombre', 'cost' => 'Costo', 'impressions' => 'Impresiones', 'clicks' => 'Clicks', 'ctr' => 'CTR', 'cpc' => 'CPC', 'cpm' => 'CPM', 'conversions' => 'Conversiones Totales', 'roas' => 'ROAS', 'leads' => 'Leads en LQ', 'qualified_leads' => 'Leads en LQ Calificados', 'unqualified_leads' => 'Leads en LQ No Calificados', 'cpl' => 'CPL'];
     $livewireSort = $livewireSort ?? false;
+    $isGoogleSection = str_starts_with((string) ($table['section'] ?? ''), 'google_');
 @endphp
 
 <section class="rounded-2xl border border-white/10 bg-zinc-950/25 p-4 backdrop-blur" data-sortable-table-wrap>
@@ -45,7 +46,13 @@
                         class="text-white/80 hover:bg-white/5 {{ $rowUrl ? 'cursor-pointer focus:bg-white/5 focus:outline-none focus:ring-2 focus:ring-indigo-300/50' : '' }}"
                     >
                         @foreach(array_keys($columns) as $key)
-                            <td class="px-3 py-2 whitespace-nowrap">{{ $row[$key] }}</td>
+                            <td class="px-3 py-2 whitespace-nowrap" @if($key === 'conversions') data-sort-value="{{ $row[$key] ?? '' }}" @endif>
+                                @if($isGoogleSection && $key === 'conversions')
+                                    @include('dashboard.partials.google-conversions-cell', ['row' => $row])
+                                @else
+                                    {{ $row[$key] }}
+                                @endif
+                            </td>
                         @endforeach
                     </tr>
                 @empty
@@ -55,7 +62,13 @@
             <tfoot class="bg-white/5 text-white">
                 <tr>
                     @foreach(array_keys($columns) as $key)
-                        <td class="px-3 py-2 whitespace-nowrap font-semibold">{{ $table['totals'][$key] }}</td>
+                        <td class="px-3 py-2 whitespace-nowrap font-semibold" @if($key === 'conversions') data-sort-value="{{ $table['totals'][$key] ?? '' }}" @endif>
+                            @if($isGoogleSection && $key === 'conversions')
+                                @include('dashboard.partials.google-conversions-cell', ['row' => $table['totals']])
+                            @else
+                                {{ $table['totals'][$key] }}
+                            @endif
+                        </td>
                     @endforeach
                 </tr>
             </tfoot>

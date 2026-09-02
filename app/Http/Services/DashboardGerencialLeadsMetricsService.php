@@ -556,7 +556,10 @@ class DashboardGerencialLeadsMetricsService
         if ($customerId !== null || $integrationId !== null) {
             $q->whereHas('ad.adSet.campaign.account', function ($qq) use ($customerId, $integrationId) {
                 if ($customerId !== null) {
-                    $qq->where('customer_id', $customerId);
+                    $qq->where(function ($accountQuery) use ($customerId): void {
+                        $accountQuery->where('customer_id', $customerId)
+                            ->orWhereHas('customers', fn ($customers) => $customers->whereKey($customerId));
+                    });
                 }
 
                 // integration_id es opcional (depende del esquema)

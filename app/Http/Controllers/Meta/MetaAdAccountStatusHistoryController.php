@@ -14,8 +14,19 @@ class MetaAdAccountStatusHistoryController extends Controller
     public function index(Request $request): View
     {
         $items = MetaAdAccountStatusHistory::query()
-            ->with(['customer:id,name', 'account:id,meta_account_id,name', 'webhookEvent:id,object,field'])
-            ->when($request->filled('customer_id'), fn ($query) => $query->where('customer_id', $request->integer('customer_id')))
+            ->with([
+                'customer:id,name',
+                'account.customers' => fn ($query) => $query->select(['customers.id', 'customers.name']),
+                'webhookEvent:id,object,field',
+            ])
+            ->when($request->filled('customer_id'), function ($query) use ($request): void {
+                $customerId = $request->integer('customer_id');
+
+                $query->where(function ($innerQuery) use ($customerId): void {
+                    $innerQuery->where('customer_id', $customerId)
+                        ->orWhereHas('account.customers', fn ($customers) => $customers->whereKey($customerId));
+                });
+            })
             ->when($request->filled('meta_ad_account_id'), fn ($query) => $query->where('meta_ad_account_id', $request->integer('meta_ad_account_id')))
             ->when($request->filled('estado_meta'), function ($query) use ($request) {
                 $value = $request->string('estado_meta')->toString();

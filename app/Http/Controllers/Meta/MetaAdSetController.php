@@ -12,7 +12,7 @@ class MetaAdSetController extends Controller
 {
     public function index(Request $request)
     {
-        $q = MetaAdSet::with('campaign.account.customer');
+        $q = MetaAdSet::with('campaign.account.customers');
 
         if ($request->filled('search')) {
             $s = $request->string('search')->toString();
@@ -30,7 +30,7 @@ class MetaAdSetController extends Controller
     public function create()
     {
         return view('meta.ad_sets.create', [
-            'campaigns' => MetaCampaign::with('account.customer')->orderBy('name')->get(),
+            'campaigns' => MetaCampaign::with('account.customers')->orderBy('name')->get(),
         ]);
     }
 
@@ -52,18 +52,18 @@ class MetaAdSetController extends Controller
 
     public function show(MetaAdSet $ad_set)
     {
-        $ad_set->load('campaign.account.customer');
+        $ad_set->load('campaign.account.customers');
 
         return view('meta.ad_sets.show', compact('ad_set'));
     }
 
     public function edit(MetaAdSet $ad_set)
     {
-        $ad_set->load('campaign.account.customer');
+        $ad_set->load('campaign.account.customers');
 
         return view('meta.ad_sets.edit', [
             'ad_set' => $ad_set,
-            'campaigns' => MetaCampaign::with('account.customer')->orderBy('name')->get(),
+            'campaigns' => MetaCampaign::with('account.customers')->orderBy('name')->get(),
         ]);
     }
 

@@ -12,7 +12,7 @@ class MetaCampaignController extends Controller
 {
     public function index(Request $request)
     {
-        $q = MetaCampaign::with('account.customer');
+        $q = MetaCampaign::with('account.customers');
 
         if ($request->filled('search')) {
             $s = $request->string('search')->toString();
@@ -30,7 +30,7 @@ class MetaCampaignController extends Controller
     public function create()
     {
         return view('meta.campaigns.create', [
-            'accounts' => MetaAdAccount::with('customer')->orderBy('name')->get(),
+            'accounts' => MetaAdAccount::with('customers')->orderBy('name')->get(),
         ]);
     }
 
@@ -52,18 +52,18 @@ class MetaCampaignController extends Controller
 
     public function show(MetaCampaign $campaign)
     {
-        $campaign->load('account.customer');
+        $campaign->load('account.customers');
 
         return view('meta.campaigns.show', compact('campaign'));
     }
 
     public function edit(MetaCampaign $campaign)
     {
-        $campaign->load('account.customer');
+        $campaign->load('account.customers');
 
         return view('meta.campaigns.edit', [
             'campaign' => $campaign,
-            'accounts' => MetaAdAccount::with('customer')->orderBy('name')->get(),
+            'accounts' => MetaAdAccount::with('customers')->orderBy('name')->get(),
         ]);
     }
 

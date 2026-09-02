@@ -8,9 +8,9 @@ use App\Models\MetaAdAccountStatusHistory;
 use App\Models\MetaPage;
 use App\Models\MetaPageStatusHistory;
 use App\Models\MetaWebhookEvent;
+use App\Support\MetaAdAccountId;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 use RuntimeException;
 
 class MetaAssetStatusSyncService
@@ -136,11 +136,11 @@ class MetaAssetStatusSyncService
         }
 
         $account = MetaAdAccount::query()
-            ->whereIn('meta_account_id', $this->accountIdCandidates($accountId))
-            ->whereNotNull('customer_id')
+            ->whereIn('meta_account_id', MetaAdAccountId::candidates($accountId))
             ->first(['id', 'customer_id']);
 
-        return $account?->customer_id ? (int) $account->customer_id : null;
+        return $account?->resolveWhatsappLeadCustomerId()
+            ?: ($account?->customer_id ? (int) $account->customer_id : null);
     }
 
     private function sync(
@@ -157,7 +157,12 @@ class MetaAssetStatusSyncService
 
         if ($this->shouldSyncAdAccounts($assetType)) {
             MetaAdAccount::query()
-                ->when($customerId, fn ($query) => $query->where('customer_id', $customerId))
+                ->when($customerId, function ($query) use ($customerId): void {
+                    $query->where(function ($innerQuery) use ($customerId): void {
+                        $innerQuery->where('customer_id', $customerId)
+                            ->orWhereHas('customers', fn ($customers) => $customers->whereKey($customerId));
+                    });
+                })
                 ->whereNotNull('meta_account_id')
                 ->orderBy('id')
                 ->chunkById(100, function ($accounts) use (&$stats, $queryType, $webhookEvent, $globalToken) {
@@ -260,7 +265,7 @@ class MetaAssetStatusSyncService
                 throw new RuntimeException('No hay token activo para consultar cuentas publicitarias de Meta.');
             }
 
-            $payload = $this->graph->get($this->normalizeActId((string) $account->meta_account_id), [
+            $payload = $this->graph->get(MetaAdAccountId::act((string) $account->meta_account_id), [
                 'fields' => 'id,account_id,name,account_status,disable_reason',
                 'access_token' => $globalToken,
             ]);
@@ -332,7 +337,7 @@ class MetaAssetStatusSyncService
         ?string $error = null,
     ): void {
         MetaAdAccountStatusHistory::create([
-            'customer_id' => $account->customer_id,
+            'customer_id' => $account->resolveWhatsappLeadCustomerId() ?: $account->customer_id,
             'meta_ad_account_id' => $account->id,
             'meta_webhook_event_id' => $webhookEvent?->id,
             'meta_account_id' => $account->meta_account_id,
@@ -460,25 +465,6 @@ class MetaAssetStatusSyncService
         $published = (bool) $payload['is_published'];
 
         return [$published ? '1' : '0', $published ? 'Publicada' : 'No publicada'];
-    }
-
-    private function normalizeActId(string $value): string
-    {
-        $value = trim($value);
-
-        return Str::startsWith($value, 'act_') ? $value : 'act_'.$value;
-    }
-
-    private function accountIdCandidates(string $value): array
-    {
-        $value = trim($value);
-        $withoutPrefix = Str::startsWith($value, 'act_') ? Str::after($value, 'act_') : $value;
-
-        return array_values(array_unique(array_filter([
-            $value,
-            $withoutPrefix,
-            'act_'.$withoutPrefix,
-        ])));
     }
 
     private function stringOrNull(mixed $value): ?string

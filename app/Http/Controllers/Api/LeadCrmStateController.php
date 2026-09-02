@@ -25,14 +25,17 @@ class LeadCrmStateController extends Controller
             return response()->json(['message' => 'Integration not found'], 404);
         }
 
+        $integration->loadMissing('integrationtype:id,name');
+
         $data = $this->normalizeWebhookPayload($request);
         $statuses = data_get($data, 'leads.status', []);
         $updates = data_get($data, 'leads.update', []);
         $isKommoStatusPayload = is_array($statuses) && count($statuses) > 0;
         $isKommoUpdatePayload = is_array($updates) && count($updates) > 0;
         $isFreshworksPayload = $this->isFreshworksPayload($data);
+        $isHubspotPayload = $this->isHubspotPayload($integration, $data);
 
-        if (! $isKommoStatusPayload && ! $isKommoUpdatePayload && ! $isFreshworksPayload) {
+        if (! $isKommoStatusPayload && ! $isKommoUpdatePayload && ! $isFreshworksPayload && ! $isHubspotPayload) {
             Log::warning('Webhook sin payload soportado para actualizar crm_state', [
                 'public_key' => $public_key,
                 'content_type' => $request->header('content-type'),
@@ -40,7 +43,7 @@ class LeadCrmStateController extends Controller
             ]);
 
             return response()->json([
-                'message' => 'Invalid payload: leads.status, leads.update or Freshworks fields not found',
+                'message' => 'Invalid payload: leads.status, leads.update, Freshworks or HubSpot fields not found',
             ], 422);
         }
 
@@ -110,6 +113,17 @@ class LeadCrmStateController extends Controller
             }
         }
 
+        if ($isHubspotPayload) {
+            $this->processHubspotDealUpdates(
+                $data,
+                $integration,
+                $crmIdPrefix,
+                $historyService,
+                $updated,
+                $notFound
+            );
+        }
+
         return response()->json([
             'message' => 'OK',
             'integration_id' => $integration->id,
@@ -134,6 +148,77 @@ class LeadCrmStateController extends Controller
         }
 
         return $data;
+    }
+
+    private function isHubspotPayload(Integration $integration, array $data): bool
+    {
+        if (strtolower((string) optional($integration->integrationtype)->name) !== 'hubspot') {
+            return false;
+        }
+
+        $events = $data['events'] ?? $data;
+
+        foreach (is_array($events) ? $events : [] as $event) {
+            if (!is_array($event)) {
+                continue;
+            }
+
+            if (strtolower((string) ($event['propertyName'] ?? '')) === 'dealstage'
+                && filled($event['objectId'] ?? null)
+                && filled($event['propertyValue'] ?? null)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private function processHubspotDealUpdates(
+        array $data,
+        Integration $integration,
+        string $crmIdPrefix,
+        LeadFunnelHistoryService $historyService,
+        int &$updated,
+        array &$notFound
+    ): void {
+        $events = $data['events'] ?? $data;
+
+        foreach (is_array($events) ? $events : [] as $event) {
+            if (!is_array($event) || strtolower((string) ($event['propertyName'] ?? '')) !== 'dealstage') {
+                continue;
+            }
+
+            $dealId = (string) ($event['objectId'] ?? '');
+            $stageId = (string) ($event['propertyValue'] ?? '');
+
+            if ($dealId === '' || $stageId === '') {
+                continue;
+            }
+
+            $crmOpportunityId = $crmIdPrefix . '-' . $dealId;
+            $crmState = $crmIdPrefix . '-' . $stageId;
+
+            if (!CrmState::query()->whereKey($crmState)->exists()) {
+                Log::warning('HubSpot webhook con etapa no sincronizada', [
+                    'integration_id' => $integration->id,
+                    'crm_id_oportunidad' => $crmOpportunityId,
+                    'crm_state' => $crmState,
+                ]);
+                $notFound[] = $crmState;
+                continue;
+            }
+
+            $leads = Lead::query()->where('crm_id_oportunidad', $crmOpportunityId)->get();
+
+            if ($leads->isEmpty()) {
+                $notFound[] = $crmOpportunityId;
+                continue;
+            }
+
+            foreach ($leads as $lead) {
+                $this->processLeadStateChangeForLead($lead, $crmState, $historyService, $updated);
+            }
+        }
     }
 
     private function processKommoLeadUpdates(

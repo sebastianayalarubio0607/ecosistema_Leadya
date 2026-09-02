@@ -75,8 +75,8 @@ const setupSortableTables = () => {
                     if (activeIcon) activeIcon.textContent = nextDirection;
 
                     rows.sort((a, b) => {
-                        const left = parseSortableValue(a.cells[columnIndex]?.textContent);
-                        const right = parseSortableValue(b.cells[columnIndex]?.textContent);
+                        const left = parseSortableValue(a.cells[columnIndex]?.dataset.sortValue ?? a.cells[columnIndex]?.textContent);
+                        const right = parseSortableValue(b.cells[columnIndex]?.dataset.sortValue ?? b.cells[columnIndex]?.textContent);
                         const result = compareSortableValues(left, right, nextDirection);
 
                         if (result !== 0) return result;

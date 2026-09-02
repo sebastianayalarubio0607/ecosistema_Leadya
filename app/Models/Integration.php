@@ -53,6 +53,7 @@ class Integration extends Model
         'username',
         'password',
         'body',
+        'body_oportunidad',
         'url_consulta_lead',
         'url_negocio',
         'url_creacionlead',

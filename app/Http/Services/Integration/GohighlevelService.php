@@ -14,6 +14,7 @@ class GohighlevelService
     use ResolvesIntegrationVariableMappings;
 
     private const DEFAULT_CONTACTS_UPSERT_URL = 'https://services.leadconnectorhq.com/contacts/upsert';
+    private const DEFAULT_OPPORTUNITIES_URL = 'https://services.leadconnectorhq.com/opportunities/';
 
     public function sendToGohighlevel(Lead $lead, Integration $integration)
     {
@@ -45,11 +46,7 @@ class GohighlevelService
         ]);
 
         if ($response->successful()) {
-            $gohighlevelLeadId = $response->json('contact.id')
-                ?? $response->json('id')
-                ?? $response->json('contact.contact_id')
-                ?? $response->json('contactId')
-                ?? null;
+            $gohighlevelLeadId = $this->extractContactId($response);
 
             Log::info('GOHIGHLEVEL CREATE RESULT', [
                 'integration_id' => $integration->id,
@@ -73,6 +70,57 @@ class GohighlevelService
         return $response;
     }
 
+    public function sendToGohighlevelOportunidad(Lead $lead, Integration $integration)
+    {
+        $contactResponse = $this->sendToGohighlevel($lead, $integration);
+
+        if (! $contactResponse->successful()) {
+            return $contactResponse;
+        }
+
+        $contactId = $this->extractContactId($contactResponse);
+        if ($contactId === null) {
+            throw new RuntimeException('GoHighLevel creo o actualizo el contacto pero no devolvio id.');
+        }
+
+        $token = trim((string) $integration->tokent);
+        $payload = $this->buildPayloadFromTemplate((string) $integration->body_oportunidad, $lead, $integration, 'body_oportunidad');
+        $payload['contactId'] = $contactId;
+
+        Log::info('GOHIGHLEVEL OPPORTUNITY URL', ['url' => self::DEFAULT_OPPORTUNITIES_URL]);
+        Log::info('GOHIGHLEVEL OPPORTUNITY PAYLOAD JSON', [
+            'json' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        ]);
+
+        $response = Http::acceptJson()
+            ->asJson()
+            ->withToken($token)
+            ->withHeaders([
+                'Version' => 'v3',
+            ])
+            ->post(self::DEFAULT_OPPORTUNITIES_URL, $payload);
+
+        Log::info('GOHIGHLEVEL OPPORTUNITY RESPONSE', [
+            'status' => $response->status(),
+            'body' => $response->body(),
+        ]);
+
+        if ($response->successful()) {
+            $opportunityId = $response->json('opportunity.id')
+                ?? $response->json('id')
+                ?? $response->json('opportunityId');
+
+            if ($opportunityId === null) {
+                throw new RuntimeException('GoHighLevel creo la oportunidad pero no devolvio id.');
+            }
+
+            $lead->crm_id_oportunidad = $integration->crmIdPrefix() . '-' . $opportunityId;
+            $lead->save();
+        }
+
+        return $response;
+    }
+
     private function resolveUrl(Integration $integration): string
     {
         $url = rtrim((string) $integration->url, '/');
@@ -80,19 +128,29 @@ class GohighlevelService
         return $url !== '' ? $url : self::DEFAULT_CONTACTS_UPSERT_URL;
     }
 
-    private function buildPayloadFromTemplate(string $template, $lead, Integration $integration): array
+    private function buildPayloadFromTemplate(string $template, $lead, Integration $integration, string $field = 'body'): array
     {
         $template = trim($template);
         if ($template === '') {
-            throw new RuntimeException('El campo body de GoHighLevel debe estar configurado.');
+            throw new RuntimeException("El campo {$field} de GoHighLevel debe estar configurado.");
         }
 
         $decoded = $this->decodeJsonTemplate($template);
         if (!is_array($decoded)) {
-            throw new RuntimeException('El campo body de GoHighLevel debe ser un JSON valido.');
+            throw new RuntimeException("El campo {$field} de GoHighLevel debe ser un JSON valido.");
         }
 
         return $this->resolveLeadPlaceholders($decoded, $lead, $integration, $this->integrationVariableMappings($integration));
+    }
+
+    private function extractContactId($response): ?string
+    {
+        $contactId = $response->json('contact.id')
+            ?? $response->json('id')
+            ?? $response->json('contact.contact_id')
+            ?? $response->json('contactId');
+
+        return $contactId === null ? null : (string) $contactId;
     }
 
     private function decodeJsonTemplate(string $template): ?array

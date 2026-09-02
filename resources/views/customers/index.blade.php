@@ -111,6 +111,9 @@
                                     @forelse($customer->metaAdAccounts as $account)
                                         <div class="rounded-lg border border-white/10 bg-white/5 px-2 py-1">
                                             <div class="text-xs break-all font-mono text-white">{{ $account->meta_account_id }}</div>
+                                            <div class="text-[11px] break-all text-white/50">
+                                                Relacionada con: {{ $account->customers?->pluck('name')->implode(', ') ?: $customer->name }}
+                                            </div>
                                             <div class="mt-1">
                                                 <span class="inline-flex rounded-lg border px-2 py-0.5 text-[11px] font-semibold {{ $account->is_subscribed_to_meta_app ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200' : 'bg-rose-500/15 border-rose-300/30 text-rose-200' }}">
                                                     Meta app: {{ $account->is_subscribed_to_meta_app ? 'Suscrita' : 'No suscrita' }}

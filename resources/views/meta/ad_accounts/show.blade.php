@@ -19,9 +19,27 @@
 @endsection
 
 @section('content')
+    @php
+        $defaultCustomer = $ad_account->customers->first(fn ($customer) => (bool) $customer->pivot->is_default_for_whatsapp_leads);
+    @endphp
+
     <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 space-y-3">
-        <div class="text-sm text-white/60">
-            Cliente: <span class="text-white/85 font-semibold">{{ $ad_account->customer?->name ?? '—' }}</span>
+        <div class="rounded-xl border border-white/10 bg-white/5 p-4">
+            <div class="text-white/60 text-xs mb-2">Clientes relacionados</div>
+            @if($ad_account->customers->isEmpty())
+                <span class="inline-flex rounded-lg border border-amber-300/20 bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-200">Sin asignar</span>
+            @else
+                <div class="flex flex-wrap gap-2">
+                    @foreach($ad_account->customers as $customer)
+                        <span class="inline-flex rounded-lg border border-white/10 bg-slate-900/50 px-2 py-1 text-xs text-white">
+                            {{ $customer->name }}
+                            @if($defaultCustomer?->id === $customer->id)
+                                <span class="ml-1 text-emerald-200">Default WhatsApp</span>
+                            @endif
+                        </span>
+                    @endforeach
+                </div>
+            @endif
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">

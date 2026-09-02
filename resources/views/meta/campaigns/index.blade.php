@@ -1,7 +1,7 @@
 @extends('meta.layout')
 
 @section('title', 'Meta Campaigns')
-@section('subtitle', 'Campañas (Customer → Account → Campaign)')
+@section('subtitle', 'Campañas (Clientes -> Account -> Campaign)')
 
 @section('header_actions')
     <a href="{{ route('meta.campaigns.create') }}" class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10">+ Nueva</a>
@@ -28,7 +28,7 @@
             <table class="w-full min-w-[950px] text-sm" data-sortable-table>
                 <thead class="bg-white/5 text-white/70">
                     <tr>
-                        <x-sort-header :index="0" label="Customer" />
+                        <x-sort-header :index="0" label="Clientes" />
                         <x-sort-header :index="1" label="Account" />
                         <x-sort-header :index="2" label="Campaign" />
                         <x-sort-header :index="3" label="Objective" />
@@ -39,8 +39,9 @@
 
                 <tbody class="divide-y divide-white/10 text-white/80">
                     @forelse($items as $it)
+                        @php($customerNames = ($it->account?->customers ?? collect())->pluck('name')->implode(', '))
                         <tr class="hover:bg-white/5">
-                            <td class="px-3 py-2">{{ $it->account?->customer?->name ?? '—' }}</td>
+                            <td class="px-3 py-2">{{ $customerNames !== '' ? $customerNames : 'Sin asignar' }}</td>
                             <td class="px-3 py-2">
                                 {{ $it->account?->name ?? '—' }}
                                 <div class="text-xs text-white/50">{{ $it->account?->meta_account_id }}</div>

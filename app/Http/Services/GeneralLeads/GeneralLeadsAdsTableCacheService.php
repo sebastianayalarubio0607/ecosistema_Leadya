@@ -32,7 +32,7 @@ class GeneralLeadsAdsTableCacheService
         $query = $filters->query();
         ksort($query);
 
-        return 'general-leads:ads-table:v1:'.md5(json_encode([
+        return 'general-leads:ads-table:v2:'.md5(json_encode([
             'section' => $section,
             'query' => $query,
         ]));

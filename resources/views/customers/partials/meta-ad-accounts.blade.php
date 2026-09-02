@@ -1,5 +1,7 @@
 @php
     $metaAdAccounts = $customer?->metaAdAccounts ?? collect();
+    $selectedMetaAdAccountIds = array_map('intval', $selectedMetaAdAccountIds ?? []);
+    $defaultMetaAdAccountIds = array_map('intval', $defaultMetaAdAccountIds ?? []);
     $newMetaAdAccount = old('new_meta_ad_account', []);
 @endphp
 
@@ -30,6 +32,10 @@
                             <div class="mt-1 text-xs text-white/50">
                                 Token: {{ is_null($account->token_can_view_account) ? 'Sin validar' : ($account->token_can_view_account ? 'Si' : 'No') }}
                             </div>
+                            <div class="mt-1 text-xs text-white/50">
+                                Clientes relacionados:
+                                {{ $account->customers?->pluck('name')->implode(', ') ?: $customer->name }}
+                            </div>
                         </div>
 
                         <div class="flex flex-wrap items-center gap-2">
@@ -40,6 +46,12 @@
                             <span class="px-2 py-1 rounded-lg text-xs border {{ $account->status === 'active' ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
                                 {{ $account->status }}
                             </span>
+
+                            @if((bool) $account->pivot->is_default_for_whatsapp_leads)
+                                <span class="px-2 py-1 rounded-lg text-xs border border-emerald-300/20 bg-emerald-500/10 text-emerald-200">
+                                    Default WhatsApp
+                                </span>
+                            @endif
 
                             <a href="{{ route('meta.ad-accounts.edit', $account) }}"
                                class="px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-white/10 text-xs text-white">
@@ -52,6 +64,55 @@
                 <p class="text-sm text-white/50">Sin Meta Ad Accounts asociadas.</p>
             @endforelse
         @endif
+
+        <div>
+            <label class="block mb-2 text-white/70">Asociar Meta Ad Accounts existentes</label>
+            <div class="rounded-xl border border-white/10 bg-slate-900/40 p-3 space-y-2">
+                @forelse(($metaAdAccountsOptions ?? $metaAdAccounts ?? collect()) as $account)
+                    <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                        <x-toggle-switch
+                            name="meta_ad_account_ids[]"
+                            value="{{ $account->id }}"
+                            :checked="in_array((int) $account->id, $selectedMetaAdAccountIds, true)"
+                        >
+                            <span class="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-2">
+                                <span class="break-all font-mono">{{ $account->meta_account_id }}</span>
+                                <span class="text-xs text-white/50 break-all">{{ $account->name ?: 'Sin nombre' }}</span>
+                                <span class="inline-flex w-fit rounded-lg border px-2 py-0.5 text-[11px] font-semibold {{ $account->is_subscribed_to_meta_app ? 'bg-emerald-500/15 border-emerald-300/30 text-emerald-200' : 'bg-rose-500/15 border-rose-300/30 text-rose-200' }}">
+                                    {{ $account->is_subscribed_to_meta_app ? 'Suscrita' : 'No suscrita' }}
+                                </span>
+                            </span>
+                        </x-toggle-switch>
+
+                        <label class="mt-2 flex items-center gap-2 text-xs text-white/70">
+                            <input type="checkbox"
+                                   name="default_meta_ad_account_ids[]"
+                                   value="{{ $account->id }}"
+                                   @checked(in_array((int) $account->id, $defaultMetaAdAccountIds, true))
+                                   class="rounded border-white/20 bg-slate-900/60 text-emerald-500 focus:ring-emerald-500">
+                            Usar este customer como default para leads de WhatsApp de esta cuenta
+                        </label>
+
+                        @if($account->customers?->isNotEmpty())
+                            <div class="mt-2 text-xs text-white/50">
+                                Relacionada con: {{ $account->customers->pluck('name')->implode(', ') }}
+                            </div>
+                        @else
+                            <div class="mt-2 text-xs text-amber-200">Sin asignar actualmente.</div>
+                        @endif
+                    </div>
+                @empty
+                    <p class="text-sm text-white/50">No hay Meta Ad Accounts disponibles aun.</p>
+                @endforelse
+            </div>
+            <p class="mt-1 text-xs text-white/50">
+                Si una cuenta queda con un solo customer, ese customer sera el default automaticamente. Si queda inconsistente por datos viejos, se usara como respaldo el customer mas antiguo relacionado.
+            </p>
+            @error('meta_ad_account_ids') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+            @error('meta_ad_account_ids.*') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+            @error('default_meta_ad_account_ids') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+            @error('default_meta_ad_account_ids.*') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+        </div>
 
         <div class="rounded-xl border border-white/10 bg-slate-900/40 p-3 space-y-3">
             <div class="text-sm font-semibold text-white/80">Agregar Meta Ad Account</div>
@@ -84,6 +145,15 @@
                     @error('new_meta_ad_account.status') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
                 </div>
             </div>
+
+            <label class="flex items-center gap-2 text-xs text-white/70">
+                <input type="checkbox"
+                       name="new_meta_ad_account[default_for_whatsapp_leads]"
+                       value="1"
+                       @checked((bool) ($newMetaAdAccount['default_for_whatsapp_leads'] ?? false))
+                       class="rounded border-white/20 bg-slate-900/60 text-emerald-500 focus:ring-emerald-500">
+                Marcar este customer como default para leads de WhatsApp de esta cuenta
+            </label>
         </div>
     </div>
 </div>

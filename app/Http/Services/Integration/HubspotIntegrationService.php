@@ -3,6 +3,7 @@
 namespace App\Http\Services\Integration;
 
 use App\Http\Services\Integration\Concerns\ResolvesIntegrationVariableMappings;
+use App\Models\CrmState;
 use App\Models\Integration;
 use App\Models\Lead;
 use Illuminate\Support\Facades\Http;
@@ -20,21 +21,10 @@ class HubspotIntegrationService
             throw new RuntimeException('No existe access_token configurado para HubSpot.');
         }
 
-        $searchUrl = trim((string) $integration->url_consulta_lead);
-        $dealUrl = trim((string) $integration->url_negocio);
-        $createLeadUrl = trim((string) $integration->url_creacionlead);
-
-        if ($searchUrl === '') {
-            throw new RuntimeException('No existe url_consulta_lead configurada para HubSpot.');
-        }
-
-        if ($dealUrl === '') {
-            throw new RuntimeException('No existe url_negocio configurada para HubSpot.');
-        }
-
-        if ($createLeadUrl === '') {
-            throw new RuntimeException('No existe url_creacionlead configurada para HubSpot.');
-        }
+        $baseUrl = $this->hubspotBaseUrl($integration);
+        $searchUrl = $baseUrl . '/crm/v3/objects/contacts/search';
+        $createLeadUrl = $baseUrl . '/crm/v3/objects/contacts';
+        $dealUrl = $baseUrl . '/crm/v3/objects/deals';
 
         $this->validateHubspotUrls($searchUrl, $createLeadUrl, $dealUrl);
 
@@ -82,6 +72,23 @@ class HubspotIntegrationService
             'status' => $response->status(),
             'body' => $response->body(),
         ]);
+
+        if ($response->successful()) {
+            $dealId = $response->json('id')
+                ?? $response->json('dealId')
+                ?? $response->json('deal.id');
+
+            if ($dealId === null) {
+                throw new RuntimeException('HubSpot creo el negocio pero no devolvio id. Body: ' . $response->body());
+            }
+
+            $this->storeCrmOpportunity($lead, $integration, (string) $dealId);
+            $this->storeCrmState(
+                $lead,
+                $integration,
+                (string) data_get($dealPayload, 'properties.dealstage')
+            );
+        }
 
         return $response;
     }
@@ -167,23 +174,47 @@ class HubspotIntegrationService
     {
         $hubspotContactId = $this->extractHubspotIdFromCrmId($lead, $integration) ?? $contactId;
 
-        return [
-            'properties' => [
-                'dealname' => $this->renderTemplateString((string) $integration->dealname, $lead, $integration, 'dealname'),
-                'dealstage' => (string) $integration->dealstage,
-                'pipeline' => 'default',
-                'amount' => '500',
+        $template = trim((string) $integration->body_oportunidad);
+        if ($template === '') {
+            throw new RuntimeException('El campo body_oportunidad de HubSpot debe estar configurado.');
+        }
+
+        $decoded = $this->decodeBodyTemplate($template);
+        if (!is_array($decoded)) {
+            throw new RuntimeException('El campo body_oportunidad de HubSpot debe ser un JSON valido.');
+        }
+
+        $payload = $this->resolveBodyPlaceholders($decoded, $lead, $integration);
+        $properties = $payload['properties'] ?? null;
+
+        if (!is_array($properties) || blank($properties['dealname'] ?? null) || blank($properties['dealstage'] ?? null)) {
+            throw new RuntimeException('body_oportunidad debe incluir properties.dealname y properties.dealstage.');
+        }
+
+        return $this->addContactAssociation($payload, $hubspotContactId);
+    }
+
+    private function addContactAssociation(array $payload, string $contactId): array
+    {
+        $payload['associations'] = is_array($payload['associations'] ?? null) ? $payload['associations'] : [];
+
+        foreach ($payload['associations'] as $association) {
+            if ((string) data_get($association, 'to.id') === (string) $contactId) {
+                return $payload;
+            }
+        }
+
+        $payload['associations'][] = [
+            'to' => [
+                'id' => $this->normalizeIntegerLike($contactId),
             ],
-            'associations' => [[
-                'to' => [
-                    'id' => $this->normalizeIntegerLike($hubspotContactId),
-                ],
-                'types' => [[
-                    'associationCategory' => 'HUBSPOT_DEFINED',
-                    'associationTypeId' => 3,
-                ]],
+            'types' => [[
+                'associationCategory' => 'HUBSPOT_DEFINED',
+                'associationTypeId' => 3,
             ]],
         ];
+
+        return $payload;
     }
 
     private function storeCrmId(Lead $lead, Integration $integration, string $contactId): void
@@ -196,6 +227,40 @@ class HubspotIntegrationService
             'crm_id' => $lead->crm_id,
             'hubspot_contact_id' => $contactId,
         ]);
+    }
+
+    private function storeCrmOpportunity(Lead $lead, Integration $integration, string $dealId): void
+    {
+        $lead->crm_id_oportunidad = $integration->crmIdPrefix() . '-' . $dealId;
+        $lead->save();
+
+        Log::info('LEAD UPDATED crm_id_oportunidad', [
+            'local_lead_id' => $lead->id,
+            'crm_id_oportunidad' => $lead->crm_id_oportunidad,
+            'hubspot_deal_id' => $dealId,
+        ]);
+    }
+
+    private function storeCrmState(Lead $lead, Integration $integration, string $dealStage): void
+    {
+        if ($dealStage === '') {
+            return;
+        }
+
+        $crmState = $integration->crmIdPrefix() . '-' . $dealStage;
+
+        if (!CrmState::query()->whereKey($crmState)->exists()) {
+            Log::warning('HUBSPOT INITIAL CRM STATE NOT SYNCED', [
+                'lead_id' => $lead->id,
+                'integration_id' => $integration->id,
+                'crm_state' => $crmState,
+            ]);
+
+            return;
+        }
+
+        $lead->crm_state = $crmState;
+        $lead->save();
     }
 
     private function extractHubspotIdFromCrmId(Lead $lead, Integration $integration): ?string
@@ -237,6 +302,17 @@ class HubspotIntegrationService
         if (str_contains(strtolower($createLeadUrl), '/search')) {
             throw new RuntimeException('url_creacionlead no debe apuntar al endpoint de search de HubSpot.');
         }
+    }
+
+    private function hubspotBaseUrl(Integration $integration): string
+    {
+        $parts = parse_url(trim((string) $integration->url));
+
+        if (!isset($parts['scheme'], $parts['host'])) {
+            throw new RuntimeException('No existe URL base configurada para HubSpot.');
+        }
+
+        return $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
     }
 
     private function decodeBodyTemplate(string $template): ?array

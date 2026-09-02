@@ -273,6 +273,9 @@
                                     <div class="mt-1 text-xs text-white/50">
                                         Token: {{ is_null($account->token_can_view_account) ? 'Sin validar' : ($account->token_can_view_account ? 'Si' : 'No') }}
                                     </div>
+                                    <div class="mt-1 text-xs text-white/50">
+                                        Relacionada con: {{ $account->customers?->pluck('name')->implode(', ') ?: $customer->name }}
+                                    </div>
                                 </div>
 
                                 <div class="flex flex-wrap items-center gap-2">
@@ -283,6 +286,12 @@
                                     <span class="px-2 py-1 rounded-lg text-xs border {{ $account->status === 'active' ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
                                         {{ $account->status }}
                                     </span>
+
+                                    @if((bool) $account->pivot->is_default_for_whatsapp_leads)
+                                        <span class="px-2 py-1 rounded-lg text-xs border border-emerald-300/20 bg-emerald-500/10 text-emerald-200">
+                                            Default WhatsApp
+                                        </span>
+                                    @endif
 
                                     <a href="{{ route('meta.ad-accounts.edit', $account) }}"
                                        class="px-3 py-1.5 rounded-lg bg-indigo-500/20 hover:bg-indigo-500/30 border border-white/10 text-xs text-white">

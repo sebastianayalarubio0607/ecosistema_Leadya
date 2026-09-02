@@ -1,18 +1,9 @@
-<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
-    <div class="md:col-span-2">
-        <label class="block mb-1 text-white/70">Cliente</label>
-        @php($selectedCustomer = old('customer_id', $ad_account->customer_id ?? ''))
-        <select name="customer_id" required
-                class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
-            <option value="">-- Seleccionar --</option>
-            @foreach($customers as $c)
-                <option value="{{ $c->id }}" @selected((string)$selectedCustomer === (string)$c->id)>
-                    {{ $c->name }} (ID: {{ $c->id }})
-                </option>
-            @endforeach
-        </select>
-    </div>
+@php
+    $selectedCustomerIds = array_map('intval', old('customer_ids', $selectedCustomerIds ?? $ad_account->customers?->pluck('id')->all() ?? []));
+    $selectedDefaultWhatsappCustomerId = old('default_whatsapp_lead_customer_id', $selectedDefaultWhatsappCustomerId ?? $ad_account->customers?->first(fn ($customer) => (bool) $customer->pivot->is_default_for_whatsapp_leads)?->id ?? null);
+@endphp
 
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4">
     <div>
         <label class="block mb-1 text-white/70">Meta Account ID (account_id)</label>
         <input name="meta_account_id"
@@ -56,5 +47,41 @@
         <label class="block mb-1 text-white/70">subscribed_apps</label>
         <textarea rows="4" disabled
                   class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/40 text-white/70">{{ $ad_account->subscribed_apps ? json_encode($ad_account->subscribed_apps, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE) : 'Sin respuesta registrada' }}</textarea>
+    </div>
+
+    <div class="md:col-span-2">
+        <label class="block mb-2 text-white/70">Clientes relacionados</label>
+        <div class="rounded-2xl border border-white/10 bg-white/5 p-3 space-y-2">
+            @forelse($customers as $customer)
+                <x-toggle-switch
+                    name="customer_ids[]"
+                    value="{{ $customer->id }}"
+                    :checked="in_array((int) $customer->id, $selectedCustomerIds, true)"
+                >
+                    {{ $customer->name }} (ID: {{ $customer->id }})
+                </x-toggle-switch>
+            @empty
+                <p class="text-sm text-white/50">No hay customers disponibles.</p>
+            @endforelse
+        </div>
+        @error('customer_ids') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+        @error('customer_ids.*') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
+    </div>
+
+    <div class="md:col-span-2">
+        <label class="block mb-1 text-white/70">Customer default para leads de WhatsApp</label>
+        <select name="default_whatsapp_lead_customer_id"
+                class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+            <option value="">Se asigna automaticamente si solo hay un customer</option>
+            @foreach($customers as $customer)
+                <option value="{{ $customer->id }}" @selected((string) $selectedDefaultWhatsappCustomerId === (string) $customer->id)>
+                    {{ $customer->name }} (ID: {{ $customer->id }})
+                </option>
+            @endforeach
+        </select>
+        <p class="mt-1 text-xs text-white/50">
+            Si la cuenta tiene varios clientes, este campo es obligatorio. Si queda inconsistente por datos viejos, el sistema usa como respaldo el cliente mas antiguo asociado a la cuenta.
+        </p>
+        @error('default_whatsapp_lead_customer_id') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
     </div>
 </div>

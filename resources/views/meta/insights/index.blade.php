@@ -90,7 +90,7 @@
                 <table class="w-full min-w-[1700px] text-sm" data-sortable-table>
                     <thead class="bg-white/5 text-white/70">
                         <tr>
-                            <x-sort-header :index="0" label="Cliente" />
+                            <x-sort-header :index="0" label="Clientes" />
                             <x-sort-header :index="1" label="Cuenta" />
                             <x-sort-header :index="2" label="Campaña" />
                             <x-sort-header :index="3" label="Conjunto" />
@@ -114,9 +114,10 @@
                     <tbody class="divide-y divide-white/10 text-white/80">
                         @forelse($items as $it)
                             @php
-                                $customer = $it->ad?->adSet?->campaign?->account?->customer?->name
-                                    ?? $it->ad?->adSet?->campaign?->account?->name
-                                    ?? '—';
+                                $customer = ($it->ad?->adSet?->campaign?->account?->customers ?? collect())->pluck('name')->implode(', ');
+                                $customer = $customer !== ''
+                                    ? $customer
+                                    : ($it->ad?->adSet?->campaign?->account?->name ?? '—');
                                 $accountName = $it->account_name ?? $it->ad?->adSet?->campaign?->account?->name ?? '—';
                             @endphp
 

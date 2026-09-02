@@ -4,6 +4,10 @@
 @section('subtitle', 'Cuentas publicitarias asociadas a clientes')
 
 @section('header_actions')
+    <form method="POST" action="{{ route('meta.ad-accounts.sync-from-meta') }}">
+        @csrf
+        <button class="px-4 py-2 rounded-xl bg-blue-500/20 hover:bg-blue-500/30 text-white border border-white/10">Sincronizar desde Meta</button>
+    </form>
     <form method="POST" action="{{ route('meta.ad-accounts.subscription-jobs.scan') }}">
         @csrf
         <button class="px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-white border border-white/10">Revisar suscripciones</button>
@@ -21,7 +25,7 @@
     <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 space-y-4">
         <form method="GET" class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
             <div class="md:col-span-3">
-                <label class="block mb-1 text-white/70">Cliente</label>
+                <label class="block mb-1 text-white/70">Cliente relacionado</label>
                 <select name="customer_id"
                         class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
                     <option value="">-- Todos --</option>
@@ -30,6 +34,15 @@
                             {{ $c->name }} (ID: {{ $c->id }})
                         </option>
                     @endforeach
+                </select>
+            </div>
+
+            <div class="md:col-span-3">
+                <label class="block mb-1 text-white/70">Asignacion</label>
+                <select name="assignment_status" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+                    <option value="">-- Todas --</option>
+                    <option value="assigned" @selected(request('assignment_status') === 'assigned')>Con cliente</option>
+                    <option value="unassigned" @selected(request('assignment_status') === 'unassigned')>Sin asignar</option>
                 </select>
             </div>
 
@@ -100,7 +113,7 @@
             <table class="w-full min-w-[1100px] text-sm" data-sortable-table>
                 <thead class="bg-white/5 text-white/70">
                     <tr>
-                        <x-sort-header :index="0" label="Cliente" />
+                        <x-sort-header :index="0" label="Clientes" />
                         <x-sort-header :index="1" label="Meta Account ID" />
                         <x-sort-header :index="2" label="Nombre" />
                         <x-sort-header :index="3" label="Estado interno" />
@@ -114,8 +127,26 @@
 
                 <tbody class="divide-y divide-white/10 text-white/80">
                     @forelse($items as $it)
+                        @php
+                            $defaultCustomer = $it->customers->first(fn ($customer) => (bool) $customer->pivot->is_default_for_whatsapp_leads);
+                        @endphp
                         <tr class="hover:bg-white/5">
-                            <td class="px-3 py-2">{{ $it->customer?->name ?? '—' }}</td>
+                            <td class="px-3 py-2">
+                                @if($it->customers->isEmpty())
+                                    <span class="inline-flex rounded-lg border border-amber-300/20 bg-amber-500/10 px-2 py-1 text-xs font-semibold text-amber-200">Sin asignar</span>
+                                @else
+                                    <div class="space-y-1">
+                                        @foreach($it->customers as $customer)
+                                            <div class="rounded-lg border border-white/10 bg-white/5 px-2 py-1">
+                                                <span>{{ $customer->name }}</span>
+                                                @if($defaultCustomer?->id === $customer->id)
+                                                    <span class="ml-1 text-xs text-emerald-200">Default WhatsApp</span>
+                                                @endif
+                                            </div>
+                                        @endforeach
+                                    </div>
+                                @endif
+                            </td>
                             <td class="px-3 py-2 font-semibold">{{ $it->meta_account_id }}</td>
                             <td class="px-3 py-2">{{ $it->name }}</td>
                             <td class="px-3 py-2">{{ $it->status }}</td>

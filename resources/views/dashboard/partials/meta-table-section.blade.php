@@ -1,6 +1,7 @@
 @php
     $table = $section['table'] ?? null;
     $livewireSort = $livewireSort ?? false;
+    $isGoogleSection = str_starts_with((string) ($table['section'] ?? ''), 'google_');
 @endphp
 
 <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4" data-sortable-table-wrap>
@@ -66,8 +67,12 @@
                             class="hover:bg-white/5 {{ $rowUrl ? 'cursor-pointer focus:bg-white/5 focus:outline-none focus:ring-2 focus:ring-indigo-300/50' : '' }}"
                         >
                             @foreach ($table['columns'] as $column)
-                                <td class="px-3 py-2 whitespace-nowrap text-white/80">
-                                    {{ $row[$column['key']] ?? '-' }}
+                                <td class="px-3 py-2 whitespace-nowrap text-white/80" @if($column['key'] === 'conversions') data-sort-value="{{ $row[$column['key']] ?? '' }}" @endif>
+                                    @if($isGoogleSection && $column['key'] === 'conversions')
+                                        @include('dashboard.partials.google-conversions-cell', ['row' => $row])
+                                    @else
+                                        {{ $row[$column['key']] ?? '-' }}
+                                    @endif
                                 </td>
                             @endforeach
                         </tr>

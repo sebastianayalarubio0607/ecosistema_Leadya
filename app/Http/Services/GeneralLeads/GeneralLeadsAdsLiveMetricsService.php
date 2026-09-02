@@ -8,6 +8,7 @@ use App\Http\Services\Meta\MetaGraphService;
 use App\Models\Customer;
 use App\Models\MetaAccessToken;
 use App\Models\MetaAdAccount;
+use App\Support\MetaAdAccountId;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -55,9 +56,16 @@ class GeneralLeadsAdsLiveMetricsService
         $accounts = MetaAdAccount::query()
             ->whereNotNull('meta_account_id')
             ->where('token_can_view_account', true)
-            ->when($filters->customerId, fn ($query) => $query->where('customer_id', $filters->customerId))
+            ->when($filters->customerId, function ($query) use ($filters): void {
+                $query->where(function ($innerQuery) use ($filters): void {
+                    $innerQuery->where('customer_id', $filters->customerId)
+                        ->orWhereHas('customers', fn ($customers) => $customers->whereKey($filters->customerId));
+                });
+            })
             ->orderBy('id')
-            ->get(['id', 'customer_id', 'meta_account_id', 'name']);
+            ->get(['id', 'customer_id', 'meta_account_id', 'name'])
+            ->unique(fn (MetaAdAccount $account) => MetaAdAccountId::normalize((string) $account->meta_account_id))
+            ->values();
 
         $rows = [];
         $errors = [];
@@ -123,7 +131,7 @@ class GeneralLeadsAdsLiveMetricsService
     {
         $items = [];
 
-        foreach ($this->meta->paginatedGet($this->normalizeMetaActId((string) $account->meta_account_id).'/insights', [
+        foreach ($this->meta->paginatedGet(MetaAdAccountId::act((string) $account->meta_account_id).'/insights', [
             'access_token' => $token,
             'level' => $this->metaLevel($section),
             'fields' => implode(',', $this->metaFields($section, $includeResults)),
@@ -174,7 +182,7 @@ class GeneralLeadsAdsLiveMetricsService
                     $cost = $this->integer(data_get($item, 'metrics.costMicros')) / 1000000;
                     $this->mergeMetricRow($rows, $entityId, [
                         'entity_value' => $entityId,
-                        'name_value' => $this->label(data_get($item, $this->googleNameField($section))),
+                        'name_value' => $this->googleEntityName(data_get($item, $this->googleNameField($section)), $entityId),
                         'cost_value' => $cost,
                         'impressions_value' => $this->integer(data_get($item, 'metrics.impressions')),
                         'clicks_value' => $this->integer(data_get($item, 'metrics.clicks')),
@@ -185,6 +193,34 @@ class GeneralLeadsAdsLiveMetricsService
             } catch (\Throwable $exception) {
                 $errors[] = $this->sanitizeErrorMessage($exception->getMessage());
                 Log::warning('General leads live Google Ads metrics request failed.', [
+                    'section' => $section,
+                    'customer_id' => $customer->id,
+                    'message' => $this->sanitizeErrorMessage($exception->getMessage()),
+                ]);
+
+                continue;
+            }
+
+            try {
+                foreach ($this->google->searchStream($credential, (string) $customer->id_Gads, $this->googleConversionQuery($filters, $section))['results'] as $item) {
+                    $entityId = (string) data_get($item, $this->googleIdField($section), '');
+                    if ($entityId === '') {
+                        continue;
+                    }
+
+                    $this->mergeConversionEvent(
+                        $rows,
+                        $entityId,
+                        (string) data_get($item, 'segments.conversionAction', ''),
+                        $this->googleConversionActionName(
+                            data_get($item, 'segments.conversionActionName'),
+                            data_get($item, 'segments.conversionAction')
+                        ),
+                        $this->decimal(data_get($item, 'metrics.conversions'))
+                    );
+                }
+            } catch (\Throwable $exception) {
+                Log::warning('General leads live Google Ads conversion events request failed.', [
                     'section' => $section,
                     'customer_id' => $customer->id,
                     'message' => $this->sanitizeErrorMessage($exception->getMessage()),
@@ -213,6 +249,7 @@ class GeneralLeadsAdsLiveMetricsService
             'ad_ids' => [],
             'adset_id' => $row['adset_id'] ?? '',
             'campaign_id' => $row['campaign_id'] ?? '',
+            'conversion_events_value' => [],
         ];
 
         $current['name_value'] = $current['name_value'] ?: $row['name_value'];
@@ -233,6 +270,29 @@ class GeneralLeadsAdsLiveMetricsService
         }
 
         $rows[$entityId] = $current;
+    }
+
+    private function mergeConversionEvent(array &$rows, string $entityId, string $eventId, string $eventName, float $conversions): void
+    {
+        if ($entityId === '' || $conversions <= 0 || ! isset($rows[$entityId])) {
+            return;
+        }
+
+        $eventKey = $eventId !== '' ? $eventId : $eventName;
+        if ($eventKey === '') {
+            $eventKey = 'unknown';
+        }
+
+        $events = $rows[$entityId]['conversion_events_value'] ?? [];
+        $current = $events[$eventKey] ?? [
+            'event_id' => $eventId,
+            'name' => $eventName !== '' ? $eventName : 'Evento sin nombre',
+            'conversions_value' => 0.0,
+        ];
+
+        $current['conversions_value'] += $conversions;
+        $events[$eventKey] = $current;
+        $rows[$entityId]['conversion_events_value'] = $events;
     }
 
     private function metricRows(array $rows): Collection
@@ -259,6 +319,7 @@ class GeneralLeadsAdsLiveMetricsService
                     'ad_ids' => array_values($row['ad_ids'] ?? []),
                     'adset_id' => (string) ($row['adset_id'] ?? ''),
                     'campaign_id' => (string) ($row['campaign_id'] ?? ''),
+                    'conversion_events_value' => $this->conversionEvents($row['conversion_events_value'] ?? []),
                 ];
             })
             ->keyBy('entity_value');
@@ -339,6 +400,15 @@ class GeneralLeadsAdsLiveMetricsService
         };
     }
 
+    private function googleConversionQuery(GeneralLeadsFilters $filters, string $section): string
+    {
+        return match ($section) {
+            'google_campaigns' => "SELECT campaign.id, segments.conversion_action, segments.conversion_action_name, metrics.conversions FROM campaign WHERE {$this->googleDateClause($filters)} AND campaign.status != 'REMOVED' AND metrics.conversions > 0 ORDER BY segments.conversion_action_name",
+            'google_ad_groups' => "SELECT ad_group.id, segments.conversion_action, segments.conversion_action_name, metrics.conversions FROM ad_group WHERE {$this->googleDateClause($filters)} AND campaign.status != 'REMOVED' AND ad_group.status != 'REMOVED' AND metrics.conversions > 0 ORDER BY segments.conversion_action_name",
+            default => "SELECT ad_group_ad.ad.id, segments.conversion_action, segments.conversion_action_name, metrics.conversions FROM ad_group_ad WHERE {$this->googleDateClause($filters)} AND campaign.status != 'REMOVED' AND ad_group.status != 'REMOVED' AND ad_group_ad.status != 'REMOVED' AND metrics.conversions > 0 ORDER BY segments.conversion_action_name",
+        };
+    }
+
     private function googleDateClause(GeneralLeadsFilters $filters): string
     {
         return "segments.date BETWEEN '{$filters->from->toDateString()}' AND '{$filters->to->toDateString()}'";
@@ -369,6 +439,52 @@ class GeneralLeadsAdsLiveMetricsService
         }
 
         return $this->decimal(data_get($item, 'metrics.conversionsValue')) / $cost;
+    }
+
+    private function googleEntityName(mixed $value, string $entityId): string
+    {
+        $name = trim((string) $value);
+
+        if ($name === '' || Str::lower($name) === 'sin nombre') {
+            return $entityId;
+        }
+
+        return $name;
+    }
+
+    private function googleConversionActionName(mixed $name, mixed $resource): string
+    {
+        $label = trim((string) $name);
+
+        if ($label !== '' && Str::lower($label) !== 'sin nombre') {
+            return $label;
+        }
+
+        $resource = trim((string) $resource);
+        if ($resource !== '') {
+            return Str::afterLast($resource, '/');
+        }
+
+        return 'Evento sin nombre';
+    }
+
+    private function conversionEvents(array $events): array
+    {
+        return collect($events)
+            ->map(function (array $event) {
+                return [
+                    'event_id' => (string) ($event['event_id'] ?? ''),
+                    'name' => $this->label($event['name'] ?? null),
+                    'conversions_value' => (float) ($event['conversions_value'] ?? 0),
+                ];
+            })
+            ->filter(fn (array $event) => $event['conversions_value'] > 0)
+            ->sortBy([
+                ['conversions_value', 'desc'],
+                ['name', 'asc'],
+            ])
+            ->values()
+            ->all();
     }
 
     private function metaResults(array $item): float
@@ -526,13 +642,6 @@ class GeneralLeadsAdsLiveMetricsService
         $roas = data_get($item, 'purchase_roas.0.value');
 
         return is_numeric($roas) ? (float) $roas : null;
-    }
-
-    private function normalizeMetaActId(string $value): string
-    {
-        $value = trim($value);
-
-        return Str::startsWith($value, 'act_') ? $value : 'act_'.$value;
     }
 
     private function cacheKey(GeneralLeadsFilters $filters, string $section): string

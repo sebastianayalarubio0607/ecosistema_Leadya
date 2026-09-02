@@ -13,6 +13,7 @@
         ->toString();
 
     $canSyncKommoBoards = in_array($normalizedIntegrationType, ['kommo', 'kommopipeline', 'kommo_pipeline'], true);
+    $canSyncHubspotDealStages = $normalizedIntegrationType === 'hubspot';
 @endphp
 
 @section('header_actions')
@@ -21,6 +22,15 @@
             @csrf
             <button class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10" type="submit">
                 Sincronizar tableros
+            </button>
+        </form>
+    @endif
+
+    @if($canSyncHubspotDealStages)
+        <form method="POST" action="{{ route('integrations.hubspot.sync-deal-stages', $integration) }}">
+            @csrf
+            <button class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10" type="submit">
+                Sincronizar etapas HubSpot
             </button>
         </form>
     @endif
@@ -335,7 +345,7 @@
             </div>
         @endif
 
-        @if (in_array($normalizedIntegrationType, ['atom', 'zoho', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel'], true))
+        @if (in_array($normalizedIntegrationType, ['atom', 'zoho', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad'], true))
             <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-6 text-white/80">
                 <div class="mb-4">
                     <h3 class="text-lg font-semibold text-white">Mapeo de variables</h3>

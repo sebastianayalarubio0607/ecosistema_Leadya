@@ -104,6 +104,7 @@ class IntegrationService
                 'monday' => fn() => $this->MondayIntegrationService->sendToMonday($lead, $integration),
                 'hubspot' => fn() => $this->HubspotIntegrationService->sendToHubspot($lead, $integration),
                 'gohighlevel' => fn() => $this->GohighlevelService->sendToGohighlevel($lead, $integration),
+                'gohighlevel_oportunidad' => fn() => $this->GohighlevelService->sendToGohighlevelOportunidad($lead, $integration),
             ];
 
             $serviceMap = [
@@ -118,6 +119,7 @@ class IntegrationService
                 'monday' => $this->MondayIntegrationService::class,
                 'hubspot' => $this->HubspotIntegrationService::class,
                 'gohighlevel' => $this->GohighlevelService::class,
+                'gohighlevel_oportunidad' => $this->GohighlevelService::class,
             ];
 
             $handler = $handlers[$type] ?? null;
@@ -194,6 +196,7 @@ class IntegrationService
         return match ($normalized) {
             'googlesheets' => 'google_sheets',
             'go_high_level', 'leadconnector', 'lead_connector' => 'gohighlevel',
+            'gohighleve_oportunidad', 'gohighlevel_opportunity' => 'gohighlevel_oportunidad',
             'kommo_pipeline' => 'kommopipeline',
             'atom_webhook', 'atom_webhooks' => 'atom',
             default => $normalized !== '' ? $normalized : 'webhook',
@@ -256,11 +259,12 @@ class IntegrationService
                 'dealstage_present' => filled($integration->dealstage),
                 'body_present' => filled($integration->body),
             ],
-            'gohighlevel' => [
+            'gohighlevel', 'gohighlevel_oportunidad' => [
                 'integration_url' => $integration->url,
                 'url_present' => filled($integration->url),
                 'token_present' => filled($integration->tokent),
                 'body_present' => filled($integration->body),
+                'body_oportunidad_present' => filled($integration->body_oportunidad),
             ],
             default => [
                 'integration_url' => $integration->url,

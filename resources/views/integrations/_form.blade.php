@@ -17,6 +17,7 @@
 
         $currentIntegrationTypeKey = match ($currentIntegrationTypeKey) {
             'go_high_level', 'leadconnector', 'lead_connector' => 'gohighlevel',
+            'gohighleve_oportunidad', 'gohighlevel_opportunity' => 'gohighlevel_oportunidad',
             'kommo_pipeline' => 'kommopipeline',
             default => $currentIntegrationTypeKey,
         };
@@ -30,6 +31,14 @@
         $maskedSecret = fn ($value, $fallback) => filled($value)
             ? \App\Support\SensitiveValue::mask($value)
             : $fallback;
+
+        $baseUrlValue = old('url', $integration->url ?? '');
+        if ($currentIntegrationTypeKey === 'hubspot' && $baseUrlValue !== '') {
+            $parts = parse_url($baseUrlValue);
+            $baseUrlValue = isset($parts['scheme'], $parts['host'])
+                ? $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '')
+                : $baseUrlValue;
+        }
     @endphp
 
     <div>
@@ -67,9 +76,10 @@
     </div>
 
     <div data-base-url-block>
-        <label class="block mb-1 text-white/70">URL *</label>
-        <input name="url" value="{{ old('url', $integration->url ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40" placeholder="https://..." data-base-url-input>
+        <label class="block mb-1 text-white/70" data-base-url-label>URL *</label>
+        <input name="url" value="{{ $baseUrlValue }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40" placeholder="https://..." data-base-url-input>
         @error('url') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+        <p class="mt-1 hidden text-xs text-white/50" data-hubspot-base-url-help>Usa solo la base, por ejemplo <span class="font-mono">https://api.hubapi.com</span>. Los endpoints se crean automáticamente.</p>
     </div>
 
     <div>
@@ -104,7 +114,7 @@
         <p class="mt-1 text-xs text-white/50">Las integraciones con mayor número se procesan primero. Si empatan, se ordenan por ID.</p>
     </div>
 
-    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="kommo kommopipeline freshworks hubspot gohighlevel">
+    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="kommo kommopipeline freshworks hubspot gohighlevel gohighlevel_oportunidad">
         <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
             <p class="text-sm text-white/70">
                 Si está desactivado, se usa el ID de integración como prefijo del <span class="font-mono">crm_id</span>.
@@ -599,7 +609,7 @@ TEXT;
         $integrationInitialMappings = collect(old('integration_variable_mappings', $integrationStoredMappings))->values();
     @endphp
 
-    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="atom zoho salesforce monday lety hubspot gohighlevel" data-integration-mappings-block>
+    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="atom zoho salesforce monday lety hubspot gohighlevel gohighlevel_oportunidad" data-integration-mappings-block>
         <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
             <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -634,33 +644,26 @@ TEXT;
         </div>
     </div>
 
-    @php
-        $gohighlevelBodyPlaceholder = <<<'JSON'
-{
-  "firstName": "{{$lead->firstName}}",
-  "lastName": "{{$lead->lastName}}",
-  "locationId": "fWWCKm54Zd8T0LLVW4kN",
-  "email": "{{$lead->email}}",
-  "phone": "{{$lead->phone}}",
-  "source": "Meta Lead Ads",
-  "tags": ["lead-web", "meta-lead"]
-}
-JSON;
-    @endphp
-
-    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="gohighlevel">
+    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="gohighlevel gohighlevel_oportunidad">
         <div>
             <label class="block mb-1 text-white/70">Token LeadConnector / GoHighLevel *</label>
-            <input name="tokent" type="password" value="{{ old('tokent') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="{{ $hasStoredSecretFor('gohighlevel') ? $maskedSecret($integration->tokent ?? null, 'Token LeadConnector / GoHighLevel') : 'Token LeadConnector / GoHighLevel' }}" data-has-stored-secret="{{ $hasStoredSecretFor('gohighlevel') ? '1' : '0' }}" data-required-for="gohighlevel">
+            <input name="tokent" type="password" value="{{ old('tokent') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="{{ in_array($currentIntegrationTypeKey, ['gohighlevel', 'gohighlevel_oportunidad'], true) && $hasStoredSecretFor($currentIntegrationTypeKey) ? $maskedSecret($integration->tokent ?? null, 'Token LeadConnector / GoHighLevel') : 'Token LeadConnector / GoHighLevel' }}" data-has-stored-secret="{{ in_array($currentIntegrationTypeKey, ['gohighlevel', 'gohighlevel_oportunidad'], true) && $hasStoredSecretFor($currentIntegrationTypeKey) ? '1' : '0' }}" data-required-for="gohighlevel gohighlevel_oportunidad">
             @error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
             <p class="mt-1 text-xs text-white/50">Se envia como Bearer token. El endpoint por defecto es contacts/upsert de LeadConnector si dejas la URL vacia.</p>
         </div>
 
         <div>
             <label class="block mb-1 text-white/70">Body JSON template *</label>
-            <textarea name="body" rows="12" class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-sm text-white" placeholder="{{ $gohighlevelBodyPlaceholder }}" data-required-for="gohighlevel">{{ old('body', $integration->body ?? '') }}</textarea>
+            <textarea name="body" rows="12" class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-sm text-white" data-required-for="gohighlevel gohighlevel_oportunidad">{{ old('body', $integration->body ?? '') }}</textarea>
             @error('body') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
             <p class="mt-1 text-xs text-white/50">Acepta variables simples del lead como <span class="font-mono">@{{ $lead->email }}</span>. Incluye <span class="font-mono">locationId</span> aqui si tu cuenta lo requiere.</p>
+        </div>
+
+        <div class="hidden" data-show-for="gohighlevel_oportunidad">
+            <label class="block mb-1 text-white/70">body_oportunidad *</label>
+            <textarea name="body_oportunidad" rows="12" class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-sm text-white" data-required-for="gohighlevel_oportunidad">{{ old('body_oportunidad', $integration->body_oportunidad ?? '') }}</textarea>
+            @error('body_oportunidad') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+            <p class="mt-1 text-xs text-white/50">Debe ser JSON valido con los campos de oportunidad requeridos por GoHighLevel. El <span class="font-mono">contactId</span> se asigna automaticamente.</p>
         </div>
     </div>
 
@@ -688,37 +691,17 @@ JSON;
             @error('access_token') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
             @error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
         </div>
-        <div>
-            <label class="block mb-1 text-white/70">url_consulta_lead *</label>
-            <input name="url_consulta_lead" value="{{ old('url_consulta_lead', $integration->url_consulta_lead ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="https://..." data-required-for="hubspot">
-            @error('url_consulta_lead') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
-        </div>
-        <div>
-            <label class="block mb-1 text-white/70">url_negocio *</label>
-            <input name="url_negocio" value="{{ old('url_negocio', $integration->url_negocio ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="https://..." data-required-for="hubspot">
-            @error('url_negocio') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
-        </div>
-        <div>
-            <label class="block mb-1 text-white/70">url_creacionlead *</label>
-            <input name="url_creacionlead" value="{{ old('url_creacionlead', $integration->url_creacionlead ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="https://..." data-required-for="hubspot">
-            @error('url_creacionlead') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
-        </div>
-        <div class="md:col-span-2">
-            <label class="block mb-1 text-white/70">dealname *</label>
-            <input name="dealname" value="{{ old('dealname', $integration->dealname ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="Quiero comprar variable soy variavle" data-required-for="hubspot">
-            @error('dealname') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
-            <p class="mt-1 text-xs text-white/50">Acepta variables dinámicas<span class="font-mono"></span></p>
-        </div>
-        <div>
-            <label class="block mb-1 text-white/70">dealstage *</label>
-            <input name="dealstage" value="{{ old('dealstage', $integration->dealstage ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="hubspot">
-            @error('dealstage') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
-        </div>
         <div class="md:col-span-2">
             <label class="block mb-1 text-white/70">body *</label>
             <textarea name="body" rows="10" class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-sm text-white" placeholder='properties email variable,firstname' data-required-for="hubspot">{{ old('body', $integration->body ?? '') }}</textarea>
             @error('body') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
             <p class="mt-1 text-xs text-white/50">Debe ser JSON válido y acepta variables dinámicas<span class="font-mono"></span>.</p>
+        </div>
+        <div class="md:col-span-2">
+            <label class="block mb-1 text-white/70">body_oportunidad *</label>
+            <textarea name="body_oportunidad" rows="10" class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-sm text-white" data-required-for="hubspot">{{ old('body_oportunidad', $integration->body_oportunidad ?? '') }}</textarea>
+            @error('body_oportunidad') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+            <p class="mt-1 text-xs text-white/50">Debe incluir <span class="font-mono">properties.dealname</span> (nombre visible) y <span class="font-mono">properties.dealstage</span> (ID interno de etapa). La asociación con el contacto se agrega automáticamente.</p>
         </div>
     </div>
 
@@ -746,6 +729,8 @@ document.addEventListener('DOMContentLoaded', () => {
   const crmPrefixInput = document.querySelector('[data-crm-prefix-input]');
   const baseUrlBlock = document.querySelector('[data-base-url-block]');
   const baseUrlInput = document.querySelector('[data-base-url-input]');
+  const baseUrlLabel = document.querySelector('[data-base-url-label]');
+  const hubspotBaseUrlHelp = document.querySelector('[data-hubspot-base-url-help]');
   const kommoPipelineBlock = document.querySelector('[data-kommo-pipeline-block]');
   const kommoConditionsBody = document.querySelector('[data-kommo-conditions-body]');
   const kommoAddConditionButton = document.querySelector('[data-kommo-add-condition]');
@@ -797,6 +782,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (key.includes('salesforce')) return 'salesforce';
     if (key.includes('monday')) return 'monday';
     if (key.includes('hubspot')) return 'hubspot';
+    if (key.includes('gohighleve_portunidad') || key.includes('gohighlevel_oportunidad') || key.includes('gohighlevel_opportunity')) return 'gohighlevel_oportunidad';
     if (key.includes('gohighlevel') || key.includes('go_high_level') || key.includes('leadconnector') || key.includes('lead_connector')) return 'gohighlevel';
     return key;
   }
@@ -813,16 +799,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     block.querySelectorAll('input, select, textarea').forEach(el => {
       el.disabled = !visible;
-      const requiredFor = (el.dataset.requiredFor || '').trim().toLowerCase();
+      const requiredFor = (el.dataset.requiredFor || '').trim().toLowerCase().split(/\s+/).filter(Boolean);
       const hasStoredSecret = el.dataset.hasStoredSecret === '1';
-      el.required = visible && requiredFor !== '' && requiredFor === key && !hasStoredSecret;
+      el.required = visible && requiredFor.includes(key) && !hasStoredSecret;
     });
   }
 
   function refreshCrmPrefixRequirement() {
     if (!crmPrefixInput || !crmPrefixToggle) return;
     const key = getSelectedKey();
-    const supportsCustomPrefix = key === 'kommo' || key === 'kommopipeline' || key === 'freshworks' || key === 'hubspot' || key === 'gohighlevel';
+    const supportsCustomPrefix = key === 'kommo' || key === 'kommopipeline' || key === 'freshworks' || key === 'hubspot' || key === 'gohighlevel' || key === 'gohighlevel_oportunidad';
     const isEnabled = supportsCustomPrefix && crmPrefixToggle.checked;
 
     crmPrefixInput.disabled = !isEnabled;
@@ -839,14 +825,18 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     if (baseUrlBlock && baseUrlInput) {
-      const shouldHideBaseUrl = key === 'hubspot' || key === 'atom' || key === 'lety';
-      const shouldRequireBaseUrl = key !== 'hubspot' && key !== 'gohighlevel' && key !== 'atom' && key !== 'lety';
+      const shouldHideBaseUrl = key === 'atom' || key === 'lety';
+      const shouldRequireBaseUrl = key !== 'gohighlevel' && key !== 'gohighlevel_oportunidad' && key !== 'atom' && key !== 'lety';
       baseUrlBlock.classList.toggle('hidden', shouldHideBaseUrl);
       baseUrlInput.disabled = shouldHideBaseUrl;
       baseUrlInput.required = shouldRequireBaseUrl;
-      baseUrlInput.placeholder = key === 'gohighlevel'
-        ? 'https://services.leadconnectorhq.com/contacts/upsert'
-        : (key === 'kommopipeline' ? 'https://tudominio.kommo.com' : 'https://...');
+      if (baseUrlLabel) baseUrlLabel.textContent = key === 'hubspot' ? 'URL base HubSpot *' : 'URL *';
+      if (hubspotBaseUrlHelp) hubspotBaseUrlHelp.classList.toggle('hidden', key !== 'hubspot');
+      baseUrlInput.placeholder = key === 'hubspot'
+        ? 'https://api.hubapi.com'
+        : ((key === 'gohighlevel' || key === 'gohighlevel_oportunidad')
+          ? 'https://services.leadconnectorhq.com/contacts/upsert'
+          : (key === 'kommopipeline' ? 'https://tudominio.kommo.com' : 'https://...'));
     }
 
     refreshCrmPrefixRequirement();

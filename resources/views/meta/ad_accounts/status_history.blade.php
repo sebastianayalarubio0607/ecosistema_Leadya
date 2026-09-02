@@ -76,7 +76,7 @@
                 <thead class="bg-white/5 text-white/70">
                     <tr>
                         <x-sort-header :index="0" label="Fecha" />
-                        <x-sort-header :index="1" label="Cliente" />
+                        <x-sort-header :index="1" label="Clientes" />
                         <x-sort-header :index="2" label="Meta Account ID" />
                         <x-sort-header :index="3" label="Anterior" />
                         <x-sort-header :index="4" label="Nuevo" />
@@ -88,9 +88,12 @@
                 </thead>
                 <tbody class="divide-y divide-white/10 text-white/80">
                     @forelse($items as $item)
+                        @php($customerNames = ($item->account?->customers ?? collect())->pluck('name')->implode(', '))
                         <tr class="hover:bg-white/5">
                             <td class="px-3 py-2 whitespace-nowrap">{{ optional($item->consulted_at)->format('Y-m-d H:i:s') }}</td>
-                            <td class="px-3 py-2">{{ $item->customer?->name ?? '-' }}</td>
+                            <td class="px-3 py-2">
+                                {{ $customerNames !== '' ? $customerNames : ($item->customer?->name ?? 'Sin asignar') }}
+                            </td>
                             <td class="px-3 py-2">
                                 <div class="font-semibold">{{ $item->meta_account_id ?: $item->account?->meta_account_id }}</div>
                                 <div class="text-xs text-white/50">{{ $item->account?->name }}</div>

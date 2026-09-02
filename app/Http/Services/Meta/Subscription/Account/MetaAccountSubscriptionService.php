@@ -6,6 +6,7 @@ use App\Jobs\MetaAdAccountSubscribeJob;
 use App\Jobs\MetaAdAccountUnsubscribeJob;
 use App\Models\MetaAccessToken;
 use App\Models\MetaAdAccount;
+use App\Support\MetaAdAccountId;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -341,6 +342,6 @@ class MetaAccountSubscriptionService
             throw new RuntimeException('La cuenta publicitaria no tiene meta_account_id.');
         }
 
-        return str_starts_with($metaAccountId, 'act_') ? $metaAccountId : 'act_'.$metaAccountId;
+        return MetaAdAccountId::act($metaAccountId);
     }
 }

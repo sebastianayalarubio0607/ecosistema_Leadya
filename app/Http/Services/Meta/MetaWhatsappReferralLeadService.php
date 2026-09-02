@@ -9,12 +9,12 @@ use App\Jobs\SendLeadToFacebook;
 use App\Models\Lead;
 use App\Models\MetaAdAccount;
 use App\Models\MetaAdInsight;
+use App\Support\MetaAdAccountId;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
-use Illuminate\Support\Str;
 
 class MetaWhatsappReferralLeadService
 {
@@ -290,9 +290,14 @@ class MetaWhatsappReferralLeadService
         }
 
         $account = MetaAdAccount::query()
-            ->whereIn('meta_account_id', $this->accountIdCandidates((string) $accountId))
-            ->whereNotNull('customer_id')
-            ->first(['id', 'customer_id']);
+            ->whereIn('meta_account_id', MetaAdAccountId::candidates((string) $accountId))
+            ->first(['id', 'customer_id', 'meta_account_id']);
+
+        $resolvedCustomerId = $account?->resolveWhatsappLeadCustomerId();
+
+        if ($resolvedCustomerId) {
+            return $resolvedCustomerId;
+        }
 
         return $account?->customer_id
             ? (int) $account->customer_id
@@ -491,18 +496,6 @@ class MetaWhatsappReferralLeadService
         }
 
         return null;
-    }
-
-    private function accountIdCandidates(string $value): array
-    {
-        $value = trim($value);
-        $withoutPrefix = Str::startsWith($value, 'act_') ? Str::after($value, 'act_') : $value;
-
-        return array_values(array_unique(array_filter([
-            $value,
-            $withoutPrefix,
-            'act_'.$withoutPrefix,
-        ])));
     }
 
     private function stringOrNull(mixed $value): ?string

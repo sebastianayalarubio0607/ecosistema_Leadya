@@ -20,7 +20,7 @@ class MetaAdInsightController extends Controller
         }
 
         $items = MetaAdInsight::query()
-            ->with(['ad.adSet.campaign.account.customer'])
+            ->with(['ad.adSet.campaign.account.customers'])
             ->when($date, fn ($q) => $q->whereDate('date_stop', $date))
             ->orderByDesc('id')
             ->paginate(50)
@@ -72,7 +72,7 @@ class MetaAdInsightController extends Controller
 
     public function show(MetaAdInsight $insight): View
     {
-        $insight->load(['ad.adSet.campaign.account.customer']);
+        $insight->load(['ad.adSet.campaign.account.customers']);
         return view('meta.insights.show', compact('insight'));
     }
 

@@ -1,15 +1,16 @@
 <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
     <div class="md:col-span-2">
-        <label class="block mb-1 text-white/70">Ad Set (Customer → Account → Campaign → Ad Set)</label>
+        <label class="block mb-1 text-white/70">Ad Set (Clientes -> Account -> Campaign -> Ad Set)</label>
         @php($selected = old('meta_ad_set_id', $ad->meta_ad_set_id ?? ''))
         <select name="meta_ad_set_id" required
                 class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
             <option value="">-- Seleccionar --</option>
             @foreach($adSets as $s)
+                @php($customerNames = ($s->campaign?->account?->customers ?? collect())->pluck('name')->implode(', '))
                 <option value="{{ $s->id }}" @selected((string)$selected === (string)$s->id)>
-                    {{ $s->campaign?->account?->customer?->name ?? '—' }}
-                    — {{ $s->campaign?->name ?? '—' }}
-                    — {{ $s->name }} ({{ $s->meta_ad_set_id }})
+                    {{ $customerNames !== '' ? $customerNames : 'Sin asignar' }}
+                    - {{ $s->campaign?->name ?? '—' }}
+                    - {{ $s->name }} ({{ $s->meta_ad_set_id }})
                 </option>
             @endforeach
         </select>

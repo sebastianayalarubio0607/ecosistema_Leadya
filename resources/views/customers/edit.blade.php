@@ -21,6 +21,9 @@
                     'customer' => $customer,
                     'metaPages' => $metaPages,
                     'selectedMetaPageIds' => $selectedMetaPageIds,
+                    'metaAdAccounts' => $metaAdAccounts,
+                    'selectedMetaAdAccountIds' => $selectedMetaAdAccountIds,
+                    'defaultMetaAdAccountIds' => $defaultMetaAdAccountIds,
                     'metaWhatsapps' => $metaWhatsapps,
                     'selectedMetaWhatsappIds' => $selectedMetaWhatsappIds,
                 ])

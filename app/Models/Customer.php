@@ -7,7 +7,6 @@ use App\Models\FacebookConversionLog;
 use App\Models\GoogleAdsAd;
 use App\Models\GoogleAdsAdGroup;
 use App\Models\GoogleAdsCampaign;
-use \App\Models\MetaAdAccount;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
@@ -81,7 +80,14 @@ class Customer extends Model
         return $this->hasMany(FacebookConversionLog::class);
     }
 
-public function metaAdAccounts()
+public function metaAdAccounts(): BelongsToMany
+{
+    return $this->belongsToMany(MetaAdAccount::class, 'customer_meta_ad_account')
+        ->withPivot('is_default_for_whatsapp_leads')
+        ->withTimestamps();
+}
+
+public function legacyMetaAdAccounts(): HasMany
 {
     return $this->hasMany(MetaAdAccount::class, 'customer_id');
 }

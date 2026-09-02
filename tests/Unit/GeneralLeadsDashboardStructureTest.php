@@ -194,6 +194,58 @@ class GeneralLeadsDashboardStructureTest extends TestCase
         $this->assertSame(248.0, $value);
     }
 
+    public function test_google_entity_name_falls_back_to_id_when_missing(): void
+    {
+        $service = (new \ReflectionClass(GeneralLeadsAdsLiveMetricsService::class))->newInstanceWithoutConstructor();
+        $method = new ReflectionMethod($service, 'googleEntityName');
+        $method->setAccessible(true);
+
+        $this->assertSame('123456', $method->invoke($service, null, '123456'));
+        $this->assertSame('123456', $method->invoke($service, ' Sin Nombre ', '123456'));
+        $this->assertSame('Marca Search', $method->invoke($service, 'Marca Search', '123456'));
+    }
+
+    public function test_google_ad_table_formats_conversion_events(): void
+    {
+        $service = new GeneralLeadsDashboardService(new GeneralLeadsLeadQuery);
+        $method = new ReflectionMethod($service, 'formatAds');
+        $method->setAccessible(true);
+
+        $table = $method->invoke(
+            $service,
+            Request::create('/dashboard/general-leads', 'GET'),
+            GeneralLeadsFilters::fromRequest(Request::create('/dashboard/general-leads', 'GET', [
+                'customer_id' => 5,
+                'from' => '2026-07-30T10:15',
+                'to' => '2026-07-31T10:15',
+            ])),
+            'google_campaigns',
+            'Campañas Google',
+            new Collection([
+                '123456' => (object) [
+                    'name_value' => 'Marca Search',
+                    'cost_value' => 100,
+                    'impressions_value' => 1000,
+                    'clicks_value' => 50,
+                    'conversions_value' => 3.5,
+                    'roas_value' => null,
+                    'conversion_events_value' => [
+                        ['event_id' => 'lead', 'name' => 'Lead', 'conversions_value' => 2],
+                        ['event_id' => 'sale', 'name' => 'Venta', 'conversions_value' => 1.5],
+                    ],
+                ],
+            ]),
+            new Collection
+        );
+
+        $this->assertSame('Lead', $table['rows'][0]['conversion_events'][0]['name']);
+        $this->assertSame('2,00', $table['rows'][0]['conversion_events'][0]['quantity']);
+        $this->assertSame('Venta', $table['rows'][0]['conversion_events'][1]['name']);
+        $this->assertSame('1,50', $table['rows'][0]['conversion_events'][1]['quantity']);
+        $this->assertSame('3,50', $table['rows'][0]['conversions']);
+        $this->assertSame('Lead', $table['totals']['conversion_events'][0]['name']);
+    }
+
     public function test_sales_summary_uses_historical_sales_funnel_leads(): void
     {
         $originalDatabaseConfig = [

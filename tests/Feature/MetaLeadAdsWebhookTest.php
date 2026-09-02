@@ -47,6 +47,7 @@ class MetaLeadAdsWebhookTest extends TestCase
             '2026_03_18_090100_create_meta_pages_table.php',
             '2026_01_27_000001_create_meta_ad_accounts_table.php',
             '2026_01_27_000006_add_customer_id_to_meta_ad_accounts_table.php',
+            '2026_09_01_000000_create_customer_meta_ad_account_table.php',
             '2026_07_27_000000_create_meta_webhook_events_table.php',
             '2026_08_21_000002_ensure_referral_on_meta_webhook_events_table.php',
         ] as $migrationPath) {
@@ -78,6 +79,7 @@ class MetaLeadAdsWebhookTest extends TestCase
         }
 
         Schema::dropIfExists('meta_webhook_events');
+        Schema::dropIfExists('customer_meta_ad_account');
         Schema::dropIfExists('meta_ad_accounts');
         Schema::dropIfExists('customers');
 
@@ -460,6 +462,96 @@ class MetaLeadAdsWebhookTest extends TestCase
         $this->assertSame(1, Lead::query()->count());
     }
 
+    public function test_meta_whatsapp_referral_job_uses_default_customer_when_ad_account_is_shared(): void
+    {
+        $this->migrateLeadCreationTables();
+
+        $legacyCustomer = Customer::query()->create([
+            'name' => 'Cliente Legacy',
+            'status' => true,
+        ]);
+        $defaultCustomer = Customer::query()->create([
+            'name' => 'Cliente Default WhatsApp',
+            'status' => true,
+        ]);
+
+        $account = MetaAdAccount::withoutEvents(fn () => MetaAdAccount::query()->create([
+            'customer_id' => $legacyCustomer->id,
+            'meta_account_id' => '893247768830003',
+            'name' => 'Cuenta Compartida WhatsApp',
+            'status' => 'active',
+        ]));
+        $account->syncCustomersWithWhatsappDefault([$legacyCustomer->id, $defaultCustomer->id], $defaultCustomer->id);
+
+        $this->createMetaAdInsightForAccount($account, '120249117232250350', '893247768830003');
+
+        app(MetaWhatsappReferralLeadService::class)->processPayload($this->whatsappReferralPayloadWithPhone());
+
+        $lead = Lead::query()->firstOrFail();
+
+        $this->assertSame($defaultCustomer->id, $lead->customer_id);
+        $this->assertSame(
+            $defaultCustomer->id,
+            DB::table('customer_meta_ad_account')
+                ->where('meta_ad_account_id', $account->id)
+                ->where('is_default_for_whatsapp_leads', true)
+                ->value('customer_id')
+        );
+    }
+
+    public function test_meta_whatsapp_referral_job_falls_back_to_oldest_related_customer_without_default(): void
+    {
+        $this->migrateLeadCreationTables();
+
+        $oldestCustomer = Customer::query()->create([
+            'name' => 'Cliente Relacion Mas Antigua',
+            'status' => true,
+        ]);
+        $newestCustomer = Customer::query()->create([
+            'name' => 'Cliente Relacion Nueva',
+            'status' => true,
+        ]);
+
+        $account = MetaAdAccount::withoutEvents(fn () => MetaAdAccount::query()->create([
+            'customer_id' => null,
+            'meta_account_id' => '123456789',
+            'name' => 'Cuenta Sin Default',
+            'status' => 'active',
+        ]));
+
+        DB::table('customer_meta_ad_account')->insert([
+            [
+                'customer_id' => $oldestCustomer->id,
+                'meta_ad_account_id' => $account->id,
+                'is_default_for_whatsapp_leads' => false,
+                'created_at' => now()->subMinute(),
+                'updated_at' => now()->subMinute(),
+            ],
+            [
+                'customer_id' => $newestCustomer->id,
+                'meta_ad_account_id' => $account->id,
+                'is_default_for_whatsapp_leads' => false,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ],
+        ]);
+
+        $this->createMetaAdInsightForAccount($account, '120252403258930589', '123456789');
+
+        app(MetaWhatsappReferralLeadService::class)->processPayload($this->whatsappReferralPayloadWithoutContactPhone());
+
+        $lead = Lead::query()->firstOrFail();
+
+        $this->assertSame($oldestCustomer->id, $lead->customer_id);
+        $this->assertSame(
+            $oldestCustomer->id,
+            DB::table('customer_meta_ad_account')
+                ->where('meta_ad_account_id', $account->id)
+                ->where('is_default_for_whatsapp_leads', true)
+                ->value('customer_id')
+        );
+    }
+
     public function test_meta_whatsapp_referral_job_extracts_phone_from_text_when_contact_has_no_wa_id(): void
     {
         $this->migrateLeadCreationTables();
@@ -694,6 +786,16 @@ class MetaLeadAdsWebhookTest extends TestCase
             'status' => 'active',
         ]));
 
+        $account->syncCustomersWithWhatsappDefault([$customer->id], $customer->id);
+        $account->forceFill(['customer_id' => $customer->id])->saveQuietly();
+
+        $this->createMetaAdInsightForAccount($account, $sourceId, $accountId);
+
+        return $customer;
+    }
+
+    private function createMetaAdInsightForAccount(MetaAdAccount $account, string $sourceId, string $accountId): void
+    {
         $campaign = MetaCampaign::query()->create([
             'meta_ad_account_id' => $account->id,
             'meta_campaign_id' => 'campaign-'.$sourceId,
@@ -725,8 +827,6 @@ class MetaLeadAdsWebhookTest extends TestCase
             'date_stop' => '2026-08-21',
             'status' => 'active',
         ]);
-
-        return $customer;
     }
 
     private function whatsappReferralPayloadWithPhone(): array

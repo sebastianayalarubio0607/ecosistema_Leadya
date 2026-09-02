@@ -8,6 +8,7 @@ use App\Models\MetaAdInsight;
 use App\Models\MetaAdSet;
 use App\Models\MetaAccessToken;
 use App\Models\MetaCampaign;
+use App\Support\MetaAdAccountId;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Http\Client\Response;
 use Illuminate\Support\Facades\Http;
@@ -85,7 +86,10 @@ class MetaInsightsSyncService
         // ✅ Consultar TODOS los accounts guardados
         $accounts = MetaAdAccount::query()
             ->whereNotNull('meta_account_id')
-            ->get();
+            ->orderBy('id')
+            ->get()
+            ->unique(fn (MetaAdAccount $account) => MetaAdAccountId::normalize((string) $account->meta_account_id))
+            ->values();
 
         if ($accounts->isEmpty()) {
             $msg = 'No hay MetaAdAccount con meta_account_id para consultar.';
@@ -184,8 +188,8 @@ class MetaInsightsSyncService
             return $counts;
         }
 
-        // ✅ El endpoint requiere act_{id} pero a veces ya viene con "act_"
-        $actId = $this->normalizeActId($metaAccountIdRaw);
+        // El endpoint requiere act_{id} pero a veces ya viene con "act_".
+        $actId = MetaAdAccountId::act($metaAccountIdRaw);
 
         $fields = [
             'account_id', 'account_name',
@@ -377,15 +381,20 @@ class MetaInsightsSyncService
 
     private function getOrUpsertAdAccount(string $accountId, array $item): MetaAdAccount
     {
-        if (isset($this->accountCache[$accountId])) {
-            return $this->accountCache[$accountId];
+        $cacheKey = MetaAdAccountId::normalize($accountId);
+
+        if (isset($this->accountCache[$cacheKey])) {
+            return $this->accountCache[$cacheKey];
         }
 
-        $model = MetaAdAccount::query()->where('meta_account_id', $accountId)->first();
+        $model = MetaAdAccount::query()
+            ->whereIn('meta_account_id', MetaAdAccountId::candidates($accountId))
+            ->orderBy('id')
+            ->first();
 
         if (! $model) {
             $model = new MetaAdAccount;
-            $model->meta_account_id = $accountId;
+            $model->meta_account_id = $cacheKey;
         }
 
         if (! empty($item['account_name'])) {
@@ -395,7 +404,7 @@ class MetaInsightsSyncService
         $model->status = $model->status ?: 'active';
         $model->save();
 
-        return $this->accountCache[$accountId] = $model;
+        return $this->accountCache[$cacheKey] = $model;
     }
 
     private function getOrUpsertCampaign(string $campaignId, MetaAdAccount $adAccount, array $item): MetaCampaign
@@ -778,18 +787,4 @@ class MetaInsightsSyncService
         }
     }
 
-    /**
-     * Normaliza el ID para el endpoint (/act_{id}/insights).
-     * Si ya viene "act_XXXX", lo respeta.
-     */
-    private function normalizeActId(string $metaAccountId): string
-    {
-        $metaAccountId = trim($metaAccountId);
-
-        if (Str::startsWith($metaAccountId, 'act_')) {
-            return $metaAccountId;
-        }
-
-        return 'act_'.$metaAccountId;
-    }
 }

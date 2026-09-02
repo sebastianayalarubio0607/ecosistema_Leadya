@@ -85,6 +85,8 @@ Route::middleware('auth')->group(function () {
         ->name('integrations.kommo-pipeline.statuses');
     Route::post('integrations/{integration}/kommo/sync-boards', [IntegrationWebController::class, 'syncKommoBoards'])
         ->name('integrations.kommo.sync-boards');
+    Route::post('integrations/{integration}/hubspot/sync-deal-stages', [IntegrationWebController::class, 'syncHubspotDealStages'])
+        ->name('integrations.hubspot.sync-deal-stages');
     Route::resource('integrations', IntegrationWebController::class);
 
     
@@ -136,6 +138,10 @@ Route::middleware('auth')->group(function () {
 
         Route::resource('ad-accounts', MetaAdAccountController::class)
             ->parameters(['ad-accounts' => 'ad_account']);
+
+        Route::post('ad-accounts/sync-from-meta', [MetaAdAccountController::class, 'syncFromMeta'])
+            ->name('ad-accounts.sync-from-meta')
+            ->middleware('throttle:3,1');
 
         Route::post('ad-accounts/statuses/sync', [MetaAdAccountController::class, 'syncStatuses'])
             ->name('ad-accounts.statuses.sync-all');

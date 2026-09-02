@@ -14,6 +14,7 @@ use App\Models\MetaAdAccount;
 use App\Models\MetaAdInsight;
 use App\Models\Origin;
 use App\Models\Source;
+use App\Support\MetaAdAccountId;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Illuminate\Support\Arr;
@@ -1951,7 +1952,10 @@ class DashboardGerencialLeadsController extends Controller
         if ($customerId !== null || $integrationId !== null) {
             $q->whereHas('ad.adSet.campaign.account', function ($qq) use ($customerId, $integrationId) {
                 if ($customerId !== null) {
-                    $qq->where('customer_id', $customerId);
+                    $qq->where(function ($accountQuery) use ($customerId): void {
+                        $accountQuery->where('customer_id', $customerId)
+                            ->orWhereHas('customers', fn ($customers) => $customers->whereKey($customerId));
+                    });
                 }
                 if ($integrationId !== null && Schema::hasColumn($qq->getModel()->getTable(), 'integration_id')) {
                     $qq->where('integration_id', $integrationId);
@@ -2747,7 +2751,10 @@ class DashboardGerencialLeadsController extends Controller
                 if ($customerId !== null || $integrationId !== null) {
                     $q->whereHas('ad.adSet.campaign.account', function ($qq) use ($customerId, $integrationId) {
                         if ($customerId !== null) {
-                            $qq->where('customer_id', $customerId);
+                            $qq->where(function ($accountQuery) use ($customerId): void {
+                                $accountQuery->where('customer_id', $customerId)
+                                    ->orWhereHas('customers', fn ($customers) => $customers->whereKey($customerId));
+                            });
                         }
                         if ($integrationId !== null && Schema::hasColumn($qq->getModel()->getTable(), 'integration_id')) {
                             $qq->where('integration_id', $integrationId);
@@ -3031,7 +3038,10 @@ class DashboardGerencialLeadsController extends Controller
                     $accQ = MetaAdAccount::query();
 
                     if ($customerId !== null) {
-                        $accQ->where('customer_id', $customerId);
+                        $accQ->where(function ($accountQuery) use ($customerId): void {
+                            $accountQuery->where('customer_id', $customerId)
+                                ->orWhereHas('customers', fn ($customers) => $customers->whereKey($customerId));
+                        });
                     }
                     if ($integrationId !== null && Schema::hasColumn($accTable, 'integration_id')) {
                         $accQ->where('integration_id', $integrationId);
@@ -3039,7 +3049,7 @@ class DashboardGerencialLeadsController extends Controller
 
                     $accIds = (clone $accQ)->pluck('id')->map(fn ($v) => (string) $v)->all();
                     $accMetaIds = Schema::hasColumn($accTable, 'meta_account_id')
-                        ? (clone $accQ)->pluck('meta_account_id')->filter()->map(fn ($v) => (string) $v)->all()
+                        ? (clone $accQ)->pluck('meta_account_id')->filter()->flatMap(fn ($v) => MetaAdAccountId::candidates((string) $v))->all()
                         : [];
                     $allowed = array_values(array_unique(array_merge($accIds, $accMetaIds)));
 
@@ -3291,7 +3301,10 @@ class DashboardGerencialLeadsController extends Controller
                     $accQ = MetaAdAccount::query();
 
                     if ($customerId !== null) {
-                        $accQ->where('customer_id', $customerId);
+                        $accQ->where(function ($accountQuery) use ($customerId): void {
+                            $accountQuery->where('customer_id', $customerId)
+                                ->orWhereHas('customers', fn ($customers) => $customers->whereKey($customerId));
+                        });
                     }
                     if ($integrationId !== null && Schema::hasColumn($accTable, 'integration_id')) {
                         $accQ->where('integration_id', $integrationId);
@@ -3299,7 +3312,7 @@ class DashboardGerencialLeadsController extends Controller
 
                     $accIds = (clone $accQ)->pluck('id')->map(fn ($v) => (string) $v)->all();
                     $accMetaIds = Schema::hasColumn($accTable, 'meta_account_id')
-                        ? (clone $accQ)->pluck('meta_account_id')->filter()->map(fn ($v) => (string) $v)->all()
+                        ? (clone $accQ)->pluck('meta_account_id')->filter()->flatMap(fn ($v) => MetaAdAccountId::candidates((string) $v))->all()
                         : [];
                     $allowed = array_values(array_unique(array_merge($accIds, $accMetaIds)));
 
@@ -4370,4 +4383,5 @@ class DashboardGerencialLeadsController extends Controller
 
         return null;
     }
+
 }
