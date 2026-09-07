@@ -20,7 +20,7 @@ use Illuminate\Validation\ValidationException;
 class IntegrationWebController extends Controller
 {
     private const DEFAULT_GOHIGHLEVEL_URL = 'https://services.leadconnectorhq.com/contacts/upsert';
-    private const VARIABLE_MAPPING_INTEGRATION_TYPES = ['atom', 'zoho', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad'];
+    private const VARIABLE_MAPPING_INTEGRATION_TYPES = ['atom', 'zoho', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'];
 
     public function index(Request $request)
     {
@@ -404,6 +404,11 @@ class IntegrationWebController extends Controller
             $rules['custom_field'] = ['required', 'string'];
         }
 
+        if ($typeName === 'zapnito_invitacion') {
+            $rules['tokent'] = $this->sensitiveValueRule($updating, $integration, $typeName, 'tokent');
+            $rules['body'] = ['required', 'string'];
+        }
+
         if ($typeName === 'salesforce') {
             $rules['url_credenciales'] = ['required', 'url', 'max:255'];
             $rules['username'] = ['required', 'string', 'max:255'];
@@ -540,6 +545,16 @@ class IntegrationWebController extends Controller
             $validated = $this->validateCrmIdPrefixPayload($validated, 'Freshworks');
         }
 
+        if ($typeName === 'zapnito_invitacion') {
+            $validated = $this->clearKommoFields($validated);
+            $validated = $this->clearZohoFieldsPreservingToken($validated);
+            $validated = $this->clearFreshworksFields($validated);
+            $validated = $this->clearSalesforceCredentialFields($validated);
+            $validated = $this->clearHubspotFields($validated);
+            $validated = $this->validateZapnitoInvitationPayload($validated);
+            $validated = $this->clearCrmIdPrefixFields($validated);
+        }
+
         if ($typeName === 'salesforce') {
             $validated = $this->clearKommoFields($validated);
             $validated = $this->clearZohoFieldsPreservingToken($validated);
@@ -589,7 +604,7 @@ class IntegrationWebController extends Controller
             $validated = $this->validateCrmIdPrefixPayload($validated, 'GoHighLevel');
         }
 
-        if (!in_array($typeName, ['google_sheets', 'kommo', 'kommopipeline', 'atom', 'lety', 'zoho', 'freshworks', 'salesforce', 'monday', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad'], true)) {
+        if (!in_array($typeName, ['google_sheets', 'kommo', 'kommopipeline', 'atom', 'lety', 'zoho', 'freshworks', 'zapnito_invitacion', 'salesforce', 'monday', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad'], true)) {
             $validated = $this->clearHubspotFields($validated);
             $validated = $this->clearCrmIdPrefixFields($validated);
         }
@@ -684,6 +699,7 @@ class IntegrationWebController extends Controller
             'kommo_pipeline' => 'kommopipeline',
             'atom_webhook', 'atom_webhooks' => 'atom',
             'lety_webhook', 'lety_webhooks' => 'lety',
+            'zapnito', 'zapnito_invitation', 'zapnito_invitations' => 'zapnito_invitacion',
             default => $normalized,
         };
     }
@@ -708,6 +724,36 @@ class IntegrationWebController extends Controller
 
         if (!empty($payload['custom_field']) && !$this->isValidFreshworksCustomField($payload['custom_field'])) {
             $messages['custom_field'] = 'custom_field debe ser un JSON valido.';
+        }
+
+        if ($messages !== []) {
+            throw ValidationException::withMessages($messages);
+        }
+
+        return $payload;
+    }
+
+    private function validateZapnitoInvitationPayload(array $payload): array
+    {
+        $required = [
+            'url' => 'URL base Zapnito',
+            'tokent' => 'token',
+            'body' => 'body',
+        ];
+
+        $messages = [];
+        foreach ($required as $field => $label) {
+            if (empty($payload[$field])) {
+                $messages[$field] = "Para Zapnito invitacion el campo {$label} es obligatorio.";
+            }
+        }
+
+        if (!empty($payload['body']) && !$this->isValidJsonTemplate($payload['body'], '__zapnito_lead_field__:', true)) {
+            $messages['body'] = 'body debe ser un JSON valido y solo acepta variables {{$lead->campo}} o {{$lead.campo}}.';
+        }
+
+        if (!empty($payload['url'])) {
+            $payload['url'] = $this->normalizeZapnitoBaseUrl((string) $payload['url']);
         }
 
         if ($messages !== []) {
@@ -936,6 +982,19 @@ class IntegrationWebController extends Controller
         return $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
     }
 
+    private function normalizeZapnitoBaseUrl(string $url): string
+    {
+        $parts = parse_url(trim($url));
+
+        if (!isset($parts['scheme'], $parts['host'])) {
+            throw ValidationException::withMessages([
+                'url' => 'La URL base de Zapnito debe incluir protocolo y dominio.',
+            ]);
+        }
+
+        return $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
+    }
+
     private function validateGohighlevelPayload(array $payload): array
     {
         $required = [
@@ -973,9 +1032,9 @@ class IntegrationWebController extends Controller
             ]);
         }
 
-        if (! $this->isValidGohighlevelJsonTemplate($payload['body_oportunidad'])) {
+        if (! $this->isValidGohighlevelJsonTemplate($payload['body_oportunidad'], ['contactId'])) {
             throw ValidationException::withMessages([
-                'body_oportunidad' => 'body_oportunidad debe ser un JSON valido y solo acepta variables {{$lead->campo}} simples.',
+                'body_oportunidad' => 'body_oportunidad debe ser un JSON valido y solo acepta variables {{$lead->campo}} simples o {{contactId}}.',
             ]);
         }
 
@@ -1160,7 +1219,7 @@ class IntegrationWebController extends Controller
         return $this->isValidJsonTemplate($customField, '__freshworks_lead_field__:');
     }
 
-    private function isValidJsonTemplate(?string $value, string $tokenPrefix = '__integration_lead_field__:'): bool
+    private function isValidJsonTemplate(?string $value, string $tokenPrefix = '__integration_lead_field__:', bool $rejectUnresolvedPlaceholders = false): bool
     {
         $value = trim((string) $value);
 
@@ -1187,10 +1246,11 @@ class IntegrationWebController extends Controller
                 : json_encode($tokenPrefix . $path, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }, $normalized);
 
-        return is_array(json_decode($normalized, true));
+        return (!$rejectUnresolvedPlaceholders || !preg_match('/\{\{.*?\}\}/s', $normalized))
+            && is_array(json_decode($normalized, true));
     }
 
-    private function isValidGohighlevelJsonTemplate(?string $value): bool
+    private function isValidGohighlevelJsonTemplate(?string $value, array $allowedContextVariables = []): bool
     {
         $value = trim((string) $value);
 
@@ -1201,16 +1261,16 @@ class IntegrationWebController extends Controller
         $quotedPattern = '/"(\s*\{\{\s*([^}]+?)\s*\}\}\s*)"/';
         $inlinePattern = '/\{\{\s*([^}]+?)\s*\}\}/';
 
-        $normalized = preg_replace_callback($quotedPattern, function ($matches) {
-            $field = $this->normalizeGohighlevelPlaceholderField($matches[2]);
+        $normalized = preg_replace_callback($quotedPattern, function ($matches) use ($allowedContextVariables) {
+            $field = $this->normalizeGohighlevelPlaceholderField($matches[2], $allowedContextVariables);
 
             return $field === null
                 ? $matches[0]
                 : json_encode('__gohighlevel_lead_field__:' . $field, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }, $value);
 
-        $normalized = preg_replace_callback($inlinePattern, function ($matches) {
-            $field = $this->normalizeGohighlevelPlaceholderField($matches[1]);
+        $normalized = preg_replace_callback($inlinePattern, function ($matches) use ($allowedContextVariables) {
+            $field = $this->normalizeGohighlevelPlaceholderField($matches[1], $allowedContextVariables);
 
             return $field === null
                 ? $matches[0]
@@ -1375,9 +1435,15 @@ class IntegrationWebController extends Controller
         return $result;
     }
 
-    private function normalizeGohighlevelPlaceholderField(string $expression): ?string
+    private function normalizeGohighlevelPlaceholderField(string $expression, array $allowedContextVariables = []): ?string
     {
         $expression = trim($expression);
+
+        foreach ($allowedContextVariables as $variable) {
+            if (strcasecmp($expression, (string) $variable) === 0) {
+                return (string) $variable;
+            }
+        }
 
         if (!preg_match('/^\$?lead\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/', $expression, $matches)) {
             return null;

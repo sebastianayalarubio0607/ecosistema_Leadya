@@ -12,6 +12,22 @@
         ->trim('_')
         ->toString();
 
+    $normalizedIntegrationType = match ($normalizedIntegrationType) {
+        'go_high_level', 'leadconnector', 'lead_connector' => 'gohighlevel',
+        'gohighleve_oportunidad', 'gohighlevel_opportunity' => 'gohighlevel_oportunidad',
+        'kommo_pipeline' => 'kommopipeline',
+        'zapnito', 'zapnito_invitation', 'zapnito_invitations' => 'zapnito_invitacion',
+        default => $normalizedIntegrationType,
+    };
+
+    $zapnitoEndpoint = null;
+    if ($normalizedIntegrationType === 'zapnito_invitacion' && filled($integration->url ?? null)) {
+        $zapnitoBaseUrl = rtrim((string) $integration->url, '/');
+        $zapnitoEndpoint = preg_match('#/api/v1/invitations/?$#', $zapnitoBaseUrl)
+            ? rtrim($zapnitoBaseUrl, '/')
+            : $zapnitoBaseUrl . '/api/v1/invitations';
+    }
+
     $canSyncKommoBoards = in_array($normalizedIntegrationType, ['kommo', 'kommopipeline', 'kommo_pipeline'], true);
     $canSyncHubspotDealStages = $normalizedIntegrationType === 'hubspot';
 @endphp
@@ -345,7 +361,42 @@
             </div>
         @endif
 
-        @if (in_array($normalizedIntegrationType, ['atom', 'zoho', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad'], true))
+        @if ($normalizedIntegrationType === 'zapnito_invitacion')
+            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-6 text-white/80">
+                <div class="mb-4">
+                    <h3 class="text-lg font-semibold text-white">Zapnito invitacion</h3>
+                    <p class="text-sm text-white/50">Invitaciones creadas desde un body JSON configurable.</p>
+                </div>
+
+                <div class="grid gap-4">
+                    <div>
+                        <div class="text-sm text-white/50">Token</div>
+                        <div class="mt-1 font-mono text-sm">{{ \App\Support\SensitiveValue::mask($integration->tokent) }}</div>
+                    </div>
+
+                    <div>
+                        <div class="text-sm text-white/50">Endpoint final</div>
+                        <div class="mt-1 break-all">{{ $zapnitoEndpoint ?: '—' }}</div>
+                    </div>
+
+                    <div>
+                        <div class="text-sm text-white/50">Headers</div>
+                        <pre class="mt-1 overflow-x-auto rounded-xl border border-white/10 bg-slate-900/60 p-3 text-xs text-white/80">
+Authorization: Token token={{ \App\Support\SensitiveValue::mask($integration->tokent) }}
+Accept: application/json
+Content-Type: application/json
+charset=utf-8</pre>
+                    </div>
+
+                    <div>
+                        <div class="text-sm text-white/50">Body JSON</div>
+                        <pre class="mt-1 overflow-x-auto rounded-xl border border-white/10 bg-slate-900/60 p-3 text-xs text-white/80">{{ $integration->body ?: '—' }}</pre>
+                    </div>
+                </div>
+            </div>
+        @endif
+
+        @if (in_array($normalizedIntegrationType, ['atom', 'zoho', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'], true))
             <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-6 text-white/80">
                 <div class="mb-4">
                     <h3 class="text-lg font-semibold text-white">Mapeo de variables</h3>

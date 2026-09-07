@@ -11,6 +11,7 @@ use App\Http\Services\Integration\SalesforceIntegrationService;
 use App\Http\Services\Integration\ZohoIntegrationService;
 use App\Http\Services\Integration\MondayIntegrationService;
 use App\Http\Services\Integration\HubspotIntegrationService;
+use App\Http\Services\Integration\ZapnitoInvitationIntegrationService;
 use App\Models\Integration;
 use App\Models\Lead;
 use App\Models\LeadIntegration;
@@ -31,6 +32,7 @@ class IntegrationService
     private $MondayIntegrationService;
     private $HubspotIntegrationService;
     private $GohighlevelService;
+    private $ZapnitoInvitationIntegrationService;
 
     public function __construct(
         GoogleSheetsIntegrationService $GooglesheetsIntegrationService,
@@ -43,7 +45,8 @@ class IntegrationService
         SalesforceIntegrationService $SalesforceIntegrationService,
         MondayIntegrationService $MondayIntegrationService,
         HubspotIntegrationService $HubspotIntegrationService,
-        GohighlevelService $GohighlevelService
+        GohighlevelService $GohighlevelService,
+        ZapnitoInvitationIntegrationService $ZapnitoInvitationIntegrationService
     ) {
         $this->GooglesheetsIntegrationService = $GooglesheetsIntegrationService;
         $this->KommoIntegrationService = $KommoIntegrationService;
@@ -56,6 +59,7 @@ class IntegrationService
         $this->MondayIntegrationService = $MondayIntegrationService;
         $this->HubspotIntegrationService = $HubspotIntegrationService;
         $this->GohighlevelService = $GohighlevelService;
+        $this->ZapnitoInvitationIntegrationService = $ZapnitoInvitationIntegrationService;
     }
 
     public function getActiveIntegrations($customer_id)
@@ -105,6 +109,7 @@ class IntegrationService
                 'hubspot' => fn() => $this->HubspotIntegrationService->sendToHubspot($lead, $integration),
                 'gohighlevel' => fn() => $this->GohighlevelService->sendToGohighlevel($lead, $integration),
                 'gohighlevel_oportunidad' => fn() => $this->GohighlevelService->sendToGohighlevelOportunidad($lead, $integration),
+                'zapnito_invitacion' => fn() => $this->ZapnitoInvitationIntegrationService->sendToZapnitoInvitation($lead, $integration),
             ];
 
             $serviceMap = [
@@ -120,6 +125,7 @@ class IntegrationService
                 'hubspot' => $this->HubspotIntegrationService::class,
                 'gohighlevel' => $this->GohighlevelService::class,
                 'gohighlevel_oportunidad' => $this->GohighlevelService::class,
+                'zapnito_invitacion' => $this->ZapnitoInvitationIntegrationService::class,
             ];
 
             $handler = $handlers[$type] ?? null;
@@ -199,6 +205,7 @@ class IntegrationService
             'gohighleve_oportunidad', 'gohighlevel_opportunity' => 'gohighlevel_oportunidad',
             'kommo_pipeline' => 'kommopipeline',
             'atom_webhook', 'atom_webhooks' => 'atom',
+            'zapnito', 'zapnito_invitation', 'zapnito_invitations' => 'zapnito_invitacion',
             default => $normalized !== '' ? $normalized : 'webhook',
         };
     }
@@ -265,6 +272,12 @@ class IntegrationService
                 'token_present' => filled($integration->tokent),
                 'body_present' => filled($integration->body),
                 'body_oportunidad_present' => filled($integration->body_oportunidad),
+            ],
+            'zapnito_invitacion' => [
+                'integration_url' => $integration->url,
+                'url_present' => filled($integration->url),
+                'token_present' => filled($integration->tokent),
+                'body_present' => filled($integration->body),
             ],
             default => [
                 'integration_url' => $integration->url,

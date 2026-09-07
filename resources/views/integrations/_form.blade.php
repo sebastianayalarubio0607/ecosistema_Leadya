@@ -19,6 +19,7 @@
             'go_high_level', 'leadconnector', 'lead_connector' => 'gohighlevel',
             'gohighleve_oportunidad', 'gohighlevel_opportunity' => 'gohighlevel_oportunidad',
             'kommo_pipeline' => 'kommopipeline',
+            'zapnito', 'zapnito_invitation', 'zapnito_invitations' => 'zapnito_invitacion',
             default => $currentIntegrationTypeKey,
         };
 
@@ -33,7 +34,7 @@
             : $fallback;
 
         $baseUrlValue = old('url', $integration->url ?? '');
-        if ($currentIntegrationTypeKey === 'hubspot' && $baseUrlValue !== '') {
+        if (in_array($currentIntegrationTypeKey, ['hubspot', 'zapnito_invitacion'], true) && $baseUrlValue !== '') {
             $parts = parse_url($baseUrlValue);
             $baseUrlValue = isset($parts['scheme'], $parts['host'])
                 ? $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '')
@@ -80,6 +81,7 @@
         <input name="url" value="{{ $baseUrlValue }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40" placeholder="https://..." data-base-url-input>
         @error('url') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
         <p class="mt-1 hidden text-xs text-white/50" data-hubspot-base-url-help>Usa solo la base, por ejemplo <span class="font-mono">https://api.hubapi.com</span>. Los endpoints se crean automáticamente.</p>
+        <p class="mt-1 hidden text-xs text-white/50" data-zapnito-base-url-help>Usa solo la base, por ejemplo <span class="font-mono">https://comunidad.flar.com</span>. El endpoint <span class="font-mono">/api/v1/invitations</span> se agrega automaticamente.</p>
     </div>
 
     <div>
@@ -553,7 +555,14 @@ TEXT;
     @endphp
 
     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 hidden" data-show-for="freshworks" data-freshworks-block>
-        <div><label class="block mb-1 text-white/70">token *</label><input name="tokent" type="password" value="{{ old('tokent') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="{{ $hasStoredSecretFor('freshworks') ? $maskedSecret($integration->tokent ?? null, 'token') : 'token' }}" data-has-stored-secret="{{ $hasStoredSecretFor('freshworks') ? '1' : '0' }}" data-required-for="freshworks">@error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
+        <div>
+            <label class="block mb-1 text-white/70">token *</label>
+            <input name="tokent" type="password" value="{{ old('tokent') }}" autocomplete="new-password" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" placeholder="{{ $hasStoredSecretFor('freshworks') ? $maskedSecret($integration->tokent ?? null, 'token') : 'token' }}" data-has-stored-secret="{{ $hasStoredSecretFor('freshworks') ? '1' : '0' }}" data-required-for="freshworks">
+            @error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+            @if($integration->exists && $hasStoredSecretFor('freshworks'))
+                <p class="mt-1 text-xs text-white/50">Deja este campo vacio para conservar el token guardado.</p>
+            @endif
+        </div>
         <div><label class="block mb-1 text-white/70">territory_id *</label><input name="territory_id" value="{{ old('territory_id', $integration->territory_id ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="freshworks">@error('territory_id') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">owner_id *</label><input name="owner_id" value="{{ old('owner_id', $integration->owner_id ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="freshworks">@error('owner_id') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
         <div><label class="block mb-1 text-white/70">City *</label><input name="city" value="{{ old('city', $integration->city ?? '') }}" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white" data-required-for="freshworks">@error('city') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror</div>
@@ -595,6 +604,47 @@ TEXT;
     </div>
 
     @php
+        $zapnitoBodyPlaceholder = <<<'JSON'
+{
+  "user": {
+    "name": "{{ lead->name }}",
+    "email": "{{ lead->email }}",
+    "invited_by_email": "admin@your-community.com"
+  }
+}
+JSON;
+    @endphp
+
+    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="zapnito_invitacion">
+        <div>
+            <label class="block mb-1 text-white/70">Token Zapnito *</label>
+            <input name="tokent"
+                   type="password"
+                   value="{{ old('tokent') }}"
+                   autocomplete="new-password"
+                   class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white"
+                   placeholder="{{ $hasStoredSecretFor('zapnito_invitacion') ? $maskedSecret($integration->tokent ?? null, 'Token Zapnito') : 'Token Zapnito' }}"
+                   data-has-stored-secret="{{ $hasStoredSecretFor('zapnito_invitacion') ? '1' : '0' }}"
+                   data-required-for="zapnito_invitacion">
+            @error('tokent') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+            @if($integration->exists && $hasStoredSecretFor('zapnito_invitacion'))
+                <p class="mt-1 text-xs text-white/50">Deja este campo vacio para conservar el token guardado.</p>
+            @endif
+        </div>
+
+        <div>
+            <label class="block mb-1 text-white/70">Body JSON invitation *</label>
+            <textarea name="body"
+                      rows="12"
+                      class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-sm text-white"
+                      placeholder="{{ $zapnitoBodyPlaceholder }}"
+                      data-required-for="zapnito_invitacion">{{ old('body', $integration->body ?? '') }}</textarea>
+            @error('body') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
+            <p class="mt-1 text-xs text-white/50">Se envia a <span class="font-mono">/api/v1/invitations</span> y acepta variables del lead como <span class="font-mono">@{{ $lead->email }}</span>.</p>
+        </div>
+    </div>
+
+    @php
         $integrationStoredMappings = isset($integrationVariableMappings)
             ? $integrationVariableMappings->map(fn ($mapping) => [
                 'target_variable' => $mapping->target_variable,
@@ -609,7 +659,7 @@ TEXT;
         $integrationInitialMappings = collect(old('integration_variable_mappings', $integrationStoredMappings))->values();
     @endphp
 
-    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="atom zoho salesforce monday lety hubspot gohighlevel gohighlevel_oportunidad" data-integration-mappings-block>
+    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="atom zoho salesforce monday lety hubspot gohighlevel gohighlevel_oportunidad zapnito_invitacion" data-integration-mappings-block>
         <div class="rounded-2xl border border-white/10 bg-white/5 p-4">
             <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
                 <div>
@@ -731,6 +781,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const baseUrlInput = document.querySelector('[data-base-url-input]');
   const baseUrlLabel = document.querySelector('[data-base-url-label]');
   const hubspotBaseUrlHelp = document.querySelector('[data-hubspot-base-url-help]');
+  const zapnitoBaseUrlHelp = document.querySelector('[data-zapnito-base-url-help]');
   const kommoPipelineBlock = document.querySelector('[data-kommo-pipeline-block]');
   const kommoConditionsBody = document.querySelector('[data-kommo-conditions-body]');
   const kommoAddConditionButton = document.querySelector('[data-kommo-add-condition]');
@@ -779,6 +830,7 @@ document.addEventListener('DOMContentLoaded', () => {
     if (key.includes('lety')) return 'lety';
     if (key.includes('zoho')) return 'zoho';
     if (key.includes('freshworks')) return 'freshworks';
+    if (key.includes('zapnito')) return 'zapnito_invitacion';
     if (key.includes('salesforce')) return 'salesforce';
     if (key.includes('monday')) return 'monday';
     if (key.includes('hubspot')) return 'hubspot';
@@ -830,16 +882,55 @@ document.addEventListener('DOMContentLoaded', () => {
       baseUrlBlock.classList.toggle('hidden', shouldHideBaseUrl);
       baseUrlInput.disabled = shouldHideBaseUrl;
       baseUrlInput.required = shouldRequireBaseUrl;
-      if (baseUrlLabel) baseUrlLabel.textContent = key === 'hubspot' ? 'URL base HubSpot *' : 'URL *';
+      if (baseUrlLabel) {
+        baseUrlLabel.textContent = key === 'hubspot'
+          ? 'URL base HubSpot *'
+          : (key === 'zapnito_invitacion' ? 'URL base Zapnito *' : 'URL *');
+      }
       if (hubspotBaseUrlHelp) hubspotBaseUrlHelp.classList.toggle('hidden', key !== 'hubspot');
+      if (zapnitoBaseUrlHelp) zapnitoBaseUrlHelp.classList.toggle('hidden', key !== 'zapnito_invitacion');
       baseUrlInput.placeholder = key === 'hubspot'
         ? 'https://api.hubapi.com'
+        : (key === 'zapnito_invitacion' ? 'https://comunidad.flar.com'
         : ((key === 'gohighlevel' || key === 'gohighlevel_oportunidad')
           ? 'https://services.leadconnectorhq.com/contacts/upsert'
-          : (key === 'kommopipeline' ? 'https://tudominio.kommo.com' : 'https://...'));
+          : (key === 'kommopipeline' ? 'https://tudominio.kommo.com' : 'https://...')));
     }
 
     refreshCrmPrefixRequirement();
+  }
+
+  function bootStoredSecretInputs() {
+    const form = typeSelect?.form || document.querySelector('form');
+
+    document.querySelectorAll('input[type="password"][data-has-stored-secret="1"]').forEach(input => {
+      input.dataset.secretEdited = '0';
+      input.autocomplete = 'new-password';
+      input.setAttribute('data-lpignore', 'true');
+      input.setAttribute('data-1p-ignore', 'true');
+
+      const markEdited = () => {
+        input.dataset.secretEdited = '1';
+      };
+
+      const clearIfUntouched = () => {
+        if (input.dataset.secretEdited !== '1') {
+          input.value = '';
+        }
+      };
+
+      ['keydown', 'paste', 'drop'].forEach(eventName => input.addEventListener(eventName, markEdited));
+      input.addEventListener('input', () => {
+        if (document.activeElement === input) {
+          markEdited();
+        }
+      });
+
+      window.setTimeout(clearIfUntouched, 50);
+      window.setTimeout(clearIfUntouched, 300);
+      window.setTimeout(clearIfUntouched, 1000);
+      form?.addEventListener('submit', clearIfUntouched);
+    });
   }
 
   function option(value, label, selected = false) {
@@ -1486,6 +1577,7 @@ document.addEventListener('DOMContentLoaded', () => {
   if (letyAddConditionButton) letyAddConditionButton.addEventListener('click', () => addLetyCondition());
   if (freshworksAddMappingButton) freshworksAddMappingButton.addEventListener('click', () => addFreshworksMapping());
   if (integrationAddMappingButton) integrationAddMappingButton.addEventListener('click', () => addIntegrationMapping());
+  bootStoredSecretInputs();
   bootKommoPipeline();
   bootAtom();
   bootLety();
