@@ -2,6 +2,7 @@
 
 namespace App\Http\Services\Integration;
 
+use App\Http\Services\Integration\Concerns\ResolvesIntegrationVariableMappings;
 use App\Models\Integration;
 use App\Models\Lead;
 use Illuminate\Support\Facades\Http;
@@ -10,6 +11,8 @@ use RuntimeException;
 
 class FreshworksIntegrationService
 {
+    use ResolvesIntegrationVariableMappings;
+
     public function sendTofreshworks(Lead $lead, Integration $integration)
     {
         $url = rtrim((string) $integration->url, '/');
@@ -101,7 +104,8 @@ class FreshworksIntegrationService
         return $this->resolveCustomFieldPlaceholders(
             $decoded,
             $lead,
-            $this->freshworksVariableMappings($integration)
+            $this->freshworksVariableMappings($integration),
+            $integration
         );
     }
 
@@ -123,7 +127,7 @@ class FreshworksIntegrationService
             $path = $this->normalizePlaceholderPath($matches[2]);
 
             return $path === null
-                ? $matches[0]
+                ? $this->integrationVariableJsonToken($matches[2], $matches[0])
                 : json_encode($this->placeholderToken($path), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }, $value);
 
@@ -131,17 +135,17 @@ class FreshworksIntegrationService
             $path = $this->normalizePlaceholderPath($matches[1]);
 
             return $path === null
-                ? $matches[0]
+                ? $this->integrationVariableJsonToken($matches[1], $matches[0])
                 : json_encode($this->placeholderToken($path), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }, $value);
     }
 
-    private function resolveCustomFieldPlaceholders(array $payload, Lead $lead, $mappings, ?string $targetVariable = null): array
+    private function resolveCustomFieldPlaceholders(array $payload, Lead $lead, $mappings, ?Integration $integration = null, ?string $targetVariable = null): array
     {
         $resolved = [];
 
         foreach ($payload as $key => $value) {
-            $resolvedValue = $this->resolveCustomFieldValue($value, $lead, $mappings, $targetVariable ?? (string) $key);
+            $resolvedValue = $this->resolveCustomFieldValue($value, $lead, $mappings, $integration, $targetVariable ?? (string) $key);
 
             if ($resolvedValue === null || $resolvedValue === '') {
                 continue;
@@ -153,14 +157,18 @@ class FreshworksIntegrationService
         return $resolved;
     }
 
-    private function resolveCustomFieldValue($value, Lead $lead, $mappings, ?string $targetVariable = null)
+    private function resolveCustomFieldValue($value, Lead $lead, $mappings, ?Integration $integration = null, ?string $targetVariable = null)
     {
         if (is_array($value)) {
-            return $this->resolveCustomFieldPlaceholders($value, $lead, $mappings, $targetVariable);
+            return $this->resolveCustomFieldPlaceholders($value, $lead, $mappings, $integration, $targetVariable);
         }
 
         if (!is_string($value)) {
             return $value;
+        }
+
+        if ($integration && $this->isIntegrationVariableToken($value)) {
+            return $this->resolveIntegrationVariableTokenValue($value, $lead, $integration, 'FRESHWORKS');
         }
 
         if (!preg_match('/^__freshworks_lead_field__:(.+)$/', $value, $matches)) {
@@ -227,6 +235,15 @@ class FreshworksIntegrationService
     private function placeholderToken(string $field): string
     {
         return '__freshworks_lead_field__:' . $field;
+    }
+
+    private function integrationVariableJsonToken(string $expression, string $fallback): string
+    {
+        $name = $this->normalizeIntegrationVariableExpression($expression);
+
+        return $name === null
+            ? $fallback
+            : json_encode($this->integrationVariableToken($name), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     private function normalizePlaceholderPath(string $expression): ?string

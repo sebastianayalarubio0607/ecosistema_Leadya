@@ -461,7 +461,7 @@ class MondayIntegrationService
 
             $sourceType = $mapping->source_type ?: 'lead_field';
             $rawValue = $sourceType === 'fixed_value'
-                ? $mapping->static_value
+                ? $this->resolveStaticValueTemplate((string) $mapping->static_value, $lead, $integration)
                 : $this->resolveLeadFieldValue($lead, $mapping->lead_field_name);
 
             if ($sourceType === 'lead_field' && $integration) {
@@ -591,6 +591,21 @@ class MondayIntegrationService
         }
 
         return data_get($lead, $field);
+    }
+
+    private function resolveStaticValueTemplate(string $value, Lead $lead, ?Integration $integration = null)
+    {
+        if ($value === '' || !str_contains($value, '{{') || $integration === null) {
+            return $value;
+        }
+
+        if (preg_match('/^\s*\{\{\s*([^}]+?)\s*\}\}\s*$/', $value, $matches)) {
+            $resolved = $this->renderIntegrationVariablePlaceholder($matches[1], $lead, $integration, [], 'MONDAY');
+
+            return $resolved ?? $value;
+        }
+
+        return $this->replaceIntegrationVariablesInString($value, $lead, $integration, [], 'MONDAY');
     }
 
     private function formatColumnValue(MondayBoardColumn $column, $value, Lead $lead)

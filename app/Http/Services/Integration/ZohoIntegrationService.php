@@ -59,6 +59,7 @@ class ZohoIntegrationService
         }
 
         $leadData = $this->applyLeadDataMappings($leadData, $lead, $integration);
+        $leadData = $this->applyCustomIntegrationVariables($leadData, $lead, $integration);
 
         $payload = [
             'data' => [$leadData],
@@ -292,6 +293,20 @@ class ZohoIntegrationService
                 $leadField,
                 $leadValue,
                 $leadData[$targetVariable],
+                'ZOHO'
+            );
+        }
+
+        return $leadData;
+    }
+
+    private function applyCustomIntegrationVariables(array $leadData, Lead $lead, Integration $integration): array
+    {
+        foreach ($this->integrationVariables($integration) as $variable) {
+            $leadData[(string) $variable->name] = $this->resolveIntegrationVariableValue(
+                $integration,
+                $lead,
+                (string) $variable->name,
                 'ZOHO'
             );
         }

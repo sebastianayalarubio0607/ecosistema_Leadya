@@ -2,6 +2,7 @@
 
 namespace App\Http\Services\Integration;
 
+use App\Http\Services\Integration\Concerns\ResolvesIntegrationVariableMappings;
 use App\Models\Integration;
 use App\Models\Lead;
 use App\Support\SensitiveValue;
@@ -11,6 +12,8 @@ use RuntimeException;
 
 class KommoPipelineService
 {
+    use ResolvesIntegrationVariableMappings;
+
     public function sendToKommoPipeline(Lead $lead, Integration $integration)
     {
         Log::info('KOMMO PIPELINE SERVICE STARTED', [
@@ -23,7 +26,7 @@ class KommoPipelineService
         $url = $this->resolveUrl($integration);
         $token = $this->resolveToken($integration);
         $target = $this->resolveTarget($lead, $integration);
-        $payload = $this->buildPayloadFromTemplate((string) $integration->body, $lead, $target['pipeline_id'], $target['status_id']);
+        $payload = $this->buildPayloadFromTemplate((string) $integration->body, $lead, $integration, $target['pipeline_id'], $target['status_id']);
 
         Log::info('KOMMO PIPELINE URL', [
             'lead_id' => $lead->id,
@@ -144,7 +147,7 @@ class KommoPipelineService
         throw new RuntimeException($message);
     }
 
-    private function buildPayloadFromTemplate(string $template, Lead $lead, string $pipelineId, string $statusId): array
+    private function buildPayloadFromTemplate(string $template, Lead $lead, Integration $integration, string $pipelineId, string $statusId): array
     {
         $template = trim($template);
 
@@ -168,7 +171,7 @@ class KommoPipelineService
             throw new RuntimeException('El payload JSON de KommoPipeline no es un JSON valido.');
         }
 
-        $payload = $this->resolveValue($decoded, $lead, $pipelineId, $statusId);
+        $payload = $this->resolveValue($decoded, $lead, $integration, $pipelineId, $statusId);
 
         if (!is_array($payload) || json_encode($payload) === false) {
             $this->logError(null, $lead, 'El payload JSON de KommoPipeline quedo invalido despues de reemplazar variables.');
@@ -178,13 +181,13 @@ class KommoPipelineService
         return $payload;
     }
 
-    private function resolveValue($value, Lead $lead, string $pipelineId, string $statusId)
+    private function resolveValue($value, Lead $lead, Integration $integration, string $pipelineId, string $statusId)
     {
         if (is_array($value)) {
             $resolved = [];
 
             foreach ($value as $key => $nestedValue) {
-                $resolved[$key] = $this->resolveValue($nestedValue, $lead, $pipelineId, $statusId);
+                $resolved[$key] = $this->resolveValue($nestedValue, $lead, $integration, $pipelineId, $statusId);
             }
 
             return $resolved;
@@ -204,11 +207,19 @@ class KommoPipelineService
             return $this->normalizeIntegerLike($statusId);
         }
 
+        if (preg_match('/^\{\{\s*([^}]+?)\s*\}\}$/', $trimmed, $matches)) {
+            $variableName = $this->normalizeIntegrationVariableExpression($matches[1]);
+
+            if ($variableName !== null) {
+                return $this->resolveIntegrationVariableValue($integration, $lead, $variableName, 'KOMMO PIPELINE');
+            }
+        }
+
         if (preg_match('/^\{\{\s*\$?lead\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$/', $trimmed, $matches)) {
             return data_get($lead, $matches[1], '');
         }
 
-        return preg_replace_callback('/\{\{\s*([^}]+?)\s*\}\}/', function ($matches) use ($lead, $pipelineId, $statusId) {
+        return preg_replace_callback('/\{\{\s*([^}]+?)\s*\}\}/', function ($matches) use ($lead, $integration, $pipelineId, $statusId) {
             $expression = trim($matches[1]);
 
             if ($expression === 'pipeline_id') {
@@ -221,6 +232,14 @@ class KommoPipelineService
 
             if (preg_match('/^\$?lead\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/', $expression, $leadMatches)) {
                 return (string) data_get($lead, $leadMatches[1], '');
+            }
+
+            $variableName = $this->normalizeIntegrationVariableExpression($expression);
+
+            if ($variableName !== null) {
+                $resolved = $this->resolveIntegrationVariableValue($integration, $lead, $variableName, 'KOMMO PIPELINE');
+
+                return is_scalar($resolved) ? (string) $resolved : (json_encode($resolved, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
             }
 
             return $matches[0];
@@ -239,6 +258,10 @@ class KommoPipelineService
             }
 
             if (preg_match('/^\$?lead\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/', $expression)) {
+                continue;
+            }
+
+            if ($this->normalizeIntegrationVariableExpression($expression) !== null) {
                 continue;
             }
 

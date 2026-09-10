@@ -396,6 +396,46 @@ charset=utf-8</pre>
             </div>
         @endif
 
+        @if (in_array($normalizedIntegrationType, ['kommopipeline', 'atom', 'zoho', 'freshworks', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'], true))
+            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-6 text-white/80">
+                <div class="mb-4">
+                    <h3 class="text-lg font-semibold text-white">Variables del body</h3>
+                    <p class="text-sm text-white/50">Variables reutilizables disponibles como <span class="font-mono">&#123;&#123;mi_variable&#125;&#125;</span> dentro de los payloads.</p>
+                </div>
+
+                <div class="overflow-x-auto rounded-xl border border-white/10">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-white/5 text-white/70">
+                            <tr>
+                                <th class="px-3 py-2 text-left">Nombre</th>
+                                <th class="px-3 py-2 text-left">Uso en body</th>
+                                <th class="px-3 py-2 text-left">Valor</th>
+                                <th class="px-3 py-2 text-left">Tipo</th>
+                                <th class="px-3 py-2 text-left">Activa</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-white/10">
+                            @forelse($integration->variables ?? [] as $variable)
+                                <tr class="hover:bg-white/5">
+                                    <td class="px-3 py-2 font-mono text-xs">{{ $variable->name }}</td>
+                                    <td class="px-3 py-2 font-mono text-xs">&#123;&#123;{{ $variable->name }}&#125;&#125;</td>
+                                    <td class="px-3 py-2">
+                                        <pre class="max-w-xl overflow-x-auto rounded-xl border border-white/10 bg-slate-900/60 p-3 text-xs text-white/80">{{ $variable->value }}</pre>
+                                    </td>
+                                    <td class="px-3 py-2">{{ $variable->type }}</td>
+                                    <td class="px-3 py-2">{{ $variable->active ? 'Si' : 'No' }}</td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td class="px-3 py-8 text-center text-white/60" colspan="5">Aun no hay variables personalizadas configuradas.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        @endif
+
         @if (in_array($normalizedIntegrationType, ['atom', 'zoho', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'], true))
             <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-6 text-white/80">
                 <div class="mb-4">
@@ -426,6 +466,53 @@ charset=utf-8</pre>
                             @empty
                                 <tr>
                                     <td class="px-3 py-8 text-center text-white/60" colspan="5">Aun no hay mapeos de variables configurados.</td>
+                                </tr>
+                            @endforelse
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        @endif
+
+        @if (in_array($normalizedIntegrationType, ['kommopipeline', 'atom', 'zoho', 'freshworks', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'], true))
+            <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-6 text-white/80">
+                <div class="mb-4">
+                    <h3 class="text-lg font-semibold text-white">Variables condicionales</h3>
+                    <p class="text-sm text-white/50">Reglas que asignan valores dinamicos para usarse dentro del body.</p>
+                </div>
+
+                <div class="overflow-x-auto rounded-xl border border-white/10">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-white/5 text-white/70">
+                            <tr>
+                                <th class="text-left px-3 py-2">Variable destino</th>
+                                <th class="text-left px-3 py-2">Uso en body</th>
+                                <th class="text-left px-3 py-2">Fuente</th>
+                                <th class="text-left px-3 py-2">Operador</th>
+                                <th class="text-left px-3 py-2">Comparacion</th>
+                                <th class="text-left px-3 py-2">Valor a enviar</th>
+                                <th class="text-left px-3 py-2">Tipo</th>
+                                <th class="text-left px-3 py-2">Activa</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-white/10">
+                            @forelse($integration->variableConditions ?? [] as $condition)
+                                <tr class="hover:bg-white/5">
+                                    <td class="px-3 py-2 font-mono text-xs">{{ $condition->target_variable }}</td>
+                                    <td class="px-3 py-2 font-mono text-xs">&#123;&#123;{{ $condition->target_variable }}&#125;&#125;</td>
+                                    <td class="px-3 py-2">
+                                        <span class="font-mono text-xs">{{ $condition->source_type }}</span>
+                                        <span class="font-mono text-xs text-white/60">{{ $condition->source_key }}</span>
+                                    </td>
+                                    <td class="px-3 py-2">{{ $condition->operator }}</td>
+                                    <td class="px-3 py-2">{{ $condition->comparison_value ?? 'Sin comparacion' }}</td>
+                                    <td class="px-3 py-2">{{ $condition->result_value ?? 'Valor vacio' }}</td>
+                                    <td class="px-3 py-2">{{ $condition->result_type }}</td>
+                                    <td class="px-3 py-2">{{ $condition->active ? 'Si' : 'No' }}</td>
+                                </tr>
+                            @empty
+                                <tr>
+                                    <td class="px-3 py-8 text-center text-white/60" colspan="8">Aun no hay variables condicionales configuradas.</td>
                                 </tr>
                             @endforelse
                         </tbody>

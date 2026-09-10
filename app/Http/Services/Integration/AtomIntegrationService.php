@@ -222,13 +222,29 @@ class AtomIntegrationService
             return $this->resolveMappedIntegrationValue($mappings, $targetVariable, $matches[1], $leadValue, $leadValue, 'ATOM');
         }
 
-        return preg_replace_callback('/\{\{\s*([^}]+?)\s*\}\}/', function ($matches) use ($lead, $mappings, $targetVariable) {
+        if (preg_match('/^\{\{\s*([^}]+?)\s*\}\}$/', $trimmed, $matches)) {
+            $variableName = $this->normalizeIntegrationVariableExpression($matches[1]);
+
+            if ($variableName !== null) {
+                return $this->resolveIntegrationVariableValue($integration, $lead, $variableName, 'ATOM');
+            }
+        }
+
+        return preg_replace_callback('/\{\{\s*([^}]+?)\s*\}\}/', function ($matches) use ($lead, $integration, $mappings, $targetVariable) {
             $expression = trim($matches[1]);
 
             if (preg_match('/^\$?lead\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/', $expression, $leadMatches)) {
                 $leadValue = data_get($lead, $leadMatches[1], '');
 
                 return (string) $this->resolveMappedIntegrationValue($mappings, $targetVariable, $leadMatches[1], $leadValue, $leadValue, 'ATOM');
+            }
+
+            $variableName = $this->normalizeIntegrationVariableExpression($expression);
+
+            if ($variableName !== null) {
+                $resolved = $this->resolveIntegrationVariableValue($integration, $lead, $variableName, 'ATOM');
+
+                return is_scalar($resolved) ? (string) $resolved : (json_encode($resolved, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
             }
 
             return $matches[0];
@@ -240,7 +256,12 @@ class AtomIntegrationService
         preg_match_all('/\{\{\s*([^}]+?)\s*\}\}/', $template, $matches);
 
         foreach ($matches[1] ?? [] as $expression) {
-            if (!preg_match('/^\$?lead\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/', trim($expression))) {
+            $expression = trim($expression);
+
+            if (
+                !preg_match('/^\$?lead\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/', $expression)
+                && $this->normalizeIntegrationVariableExpression($expression) === null
+            ) {
                 return false;
             }
         }

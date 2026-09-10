@@ -203,6 +203,16 @@ class LetyIntegrationService
                 return (string) $value;
             }
 
+            if ($integration) {
+                $variableName = $this->normalizeIntegrationVariableExpression($expression);
+
+                if ($variableName !== null) {
+                    $value = $this->resolveIntegrationVariableValue($integration, $lead, $variableName, 'LETY');
+
+                    return is_scalar($value) ? (string) $value : (json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '');
+                }
+            }
+
             return $matches[0];
         }, $value) ?? '';
     }
@@ -212,7 +222,12 @@ class LetyIntegrationService
         preg_match_all('/\{\{\s*([^}]+?)\s*\}\}/', $template, $matches);
 
         foreach ($matches[1] ?? [] as $expression) {
-            if (!preg_match('/^\$?lead\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/', trim($expression))) {
+            $expression = trim($expression);
+
+            if (
+                !preg_match('/^\$?lead\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/', $expression)
+                && $this->normalizeIntegrationVariableExpression($expression) === null
+            ) {
                 return false;
             }
         }

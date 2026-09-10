@@ -138,7 +138,7 @@
                                             <input name="mappings[{{ $index }}][static_value]"
                                                    value="{{ old("mappings.{$index}.static_value", $column->mapping->static_value ?? '') }}"
                                                    class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 text-white"
-                                                   placeholder="Valor fijo a enviar a Monday">
+                                                   placeholder="Valor fijo o @{{mi_variable}}">
                                             @error("mappings.$index.static_value") <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
                                         </div>
                                     </td>

@@ -106,7 +106,7 @@ class ZapnitoInvitationIntegrationService
             $path = $this->normalizePlaceholderPath($matches[2]);
 
             return $path === null
-                ? $matches[0]
+                ? $this->integrationVariableJsonToken($matches[2], $matches[0])
                 : json_encode($this->placeholderToken($path), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }, $value);
 
@@ -114,7 +114,7 @@ class ZapnitoInvitationIntegrationService
             $path = $this->normalizePlaceholderPath($matches[1]);
 
             return $path === null
-                ? $matches[0]
+                ? $this->integrationVariableJsonToken($matches[1], $matches[0])
                 : json_encode($this->placeholderToken($path), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }, $value);
     }
@@ -146,6 +146,10 @@ class ZapnitoInvitationIntegrationService
             return $value;
         }
 
+        if ($this->isIntegrationVariableToken($value)) {
+            return $this->resolveIntegrationVariableTokenValue($value, $lead, $integration, 'ZAPNITO INVITATION');
+        }
+
         if (!preg_match('/^' . preg_quote(self::PLACEHOLDER_TOKEN_PREFIX, '/') . '(.+)$/', $value, $matches)) {
             return $value;
         }
@@ -164,6 +168,15 @@ class ZapnitoInvitationIntegrationService
     private function placeholderToken(string $field): string
     {
         return self::PLACEHOLDER_TOKEN_PREFIX . $field;
+    }
+
+    private function integrationVariableJsonToken(string $expression, string $fallback): string
+    {
+        $name = $this->normalizeIntegrationVariableExpression($expression);
+
+        return $name === null
+            ? $fallback
+            : json_encode($this->integrationVariableToken($name), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     private function normalizePlaceholderPath(string $expression): ?string

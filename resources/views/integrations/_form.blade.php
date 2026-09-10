@@ -153,42 +153,6 @@
     </div>
 
     @php
-        $kommoPipelineBodyPlaceholder = <<<'JSON'
-[
-  {
-    "name": "{{$lead->name}} {{$lead->last_name}}",
-    "pipeline_id": "{{pipeline_id}}",
-    "status_id": "{{status_id}}",
-    "_embedded": {
-      "contacts": [
-        {
-          "name": "{{$lead->name}} {{$lead->last_name}}",
-          "custom_fields_values": [
-            {
-              "field_id": 123456,
-              "values": [
-                {
-                  "value": "{{$lead->phone}}"
-                }
-              ]
-            },
-            {
-              "field_id": 789101,
-              "values": [
-                {
-                  "value": "{{$lead->email}}",
-                  "enum_code": "WORK"
-                }
-              ]
-            }
-          ]
-        }
-      ]
-    }
-  }
-]
-JSON;
-
         $kommoPipelineStoredConditions = isset($kommoPipelineConditions)
             ? $kommoPipelineConditions->map(fn ($condition) => [
                 'lead_field' => $condition->lead_field,
@@ -228,7 +192,7 @@ JSON;
             <textarea name="body"
                       rows="16"
                       class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-sm text-white"
-                      placeholder="{{ $kommoPipelineBodyPlaceholder }}"
+                      placeholder="JSON configurable para crear el lead"
                       data-required-for="kommopipeline">{{ old('body', $integration->body ?? '') }}</textarea>
             @error('body') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
         </div>
@@ -308,14 +272,6 @@ JSON;
     </div>
 
     @php
-        $atomBodyPlaceholder = <<<'JSON'
-{
-  "name": "{{$lead->name}}",
-  "email": "{{$lead.email}}",
-  "phone": "{{$lead->phone}}"
-}
-JSON;
-
         $atomStoredWebhooks = isset($atomWebhooks)
             ? $atomWebhooks->map(fn ($webhook) => [
                 'key' => (string) $webhook->id,
@@ -363,7 +319,7 @@ JSON;
             <textarea name="body"
                       rows="12"
                       class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-sm text-white"
-                      placeholder="{{ $atomBodyPlaceholder }}"
+                      placeholder="JSON para enviar al webhook"
                       data-required-for="atom">{{ old('body', $integration->body ?? '') }}</textarea>
             @error('body') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
         </div>
@@ -603,18 +559,6 @@ TEXT;
         </div>
     </div>
 
-    @php
-        $zapnitoBodyPlaceholder = <<<'JSON'
-{
-  "user": {
-    "name": "{{ lead->name }}",
-    "email": "{{ lead->email }}",
-    "invited_by_email": "admin@your-community.com"
-  }
-}
-JSON;
-    @endphp
-
     <div class="grid grid-cols-1 gap-4 hidden" data-show-for="zapnito_invitacion">
         <div>
             <label class="block mb-1 text-white/70">Token Zapnito *</label>
@@ -637,11 +581,29 @@ JSON;
             <textarea name="body"
                       rows="12"
                       class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-sm text-white"
-                      placeholder="{{ $zapnitoBodyPlaceholder }}"
+                      placeholder="JSON para la invitacion"
                       data-required-for="zapnito_invitacion">{{ old('body', $integration->body ?? '') }}</textarea>
             @error('body') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
-            <p class="mt-1 text-xs text-white/50">Se envia a <span class="font-mono">/api/v1/invitations</span> y acepta variables del lead como <span class="font-mono">@{{ $lead->email }}</span>.</p>
+            <p class="mt-1 text-xs text-white/50">Se envia a <span class="font-mono">/api/v1/invitations</span> y acepta variables del lead dentro del body.</p>
         </div>
+    </div>
+
+    @php
+        $integrationStoredVariables = isset($integrationVariables)
+            ? $integrationVariables->map(fn ($variable) => [
+                'name' => $variable->name,
+                'value' => $variable->value,
+                'type' => $variable->type,
+                'order' => $variable->order,
+                'active' => $variable->active ? 1 : 0,
+            ])->values()->all()
+            : [];
+
+        $integrationInitialVariables = collect(old('integration_variables', $integrationStoredVariables))->values()->all();
+    @endphp
+
+    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="kommopipeline atom zoho freshworks salesforce monday lety hubspot gohighlevel gohighlevel_oportunidad zapnito_invitacion">
+        @livewire('integration-variables-form', ['initialVariables' => $integrationInitialVariables], key('integration-variables-form-' . ($integration->id ?? 'new') . '-' . md5(json_encode($integrationInitialVariables))))
     </div>
 
     @php
@@ -694,6 +656,33 @@ JSON;
         </div>
     </div>
 
+    @php
+        $integrationStoredVariableConditions = isset($integrationVariableConditions)
+            ? $integrationVariableConditions->map(fn ($condition) => [
+                'target_variable' => $condition->target_variable,
+                'source_type' => $condition->source_type,
+                'source_key' => $condition->source_key,
+                'operator' => $condition->operator,
+                'comparison_value' => $condition->comparison_value,
+                'result_value' => $condition->result_value,
+                'result_type' => $condition->result_type,
+                'order' => $condition->order,
+                'active' => $condition->active ? 1 : 0,
+            ])->values()->all()
+            : [];
+
+        $integrationInitialVariableConditions = collect(old('integration_variable_conditions', $integrationStoredVariableConditions))->values()->all();
+        $integrationVariableNames = collect($integrationInitialVariables)
+            ->pluck('name')
+            ->filter()
+            ->values()
+            ->all();
+    @endphp
+
+    <div class="grid grid-cols-1 gap-4 hidden" data-show-for="kommopipeline atom zoho freshworks salesforce monday lety hubspot gohighlevel gohighlevel_oportunidad zapnito_invitacion">
+        @livewire('integration-variable-conditions-form', ['initialConditions' => $integrationInitialVariableConditions, 'leadFields' => array_values($leadFields ?? []), 'variableNames' => $integrationVariableNames], key('integration-variable-conditions-form-' . ($integration->id ?? 'new') . '-' . md5(json_encode($integrationInitialVariableConditions) . json_encode($integrationVariableNames))))
+    </div>
+
     <div class="grid grid-cols-1 gap-4 hidden" data-show-for="gohighlevel gohighlevel_oportunidad">
         <div>
             <label class="block mb-1 text-white/70">Token LeadConnector / GoHighLevel *</label>
@@ -706,7 +695,7 @@ JSON;
             <label class="block mb-1 text-white/70">Body JSON template *</label>
             <textarea name="body" rows="12" class="w-full rounded-xl border border-white/10 bg-slate-900/60 p-2 font-mono text-sm text-white" data-required-for="gohighlevel gohighlevel_oportunidad">{{ old('body', $integration->body ?? '') }}</textarea>
             @error('body') <div class="mt-1 text-sm text-rose-300">{{ $message }}</div> @enderror
-            <p class="mt-1 text-xs text-white/50">Acepta variables simples del lead como <span class="font-mono">@{{ $lead->email }}</span>. Incluye <span class="font-mono">locationId</span> aqui si tu cuenta lo requiere.</p>
+            <p class="mt-1 text-xs text-white/50">Acepta variables simples del lead dentro del body. Incluye <span class="font-mono">locationId</span> aqui si tu cuenta lo requiere.</p>
         </div>
 
         <div class="hidden" data-show-for="gohighlevel_oportunidad">
@@ -1354,7 +1343,7 @@ document.addEventListener('DOMContentLoaded', () => {
     urlInput.dataset.letyWebhookUrl = '1';
     row.appendChild(cell(urlInput));
 
-    row.appendChild(cell(textareaInput(`lety_webhooks[${index}][body]`, webhook.body || letyBodyPlaceholder, letyBodyPlaceholder)));
+    row.appendChild(cell(textareaInput(`lety_webhooks[${index}][body]`, webhook.body || letyBodyPlaceholder, 'Formulario con campos del lead')));
 
     const activeWrap = document.createElement('label');
     activeWrap.className = 'inline-flex items-center gap-2';

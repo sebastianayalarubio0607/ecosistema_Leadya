@@ -21,6 +21,16 @@ class IntegrationWebController extends Controller
 {
     private const DEFAULT_GOHIGHLEVEL_URL = 'https://services.leadconnectorhq.com/contacts/upsert';
     private const VARIABLE_MAPPING_INTEGRATION_TYPES = ['atom', 'zoho', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'];
+    private const CUSTOM_VARIABLE_INTEGRATION_TYPES = ['kommopipeline', 'atom', 'zoho', 'freshworks', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'];
+    private const CUSTOM_VARIABLE_TYPES = ['text', 'number', 'boolean', 'binary', 'url', 'json', 'any'];
+    private const VARIABLE_CONDITION_OPERATORS = [
+        'equals', 'not_equals', 'greater_than', 'less_than', 'greater_or_equal', 'less_or_equal',
+        'and_logic', 'or_logic', 'negation', 'exists', 'not_exists', 'empty', 'not_empty',
+        'is', 'not_is', 'contains', 'not_contains', 'starts_with', 'not_starts_with',
+        'ends_with', 'not_ends_with', 'in_list', 'not_in_list', 'key_exists', 'key_not_exists',
+        'record_exists', 'record_not_exists', 'has_elements', 'no_elements', 'matches_pattern',
+        'not_matches_pattern', 'all_conditions', 'any_condition', 'no_conditions',
+    ];
 
     public function index(Request $request)
     {
@@ -74,8 +84,10 @@ class IntegrationWebController extends Controller
         $letyConditions = collect();
         $freshworksVariableMappings = collect();
         $integrationVariableMappings = collect();
+        $integrationVariables = collect();
+        $integrationVariableConditions = collect();
 
-        return view('integrations.create', compact('integration', 'customers', 'types', 'leadFields', 'kommoPipelineConditions', 'atomWebhooks', 'atomConditions', 'letyWebhooks', 'letyConditions', 'freshworksVariableMappings', 'integrationVariableMappings'));
+        return view('integrations.create', compact('integration', 'customers', 'types', 'leadFields', 'kommoPipelineConditions', 'atomWebhooks', 'atomConditions', 'letyWebhooks', 'letyConditions', 'freshworksVariableMappings', 'integrationVariableMappings', 'integrationVariables', 'integrationVariableConditions'));
     }
 
     public function store(Request $request)
@@ -93,6 +105,8 @@ class IntegrationWebController extends Controller
         $this->syncLetyConfiguration($integration, $validated);
         $this->syncFreshworksVariableMappings($integration, $validated);
         $this->syncIntegrationVariableMappings($integration, $validated);
+        $this->syncIntegrationVariables($integration, $validated);
+        $this->syncIntegrationVariableConditions($integration, $validated);
 
         return redirect()
             ->route('integrations.show', $integration)
@@ -143,6 +157,13 @@ class IntegrationWebController extends Controller
             ]);
         }
 
+        if (in_array($this->normalizeIntegrationTypeName(optional($integration->integrationtype)->name), self::CUSTOM_VARIABLE_INTEGRATION_TYPES, true)) {
+            $integration->load([
+                'variables' => fn ($query) => $query->orderBy('order')->orderBy('id'),
+                'variableConditions' => fn ($query) => $query->orderBy('order')->orderBy('id'),
+            ]);
+        }
+
         return view('integrations.show', compact('integration'));
     }
 
@@ -160,6 +181,8 @@ class IntegrationWebController extends Controller
             'letyConditions' => fn ($query) => $query->orderBy('order')->orderBy('id'),
             'freshworksVariableMappings' => fn ($query) => $query->orderBy('order')->orderBy('id'),
             'variableMappings' => fn ($query) => $query->orderBy('order')->orderBy('id'),
+            'variables' => fn ($query) => $query->orderBy('order')->orderBy('id'),
+            'variableConditions' => fn ($query) => $query->orderBy('order')->orderBy('id'),
         ]);
 
         $kommoPipelineConditions = $integration->kommoPipelineConditions;
@@ -169,8 +192,10 @@ class IntegrationWebController extends Controller
         $letyConditions = $integration->letyConditions;
         $freshworksVariableMappings = $integration->freshworksVariableMappings;
         $integrationVariableMappings = $integration->variableMappings;
+        $integrationVariables = $integration->variables;
+        $integrationVariableConditions = $integration->variableConditions;
 
-        return view('integrations.edit', compact('integration', 'customers', 'types', 'leadFields', 'kommoPipelineConditions', 'atomWebhooks', 'atomConditions', 'letyWebhooks', 'letyConditions', 'freshworksVariableMappings', 'integrationVariableMappings'));
+        return view('integrations.edit', compact('integration', 'customers', 'types', 'leadFields', 'kommoPipelineConditions', 'atomWebhooks', 'atomConditions', 'letyWebhooks', 'letyConditions', 'freshworksVariableMappings', 'integrationVariableMappings', 'integrationVariables', 'integrationVariableConditions'));
     }
 
     public function update(Request $request, Integration $integration)
@@ -198,6 +223,8 @@ class IntegrationWebController extends Controller
         $this->syncLetyConfiguration($integration, $validated);
         $this->syncFreshworksVariableMappings($integration, $validated);
         $this->syncIntegrationVariableMappings($integration, $validated);
+        $this->syncIntegrationVariables($integration, $validated);
+        $this->syncIntegrationVariableConditions($integration, $validated);
 
         return redirect()
             ->route('integrations.show', $integration)
@@ -389,6 +416,22 @@ class IntegrationWebController extends Controller
             'integration_variable_mappings.*.mapped_value' => ['nullable', 'string'],
             'integration_variable_mappings.*.order' => ['nullable', 'integer', 'min:0'],
             'integration_variable_mappings.*.active' => ['nullable', 'boolean'],
+            'integration_variables' => ['nullable', 'array'],
+            'integration_variables.*.name' => ['required_with:integration_variables', 'string', 'max:80', 'regex:/^[A-Za-z_][A-Za-z0-9_]*$/'],
+            'integration_variables.*.value' => ['required_with:integration_variables', 'string'],
+            'integration_variables.*.type' => ['required_with:integration_variables', 'string', Rule::in(self::CUSTOM_VARIABLE_TYPES)],
+            'integration_variables.*.order' => ['nullable', 'integer', 'min:0'],
+            'integration_variables.*.active' => ['nullable', 'boolean'],
+            'integration_variable_conditions' => ['nullable', 'array'],
+            'integration_variable_conditions.*.target_variable' => ['required_with:integration_variable_conditions', 'string', 'max:80', 'regex:/^[A-Za-z_][A-Za-z0-9_]*$/'],
+            'integration_variable_conditions.*.source_type' => ['required_with:integration_variable_conditions', 'string', Rule::in(['lead', 'variable'])],
+            'integration_variable_conditions.*.source_key' => ['required_with:integration_variable_conditions', 'string', 'max:120'],
+            'integration_variable_conditions.*.operator' => ['required_with:integration_variable_conditions', 'string', Rule::in(self::VARIABLE_CONDITION_OPERATORS)],
+            'integration_variable_conditions.*.comparison_value' => ['nullable', 'string'],
+            'integration_variable_conditions.*.result_value' => ['nullable', 'string'],
+            'integration_variable_conditions.*.result_type' => ['required_with:integration_variable_conditions', 'string', Rule::in(self::CUSTOM_VARIABLE_TYPES)],
+            'integration_variable_conditions.*.order' => ['nullable', 'integer', 'min:0'],
+            'integration_variable_conditions.*.active' => ['nullable', 'boolean'],
         ];
 
         if ($this->hasIntegrationPriorityColumn()) {
@@ -469,6 +512,8 @@ class IntegrationWebController extends Controller
         $typeName = $this->normalizeIntegrationTypeName(
             Integrationtype::whereKey($validated['integrationtype_id'])->value('name')
         );
+
+        $this->validateIntegrationVariablesPayload($validated, $typeName);
 
         if (!in_array($typeName, ['hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'atom', 'lety'], true) && empty($validated['url'])) {
             throw ValidationException::withMessages([
@@ -614,7 +659,7 @@ class IntegrationWebController extends Controller
         }
 
         unset($validated['kommo_pipeline_conditions']);
-        unset($validated['atom_webhooks'], $validated['atom_conditions'], $validated['lety_webhooks'], $validated['lety_conditions'], $validated['freshworks_variable_mappings'], $validated['integration_variable_mappings']);
+        unset($validated['atom_webhooks'], $validated['atom_conditions'], $validated['lety_webhooks'], $validated['lety_conditions'], $validated['freshworks_variable_mappings'], $validated['integration_variable_mappings'], $validated['integration_variables'], $validated['integration_variable_conditions']);
 
         return $validated;
     }
@@ -722,7 +767,7 @@ class IntegrationWebController extends Controller
             }
         }
 
-        if (!empty($payload['custom_field']) && !$this->isValidFreshworksCustomField($payload['custom_field'])) {
+        if (!empty($payload['custom_field']) && !$this->isValidFreshworksCustomField($payload['custom_field'], $this->customVariableNamesFromPayload($payload))) {
             $messages['custom_field'] = 'custom_field debe ser un JSON valido.';
         }
 
@@ -748,7 +793,9 @@ class IntegrationWebController extends Controller
             }
         }
 
-        if (!empty($payload['body']) && !$this->isValidJsonTemplate($payload['body'], '__zapnito_lead_field__:', true)) {
+        $customVariables = $this->customVariableNamesFromPayload($payload);
+
+        if (!empty($payload['body']) && !$this->isValidJsonTemplate($payload['body'], '__zapnito_lead_field__:', true, $customVariables)) {
             $messages['body'] = 'body debe ser un JSON valido y solo acepta variables {{$lead->campo}} o {{$lead.campo}}.';
         }
 
@@ -782,7 +829,7 @@ class IntegrationWebController extends Controller
             }
         }
 
-        if (!empty($payload['body']) && !$this->isValidKommoPipelineJsonTemplate($payload['body'])) {
+        if (!empty($payload['body']) && !$this->isValidKommoPipelineJsonTemplate($payload['body'], $this->customVariableNamesFromPayload($payload))) {
             $messages['body'] = 'El payload JSON debe ser valido y solo acepta {{$lead->campo}}, {{pipeline_id}} y {{status_id}}.';
         }
 
@@ -809,7 +856,7 @@ class IntegrationWebController extends Controller
 
         if (empty($payload['body'])) {
             $messages['body'] = 'Para Atom el body JSON es obligatorio.';
-        } elseif (!$this->isValidAtomJsonTemplate($payload['body'])) {
+        } elseif (!$this->isValidAtomJsonTemplate($payload['body'], $this->customVariableNamesFromPayload($payload))) {
             $messages['body'] = 'El body Atom debe ser JSON valido y solo acepta variables {{$lead->campo}} o {{$lead.campo}}.';
         }
 
@@ -876,7 +923,7 @@ class IntegrationWebController extends Controller
                 continue;
             }
 
-            if (!$this->isValidLetyFormTemplate((string) $webhook['body'])) {
+            if (!$this->isValidLetyFormTemplate((string) $webhook['body'], $this->customVariableNamesFromPayload($payload))) {
                 $messages["lety_webhooks.{$index}.body"] = 'El payload de Lety debe usar lineas campo=valor y solo acepta variables {{$lead->campo}} o {{$lead.campo}}.';
             }
         }
@@ -910,7 +957,7 @@ class IntegrationWebController extends Controller
             }
         }
 
-        if (!empty($payload['body']) && !is_array(json_decode($payload['body'], true))) {
+        if (!empty($payload['body']) && !$this->isValidJsonTemplate($payload['body'], '__salesforce_lead_field__:', false, $this->customVariableNamesFromPayload($payload))) {
             $messages['body'] = 'body debe ser un JSON valido.';
         }
 
@@ -954,11 +1001,13 @@ class IntegrationWebController extends Controller
         $payload['url_creacionlead'] = $baseUrl . '/crm/v3/objects/contacts';
         $payload['url_negocio'] = $baseUrl . '/crm/v3/objects/deals';
 
-        if (!empty($payload['body']) && !$this->isValidJsonTemplate($payload['body'])) {
+        $customVariables = $this->customVariableNamesFromPayload($payload);
+
+        if (!empty($payload['body']) && !$this->isValidJsonTemplate($payload['body'], '__integration_lead_field__:', false, $customVariables)) {
             $messages['body'] = 'body debe ser un JSON valido.';
         }
 
-        if (!empty($payload['body_oportunidad']) && !$this->isValidJsonTemplate($payload['body_oportunidad'])) {
+        if (!empty($payload['body_oportunidad']) && !$this->isValidJsonTemplate($payload['body_oportunidad'], '__integration_lead_field__:', false, $customVariables)) {
             $messages['body_oportunidad'] = 'body_oportunidad debe ser un JSON valido.';
         }
 
@@ -1013,7 +1062,9 @@ class IntegrationWebController extends Controller
             $payload['url'] = self::DEFAULT_GOHIGHLEVEL_URL;
         }
 
-        if (!empty($payload['body']) && !$this->isValidGohighlevelJsonTemplate($payload['body'])) {
+        $customVariables = $this->customVariableNamesFromPayload($payload);
+
+        if (!empty($payload['body']) && !$this->isValidGohighlevelJsonTemplate($payload['body'], [], $customVariables)) {
             $messages['body'] = 'body debe ser un JSON valido y solo acepta variables {{$lead->campo}} simples.';
         }
 
@@ -1032,7 +1083,7 @@ class IntegrationWebController extends Controller
             ]);
         }
 
-        if (! $this->isValidGohighlevelJsonTemplate($payload['body_oportunidad'], ['contactId'])) {
+        if (! $this->isValidGohighlevelJsonTemplate($payload['body_oportunidad'], ['contactId'], $this->customVariableNamesFromPayload($payload))) {
             throw ValidationException::withMessages([
                 'body_oportunidad' => 'body_oportunidad debe ser un JSON valido y solo acepta variables {{$lead->campo}} simples o {{contactId}}.',
             ]);
@@ -1208,7 +1259,7 @@ class IntegrationWebController extends Controller
         return $payload;
     }
 
-    private function isValidFreshworksCustomField(?string $customField): bool
+    private function isValidFreshworksCustomField(?string $customField, array $allowedCustomVariables = []): bool
     {
         $customField = trim((string) $customField);
 
@@ -1216,10 +1267,10 @@ class IntegrationWebController extends Controller
             return true;
         }
 
-        return $this->isValidJsonTemplate($customField, '__freshworks_lead_field__:');
+        return $this->isValidJsonTemplate($customField, '__freshworks_lead_field__:', false, $allowedCustomVariables);
     }
 
-    private function isValidJsonTemplate(?string $value, string $tokenPrefix = '__integration_lead_field__:', bool $rejectUnresolvedPlaceholders = false): bool
+    private function isValidJsonTemplate(?string $value, string $tokenPrefix = '__integration_lead_field__:', bool $rejectUnresolvedPlaceholders = false, array $allowedCustomVariables = []): bool
     {
         $value = trim((string) $value);
 
@@ -1230,27 +1281,39 @@ class IntegrationWebController extends Controller
         $quotedPattern = '/"(\s*\{\{\s*([^}]+?)\s*\}\}\s*)"/';
         $inlinePattern = '/\{\{\s*([^}]+?)\s*\}\}/';
 
-        $normalized = preg_replace_callback($quotedPattern, function ($matches) use ($tokenPrefix) {
+        $normalized = preg_replace_callback($quotedPattern, function ($matches) use ($tokenPrefix, $allowedCustomVariables) {
             $path = $this->normalizeFreshworksPlaceholderPath($matches[2]);
 
-            return $path === null
+            if ($path !== null) {
+                return json_encode($tokenPrefix . $path, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            }
+
+            $variable = $this->normalizeCustomVariableExpression($matches[2], $allowedCustomVariables);
+
+            return $variable === null
                 ? $matches[0]
-                : json_encode($tokenPrefix . $path, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                : json_encode('__integration_variable__:' . $variable, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }, $value);
 
-        $normalized = preg_replace_callback($inlinePattern, function ($matches) use ($tokenPrefix) {
+        $normalized = preg_replace_callback($inlinePattern, function ($matches) use ($tokenPrefix, $allowedCustomVariables) {
             $path = $this->normalizeFreshworksPlaceholderPath($matches[1]);
 
-            return $path === null
+            if ($path !== null) {
+                return json_encode($tokenPrefix . $path, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            }
+
+            $variable = $this->normalizeCustomVariableExpression($matches[1], $allowedCustomVariables);
+
+            return $variable === null
                 ? $matches[0]
-                : json_encode($tokenPrefix . $path, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                : json_encode('__integration_variable__:' . $variable, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }, $normalized);
 
         return (!$rejectUnresolvedPlaceholders || !preg_match('/\{\{.*?\}\}/s', $normalized))
             && is_array(json_decode($normalized, true));
     }
 
-    private function isValidGohighlevelJsonTemplate(?string $value, array $allowedContextVariables = []): bool
+    private function isValidGohighlevelJsonTemplate(?string $value, array $allowedContextVariables = [], array $allowedCustomVariables = []): bool
     {
         $value = trim((string) $value);
 
@@ -1261,27 +1324,39 @@ class IntegrationWebController extends Controller
         $quotedPattern = '/"(\s*\{\{\s*([^}]+?)\s*\}\}\s*)"/';
         $inlinePattern = '/\{\{\s*([^}]+?)\s*\}\}/';
 
-        $normalized = preg_replace_callback($quotedPattern, function ($matches) use ($allowedContextVariables) {
+        $normalized = preg_replace_callback($quotedPattern, function ($matches) use ($allowedContextVariables, $allowedCustomVariables) {
             $field = $this->normalizeGohighlevelPlaceholderField($matches[2], $allowedContextVariables);
 
-            return $field === null
+            if ($field !== null) {
+                return json_encode('__gohighlevel_lead_field__:' . $field, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            }
+
+            $variable = $this->normalizeCustomVariableExpression($matches[2], $allowedCustomVariables);
+
+            return $variable === null
                 ? $matches[0]
-                : json_encode('__gohighlevel_lead_field__:' . $field, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                : json_encode('__integration_variable__:' . $variable, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }, $value);
 
-        $normalized = preg_replace_callback($inlinePattern, function ($matches) use ($allowedContextVariables) {
+        $normalized = preg_replace_callback($inlinePattern, function ($matches) use ($allowedContextVariables, $allowedCustomVariables) {
             $field = $this->normalizeGohighlevelPlaceholderField($matches[1], $allowedContextVariables);
 
-            return $field === null
+            if ($field !== null) {
+                return json_encode('__gohighlevel_lead_field__:' . $field, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            }
+
+            $variable = $this->normalizeCustomVariableExpression($matches[1], $allowedCustomVariables);
+
+            return $variable === null
                 ? $matches[0]
-                : json_encode('__gohighlevel_lead_field__:' . $field, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                : json_encode('__integration_variable__:' . $variable, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }, $normalized);
 
         return !preg_match('/\{\{.*?\}\}/s', $normalized)
             && is_array(json_decode($normalized, true));
     }
 
-    private function isValidKommoPipelineJsonTemplate(?string $value): bool
+    private function isValidKommoPipelineJsonTemplate(?string $value, array $allowedCustomVariables = []): bool
     {
         $value = trim((string) $value);
 
@@ -1305,13 +1380,17 @@ class IntegrationWebController extends Controller
                 continue;
             }
 
+            if ($this->normalizeCustomVariableExpression($expression, $allowedCustomVariables) !== null) {
+                continue;
+            }
+
             return false;
         }
 
         return is_array(json_decode($this->quoteKommoPipelineUnquotedPlaceholders($value), true));
     }
 
-    private function isValidAtomJsonTemplate(?string $value): bool
+    private function isValidAtomJsonTemplate(?string $value, array $allowedCustomVariables = []): bool
     {
         $value = trim((string) $value);
 
@@ -1331,13 +1410,17 @@ class IntegrationWebController extends Controller
                 continue;
             }
 
+            if ($this->normalizeCustomVariableExpression($expression, $allowedCustomVariables) !== null) {
+                continue;
+            }
+
             return false;
         }
 
         return is_array(json_decode($this->quoteKommoPipelineUnquotedPlaceholders($value), true));
     }
 
-    private function isValidLetyFormTemplate(?string $value): bool
+    private function isValidLetyFormTemplate(?string $value, array $allowedCustomVariables = []): bool
     {
         $value = trim((string) $value);
 
@@ -1345,7 +1428,7 @@ class IntegrationWebController extends Controller
             return false;
         }
 
-        if (!$this->containsOnlySupportedLeadPlaceholders($value)) {
+        if (!$this->containsOnlySupportedLeadPlaceholders($value, $allowedCustomVariables)) {
             return false;
         }
 
@@ -1376,7 +1459,7 @@ class IntegrationWebController extends Controller
         return $hasPair;
     }
 
-    private function containsOnlySupportedLeadPlaceholders(string $value): bool
+    private function containsOnlySupportedLeadPlaceholders(string $value, array $allowedCustomVariables = []): bool
     {
         preg_match_all('/\{\{\s*([^}]+?)\s*\}\}/', $value, $matches);
 
@@ -1387,6 +1470,10 @@ class IntegrationWebController extends Controller
                 preg_match('/^\$?lead\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/', $expression, $leadMatches)
                 && in_array($leadMatches[1], $this->leadFields(), true)
             ) {
+                continue;
+            }
+
+            if ($this->normalizeCustomVariableExpression($expression, $allowedCustomVariables) !== null) {
                 continue;
             }
 
@@ -1729,6 +1816,147 @@ class IntegrationWebController extends Controller
                 'active' => (bool) ($mapping['active'] ?? true),
             ]);
         }
+    }
+
+    private function syncIntegrationVariables(Integration $integration, array $validated): void
+    {
+        $typeName = $this->normalizeIntegrationTypeName(optional($integration->integrationtype)->name);
+
+        if ($typeName === '') {
+            $typeName = $this->normalizeIntegrationTypeName(
+                Integrationtype::whereKey($integration->integrationtype_id)->value('name')
+            );
+        }
+
+        if (!in_array($typeName, self::CUSTOM_VARIABLE_INTEGRATION_TYPES, true)) {
+            $integration->variables()->delete();
+            return;
+        }
+
+        $variables = collect($validated['integration_variables'] ?? [])
+            ->filter(fn ($variable) => filled($variable['name'] ?? null))
+            ->values();
+
+        $integration->variables()->delete();
+
+        foreach ($variables as $index => $variable) {
+            $integration->variables()->create([
+                'name' => trim((string) $variable['name']),
+                'value' => (string) ($variable['value'] ?? ''),
+                'type' => $variable['type'] ?? 'text',
+                'order' => $variable['order'] ?? $index,
+                'active' => (bool) ($variable['active'] ?? true),
+            ]);
+        }
+    }
+
+    private function syncIntegrationVariableConditions(Integration $integration, array $validated): void
+    {
+        $typeName = $this->normalizeIntegrationTypeName(optional($integration->integrationtype)->name);
+
+        if ($typeName === '') {
+            $typeName = $this->normalizeIntegrationTypeName(
+                Integrationtype::whereKey($integration->integrationtype_id)->value('name')
+            );
+        }
+
+        if (!in_array($typeName, self::CUSTOM_VARIABLE_INTEGRATION_TYPES, true)) {
+            $integration->variableConditions()->delete();
+            return;
+        }
+
+        $conditions = collect($validated['integration_variable_conditions'] ?? [])
+            ->filter(fn ($condition) => filled($condition['target_variable'] ?? null) && filled($condition['source_key'] ?? null))
+            ->values();
+
+        $integration->variableConditions()->delete();
+
+        foreach ($conditions as $index => $condition) {
+            $integration->variableConditions()->create([
+                'target_variable' => trim((string) $condition['target_variable']),
+                'source_type' => $condition['source_type'] ?? 'lead',
+                'source_key' => trim((string) $condition['source_key']),
+                'operator' => $condition['operator'] ?? 'equals',
+                'comparison_value' => array_key_exists('comparison_value', $condition) && $condition['comparison_value'] !== ''
+                    ? $condition['comparison_value']
+                    : null,
+                'result_value' => array_key_exists('result_value', $condition) ? $condition['result_value'] : null,
+                'result_type' => $condition['result_type'] ?? 'text',
+                'order' => $condition['order'] ?? $index,
+                'active' => (bool) ($condition['active'] ?? true),
+            ]);
+        }
+    }
+
+    private function validateIntegrationVariablesPayload(array $payload, string $typeName): void
+    {
+        $variables = collect($payload['integration_variables'] ?? [])
+            ->filter(fn ($variable) => filled($variable['name'] ?? null))
+            ->values();
+
+        if ($variables->isEmpty()) {
+            return;
+        }
+
+        if (!in_array($typeName, self::CUSTOM_VARIABLE_INTEGRATION_TYPES, true)) {
+            return;
+        }
+
+        $names = [];
+        $messages = [];
+
+        foreach ($variables as $index => $variable) {
+            $name = trim((string) ($variable['name'] ?? ''));
+            $type = strtolower(trim((string) ($variable['type'] ?? 'text')));
+            $value = trim((string) ($variable['value'] ?? ''));
+
+            if (in_array($name, $names, true)) {
+                $messages["integration_variables.{$index}.name"] = "La variable {$name} esta duplicada.";
+            }
+
+            $names[] = $name;
+
+            if ($type === 'url' && $value !== '' && !str_contains($value, '{{') && filter_var($value, FILTER_VALIDATE_URL) === false) {
+                $messages["integration_variables.{$index}.value"] = 'Las variables URL deben tener una URL valida cuando el valor no usa placeholders.';
+            }
+
+            if ($type === 'json' && $value !== '' && !str_contains($value, '{{') && json_decode($value, true) === null && json_last_error() !== JSON_ERROR_NONE) {
+                $messages["integration_variables.{$index}.value"] = 'Las variables JSON deben tener JSON valido cuando el valor no usa placeholders.';
+            }
+        }
+
+        if ($messages !== []) {
+            throw ValidationException::withMessages($messages);
+        }
+    }
+
+    private function customVariableNamesFromPayload(array $payload): array
+    {
+        $variables = collect($payload['integration_variables'] ?? [])
+            ->pluck('name')
+            ->merge(collect($payload['integration_variable_conditions'] ?? [])->pluck('target_variable'));
+
+        return $variables
+            ->map(fn ($name) => trim((string) $name))
+            ->filter(fn ($name) => preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $name) === 1)
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function normalizeCustomVariableExpression(string $expression, array $allowedNames): ?string
+    {
+        $expression = trim($expression);
+
+        if (preg_match('/^\$?variables?\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/', $expression, $matches)) {
+            $expression = $matches[1];
+        }
+
+        if (!preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $expression)) {
+            return null;
+        }
+
+        return in_array($expression, $allowedNames, true) ? $expression : null;
     }
 
     private function kommoPipelineRequest(Integration $integration, string $path)

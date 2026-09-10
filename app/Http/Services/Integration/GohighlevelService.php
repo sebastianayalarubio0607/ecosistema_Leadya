@@ -248,6 +248,10 @@ class GohighlevelService
             return $value;
         }
 
+        if ($this->isIntegrationVariableToken($value)) {
+            return $this->resolveIntegrationVariableTokenValue($value, $lead, $integration, 'GOHIGHLEVEL');
+        }
+
         if (preg_match('/^' . preg_quote(self::CONTEXT_TOKEN_PREFIX, '/') . '(.+)$/', $value, $matches)) {
             return data_get($context, $matches[1], '');
         }
@@ -282,7 +286,13 @@ class GohighlevelService
 
         $field = $this->normalizeLeadField($expression);
 
-        return $field === null ? null : $this->placeholderToken($field);
+        if ($field !== null) {
+            return $this->placeholderToken($field);
+        }
+
+        $variableName = $this->normalizeIntegrationVariableExpression($expression);
+
+        return $variableName === null ? null : $this->integrationVariableToken($variableName);
     }
 
     private function normalizeLeadField(string $expression): ?string

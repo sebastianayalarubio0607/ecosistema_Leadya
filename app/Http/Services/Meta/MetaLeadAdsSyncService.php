@@ -726,7 +726,7 @@ class MetaLeadAdsSyncService
         }
 
         $value = $this->stripMetaPrefix(trim((string) $value));
-        $digits = preg_replace('/\D+/', '', $value) ?? '';
+        $digits = preg_replace('/\D/', '', $value) ?? '';
 
         return $digits !== '' ? $digits : $value;
     }

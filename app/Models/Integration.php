@@ -130,4 +130,14 @@ class Integration extends Model
     {
         return $this->hasMany(IntegrationVariableMapping::class);
     }
+
+    public function variables(): HasMany
+    {
+        return $this->hasMany(IntegrationVariable::class);
+    }
+
+    public function variableConditions(): HasMany
+    {
+        return $this->hasMany(IntegrationVariableCondition::class);
+    }
 }
