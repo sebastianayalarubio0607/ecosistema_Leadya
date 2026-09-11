@@ -137,7 +137,7 @@ class MetaLeadAdsSyncServiceTest extends TestCase
         $this->assertSame('3365649860301876', $lead->meta_lead_id);
         $this->assertSame('120254068070430368', $lead->meta_id_ad);
         $this->assertSame('Laura Meta', $lead->name);
-        $this->assertSame('573233600190', $lead->phone);
+        $this->assertSame('+573233600190', $lead->phone);
         $this->assertSame('CC-987', $lead->reference);
         $this->assertSame('mapped-origin', $lead->campaign_origin);
         $this->assertSame('Mapped Platform', $lead->plataforma);
@@ -199,7 +199,7 @@ class MetaLeadAdsSyncServiceTest extends TestCase
         $this->assertSame('meta', $lead->campaign_origin);
         $this->assertSame('Formulario instantáneo Meta', $lead->plataforma);
         $this->assertNull($lead->reference);
-        $this->assertSame('573001112233', $lead->phone);
+        $this->assertSame('+573001112233', $lead->phone);
     }
 
     private function createActiveMetaForm(): array

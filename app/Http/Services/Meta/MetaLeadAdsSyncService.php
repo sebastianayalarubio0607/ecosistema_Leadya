@@ -689,6 +689,10 @@ class MetaLeadAdsSyncService
             return $this->normalizeMetaIdentifier($value);
         }
 
+        if ($leadFieldName === 'phone') {
+            return $this->normalizePhoneValue($value, true);
+        }
+
         if (in_array($leadFieldName, self::PHONE_LEAD_FIELDS, true)) {
             return $this->normalizePhoneValue($value);
         }
@@ -719,7 +723,7 @@ class MetaLeadAdsSyncService
         return filled($value) ? $value : null;
     }
 
-    private function normalizePhoneValue(mixed $value): mixed
+    private function normalizePhoneValue(mixed $value, bool $withInternationalPrefix = false): mixed
     {
         if (! is_scalar($value)) {
             return $value;
@@ -728,7 +732,11 @@ class MetaLeadAdsSyncService
         $value = $this->stripMetaPrefix(trim((string) $value));
         $digits = preg_replace('/\D/', '', $value) ?? '';
 
-        return $digits !== '' ? $digits : $value;
+        if ($digits === '') {
+            return $value;
+        }
+
+        return $withInternationalPrefix ? '+'.$digits : $digits;
     }
 
     private function findPageByMetaId(mixed $rawValue, string $normalizedValue): ?MetaPage

@@ -11,11 +11,19 @@
 @endsection
 
 @section('content')
-    <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-6">
-        <form method="POST" action="{{ route('integrations.update', $integration) }}">
-            @csrf
-            @method('PUT')
-            @include('integrations._form', ['integration' => $integration, 'customers' => $customers, 'types' => $types])
-        </form>
-    </div>
+    <livewire:integrations.form
+        :integration="$integration"
+        :customer-options="$customers"
+        :type-options="$types"
+        :lead-field-options="$leadFields"
+        :initial-kommo-conditions="$kommoPipelineConditions"
+        :initial-atom-webhooks="$atomWebhooks"
+        :initial-atom-conditions="$atomConditions"
+        :initial-lety-webhooks="$letyWebhooks"
+        :initial-lety-conditions="$letyConditions"
+        :initial-freshworks-mappings="$freshworksVariableMappings"
+        :initial-integration-mappings="$integrationVariableMappings"
+        :initial-variables="$integrationVariables"
+        :initial-variable-conditions="$integrationVariableConditions"
+    />
 @endsection
