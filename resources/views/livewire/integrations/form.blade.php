@@ -6,6 +6,8 @@ use Illuminate\Support\Str;
 use Livewire\Volt\Component;
 
 new class extends Component {
+    #[\Livewire\Attributes\Locked]
+    public bool $embeddedInLegacyForm = false;
     public ?int $integrationId = null;
     public bool $isEdit = false;
     public ?int $originalTypeId = null;
@@ -69,8 +71,10 @@ new class extends Component {
         $initialFreshworksMappings = [],
         $initialIntegrationMappings = [],
         $initialVariables = [],
-        $initialVariableConditions = []
+        $initialVariableConditions = [],
+        bool $embeddedInLegacyForm = false
     ): void {
+        $this->embeddedInLegacyForm = $embeddedInLegacyForm;
         $this->integrationId = $integration->exists ? (int) $integration->id : null;
         $this->isEdit = (bool) $integration->exists;
         $this->originalTypeId = $integration->integrationtype_id ? (int) $integration->integrationtype_id : null;
@@ -349,10 +353,14 @@ new class extends Component {
     $supportsMappings = in_array($typeKey, ['atom', 'zoho', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'], true);
 @endphp
 
-<div class="border border-white/10 bg-zinc-950/25 p-4 backdrop-blur sm:p-6 rounded-xl">
+<div data-integration-form-version="2026-09-11-livewire" class="border border-white/10 bg-zinc-950/25 p-4 backdrop-blur sm:p-6 rounded-xl">
+    @if($embeddedInLegacyForm)
+        <div class="space-y-8">
+    @else
     <form method="POST" action="{{ $isEdit ? route('integrations.update', $integrationId) : route('integrations.store') }}" class="space-y-8">
         @csrf
         @if($isEdit) @method('PUT') @endif
+    @endif
 
         @if($errors->any())
             <section class="border border-rose-300/20 bg-rose-500/10 p-4 text-sm text-rose-100" role="alert">
@@ -405,5 +413,9 @@ new class extends Component {
                 </button>
             </div>
         </div>
-    </form>
+    @if($embeddedInLegacyForm)
+        </div>
+    @else
+        </form>
+    @endif
 </div>

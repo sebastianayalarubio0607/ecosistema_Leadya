@@ -144,14 +144,12 @@
                                             data-original-value="{{ $lead->crm_state }}"
                                             @disabled($stateOptions->isEmpty())
                                         >
-                                            @if($stateOptions->isEmpty())
-                                                <option value="">Sin Estados Del Cliente</option>
-                                            @elseif(! $currentStateExists)
-                                                <option value="" selected disabled>{{ $lead->crm_state_name ?: 'Sin Estado' }}</option>
+                                            @if(! $currentStateExists)
+                                                <option value="{{ $lead->crm_state }}" selected disabled>{{ $lead->funnel_name ?: 'Sin Funnel' }} | {{ $lead->crm_state_name ?: 'Sin Estado' }}</option>
                                             @endif
                                             @foreach($stateOptions as $state)
                                                 <option value="{{ $state->id }}" data-qualification="{{ $state->qualification_name ?: 'Sin Calificacion' }}" @selected((string) $lead->crm_state === (string) $state->id)>
-                                                    {{ $state->name ?: $state->id }}
+                                                    {{ $state->funnel_name }} | {{ $state->name ?: $state->id }}
                                                 </option>
                                             @endforeach
                                         </select>
@@ -160,6 +158,9 @@
                                                 Guardando...
                                             </div>
                                         </div>
+                                        @if($stateOptions->isEmpty())
+                                            <p class="mt-1 text-xs text-white/50">Sin estados con funnel y eventos configurados para este cliente.</p>
+                                        @endif
                                     </td>
                                     <td class="max-w-48 truncate whitespace-nowrap px-3 py-2" data-lead-qualification title="{{ $lead->qualification_name }}">{{ $lead->qualification_name }}</td>
                                     <td class="max-w-xs truncate whitespace-nowrap px-3 py-2" title="{{ $lead->page_url ?: 'Sin Dato' }}">

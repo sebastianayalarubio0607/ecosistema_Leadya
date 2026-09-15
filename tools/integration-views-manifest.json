@@ -1,0 +1,15 @@
+{
+  "version": "2026-09-11-livewire",
+  "files": {
+    "resources/views/integrations/create.blade.php": "6f21f384cb2bf341d30763c3b2044f46be49147f384f37bcd6bc348bfa84566d",
+    "resources/views/integrations/edit.blade.php": "d86910e407349e243e1607418bd44c5d00efad8d0ca92d8d1b7ea6fd2885a9f1",
+    "resources/views/integrations/_form.blade.php": "39e3c9dd3b19827b6331a0cc0f9b575ea09e15e4ca02490fa9d39a6ef2ada4d2",
+    "resources/views/livewire/integrations/form.blade.php": "77c1e2e813cca9dc58c12a1c4def0988001b43e64953b98841fd97fae78e278f",
+    "resources/views/livewire/integrations/partials/general.blade.php": "5187863ffd587353681a8132e3c8d14d66a5422a9e791a0aded04803928a3061",
+    "resources/views/livewire/integrations/partials/mappings.blade.php": "df33e125f84667dda8bf9e034250b73032fee36812409ce9355135b9c6a3588f",
+    "resources/views/livewire/integrations/partials/type-fields.blade.php": "e9c930c600c47b348b39583146c601851a5a7a1ba966338c12f586e5d8220468",
+    "resources/views/livewire/integrations/partials/variable-conditions.blade.php": "5f6a721d624724339d2667b682341046427bc86e86035b96271aef4d4a8022fd",
+    "resources/views/livewire/integrations/partials/variables.blade.php": "b30c619cc73f2adbb36abcfd86b8cd0ecca240c47fe0a917c52e215d67af9819",
+    "resources/views/livewire/integrations/partials/webhooks.blade.php": "cd06c7a1091adfd687f915a8af155d4aeb030c7599f570cace5e6f8740e9033b"
+  }
+}

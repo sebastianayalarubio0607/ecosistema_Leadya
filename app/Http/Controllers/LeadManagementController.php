@@ -55,7 +55,7 @@ class LeadManagementController extends Controller
                 ->contains((string) $request->input('crm_state'));
 
             if (! $allowed) {
-                $validator->errors()->add('crm_state', 'El estado CRM no pertenece al cliente del lead.');
+                $validator->errors()->add('crm_state', 'El estado CRM no esta disponible para este lead: debe pertenecer al cliente y tener un funnel y un evento configurados.');
             }
         });
 
@@ -123,6 +123,7 @@ class LeadManagementController extends Controller
             ->leftJoin('customers as c_management', 'c_management.id', '=', 'leads.customer_id')
             ->leftJoin('crm_state as cs_management', 'cs_management.id', '=', 'leads.crm_state')
             ->leftJoin('qualification as q_management', 'q_management.id', '=', 'cs_management.qualification')
+            ->leftJoin('funnels as f_management', 'f_management.id', '=', 'q_management.funnel_id')
             ->leftJoin('campaign_objectives as co_management', 'co_management.id', '=', 'leads.campaign_objective')
             ->leftJoin('origins as origin_management', 'origin_management.code', '=', 'leads.campaign_origin')
             ->leftJoin('sources as source_management', 'source_management.id', '=', 'origin_management.source_id')
@@ -144,6 +145,7 @@ class LeadManagementController extends Controller
             ->selectRaw("COALESCE(NULLIF(c_management.name, ''), 'Sin Cliente') as customer_name")
             ->selectRaw("COALESCE(NULLIF(cs_management.name, ''), NULLIF(leads.crm_state, ''), 'Sin Estado') as crm_state_name")
             ->selectRaw("COALESCE(NULLIF(q_management.name, ''), 'Sin Calificacion') as qualification_name")
+            ->selectRaw("COALESCE(NULLIF(TRIM(f_management.name), ''), 'Sin Funnel') as funnel_name")
             ->selectRaw("COALESCE(NULLIF(source_management.name, ''), 'Sin Fuente') as source_name")
             ->selectRaw("COALESCE(NULLIF(origin_management.name, ''), NULLIF(leads.campaign_origin, ''), 'Sin Origen') as origin_name")
             ->selectRaw("COALESCE(NULLIF(platform_management.name, ''), NULLIF(leads.plataforma, ''), 'Sin Medio') as medium_name")
@@ -185,15 +187,15 @@ class LeadManagementController extends Controller
 
         $leads->each(function (Lead $lead) use ($optionsByPrefixSet): void {
             $prefixes = $this->crmStatePrefixesForLead($lead);
-            $cacheKey = $prefixes->implode('|');
+            $cacheKey = $lead->customer_id . ':' . $prefixes->implode('|');
 
-            if ($cacheKey === '') {
+            if ($prefixes->isEmpty()) {
                 $lead->setAttribute('crm_state_options', collect());
                 return;
             }
 
             if (! $optionsByPrefixSet->has($cacheKey)) {
-                $optionsByPrefixSet->put($cacheKey, $this->crmStateOptionsForPrefixes($prefixes));
+                $optionsByPrefixSet->put($cacheKey, $this->crmStateOptionsForPrefixes($prefixes, (int) $lead->customer_id));
             }
 
             $lead->setAttribute('crm_state_options', $optionsByPrefixSet->get($cacheKey, collect()));
@@ -202,10 +204,10 @@ class LeadManagementController extends Controller
 
     private function crmStateOptionsForLead(Lead $lead): Collection
     {
-        return $this->crmStateOptionsForPrefixes($this->crmStatePrefixesForLead($lead));
+        return $this->crmStateOptionsForPrefixes($this->crmStatePrefixesForLead($lead), (int) $lead->customer_id);
     }
 
-    private function crmStateOptionsForPrefixes(Collection $prefixes): Collection
+    private function crmStateOptionsForPrefixes(Collection $prefixes, int $customerId): Collection
     {
         if ($prefixes->isEmpty()) {
             return collect();
@@ -213,13 +215,39 @@ class LeadManagementController extends Controller
 
         return CrmState::query()
             ->leftJoin('qualification as q_options', 'q_options.id', '=', 'crm_state.qualification')
+            ->join('funnels as f_options', 'f_options.id', '=', 'q_options.funnel_id')
+            ->whereRaw("TRIM(f_options.name) <> ''")
             ->where(function ($query) use ($prefixes): void {
                 foreach ($prefixes as $prefix) {
                     $query->orWhere('crm_state.id', 'like', $this->crmStatePrefixLike((string) $prefix));
                 }
             })
+            ->where(function ($query) use ($customerId): void {
+                $query->whereNotNull('crm_state.meta_event_id')
+                    ->orWhereNotNull('crm_state.whatsapp_event_id')
+                    ->orWhere(function ($googleQuery) use ($customerId): void {
+                        $googleQuery->where('crm_state.google_ads_conversion_enabled', true)
+                            ->where(function ($conversionQuery) use ($customerId): void {
+                                $conversionQuery->whereHas('googleAdsConversions', function ($configuredQuery) use ($customerId): void {
+                                    $configuredQuery->where('customer_id', $customerId)
+                                        ->where(function ($actionQuery): void {
+                                            $actionQuery->whereRaw("TRIM(conversion_action_id) <> ''")
+                                                ->orWhereRaw("TRIM(conversion_action_resource_name) <> ''");
+                                        });
+                                })->orWhere(function ($legacyQuery): void {
+                                    $legacyQuery->whereDoesntHave('googleAdsConversions')
+                                        ->where(function ($actionQuery): void {
+                                            $actionQuery->whereRaw("TRIM(crm_state.google_ads_conversion_action_id) <> ''")
+                                                ->orWhereRaw("TRIM(crm_state.google_ads_conversion_action_resource_name) <> ''");
+                                        });
+                                });
+                            });
+                    });
+            })
+            ->orderBy('f_options.name')
             ->orderBy('crm_state.name')
-            ->get(['crm_state.id', 'crm_state.name', 'q_options.name as qualification_name']);
+            ->orderBy('crm_state.id')
+            ->get(['crm_state.id', 'crm_state.name', 'q_options.name as qualification_name', 'f_options.name as funnel_name']);
     }
 
     private function crmStatePrefixesForLead(Lead $lead): Collection
@@ -239,6 +267,7 @@ class LeadManagementController extends Controller
         return Integration::query()
             ->where('customer_id', $customerId)
             ->get(['id', 'disable_integration_id_crm_prefix', 'crm_id_prefix'])
+            ->toBase()
             ->map(fn (Integration $integration) => $integration->crmIdPrefix())
             ->filter()
             ->unique()
