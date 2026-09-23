@@ -18,7 +18,7 @@
         @unless(in_array($typeKey, ['atom', 'lety'], true))
             <div>
                 <label class="{{ $labelClass }}">
-                    {{ $typeKey === 'hubspot' ? 'URL base HubSpot' : ($typeKey === 'zapnito_invitacion' ? 'URL base Zapnito' : 'URL') }}
+                    {{ $typeKey === 'hubspot' ? 'URL base HubSpot' : ($typeKey === 'freshworks_oportunidad' ? 'URL principal Freshworks' : ($typeKey === 'zapnito_invitacion' ? 'URL base Zapnito' : 'URL')) }}
                     {{ in_array($typeKey, ['gohighlevel', 'gohighlevel_oportunidad'], true) ? '' : '*' }}
                 </label>
                 <input name="url" type="url" wire:model.blur="typeData.{{ $typeKey }}.url"
@@ -152,9 +152,7 @@
                                     <div>
                                         <label class="{{ $labelClass }}">Activa</label>
                                         <input type="hidden" name="kommo_pipeline_conditions[{{ $index }}][active]" value="0">
-                                        <label class="inline-flex items-center gap-2 pt-2 text-sm text-white/80">
-                                            <input type="checkbox" name="kommo_pipeline_conditions[{{ $index }}][active]" value="1" wire:model.change="kommoConditions.{{ $index }}.active" class="rounded border-white/20 bg-slate-900 text-indigo-500"> Si
-                                        </label>
+                                        <x-toggle-switch name="kommo_pipeline_conditions[{{ $index }}][active]" value="1" wire:model.change="kommoConditions.{{ $index }}.active" label="Sí" />
                                     </div>
                                     <div class="flex items-end justify-end">
                                         <input type="hidden" name="kommo_pipeline_conditions[{{ $index }}][order]" value="{{ $index }}">
@@ -210,6 +208,14 @@
                 </div>
                 @break
 
+            @case('freshworks_oportunidad')
+                <div class="space-y-4">
+                    <div><label class="{{ $labelClass }}">Token Freshworks *</label><input name="tokent" type="password" wire:model="typeData.freshworks_oportunidad.tokent" autocomplete="new-password" class="{{ $inputClass }}" placeholder="{{ $tokenStored ? 'Token guardado; deja vacio para conservarlo' : '' }}" @required(!$tokenStored)></div>
+                    <div><label class="{{ $labelClass }}">Body JSON contacto *</label><textarea name="body" rows="10" wire:model.blur="typeData.freshworks_oportunidad.body" class="{{ $inputClass }} font-mono text-sm" required placeholder='{"first_name":"@{{lead->name}}","last_name":"@{{lead->last_name}}","mobile_number":"@{{lead->phone}}"}'></textarea><p class="mt-1 text-xs text-white/50">mobile_number se toma siempre del teléfono válido del lead.</p></div>
+                    <div><label class="{{ $labelClass }}">Body JSON oportunidad *</label><textarea name="body_oportunidad" rows="12" wire:model.blur="typeData.freshworks_oportunidad.body_oportunidad" class="{{ $inputClass }} font-mono text-sm" required placeholder='{"name":"@{{lead->name}}","amount":"@{{lead->value}}","deal_pipeline_id":0,"deal_stage_id":0,"probability":10}'></textarea><p class="mt-1 text-xs text-white/50">Se asocia automáticamente el contacto creado o actualizado.</p></div>
+                </div>
+                @break
+
             @case('zapnito_invitacion')
                 <div class="space-y-4">
                     <div><label class="{{ $labelClass }}">Token Zapnito *</label><input name="tokent" type="password" wire:model="typeData.zapnito_invitacion.tokent" autocomplete="new-password" class="{{ $inputClass }}" placeholder="{{ $tokenStored ? 'Token guardado; deja vacio para conservarlo' : '' }}" @required(!$tokenStored)></div>
@@ -219,11 +225,31 @@
 
             @case('gohighlevel')
             @case('gohighlevel_oportunidad')
-                <div class="space-y-4">
-                    <div><label class="{{ $labelClass }}">Token LeadConnector / GoHighLevel *</label><input name="tokent" type="password" wire:model="typeData.{{ $typeKey }}.tokent" autocomplete="new-password" class="{{ $inputClass }}" placeholder="{{ $tokenStored ? 'Token guardado; deja vacio para conservarlo' : '' }}" @required(!$tokenStored)></div>
-                    <div><label class="{{ $labelClass }}">Body JSON *</label><textarea name="body" rows="12" wire:model.blur="typeData.{{ $typeKey }}.body" class="{{ $inputClass }} font-mono text-sm" required></textarea></div>
+                <div class="space-y-5 rounded-2xl border border-white/10 bg-white/5 p-5 text-white/80">
+                    <div class="rounded-xl border border-white/10 bg-slate-900/40 p-4"><label class="{{ $labelClass }}">Token LeadConnector / GoHighLevel *</label><input name="tokent" type="password" wire:model.live.blur="typeData.{{ $typeKey }}.tokent" autocomplete="new-password" class="{{ $inputClass }}" placeholder="{{ $tokenStored ? 'Token guardado; deja vacio para conservarlo' : '' }}" @required(!$tokenStored)></div>
                     @if($typeKey === 'gohighlevel_oportunidad')
-                        <div><label class="{{ $labelClass }}">Body oportunidad *</label><textarea name="body_oportunidad" rows="12" wire:model.blur="typeData.gohighlevel_oportunidad.body_oportunidad" class="{{ $inputClass }} font-mono text-sm" required></textarea></div>
+                        <div class="rounded-xl border border-white/10 bg-slate-900/40 p-4"><label class="{{ $labelClass }}">locationId</label><input name="location_id" wire:model.live.blur="typeData.gohighlevel_oportunidad.location_id" maxlength="100" autocomplete="off" class="{{ $inputClass }}" placeholder="ID de la subcuenta de GoHighLevel"></div>
+                    @endif
+                    @if($typeKey === 'gohighlevel_oportunidad' && $tokenStored)
+                        <livewire:gohighlevel-pipeline-catalog
+                            :integration-id="$integrationId"
+                            :location-id="(string) ($data['location_id'] ?? '')"
+                            :input-class="$inputClass"
+                            :label-class="$labelClass"
+                            :key="'gohighlevel-catalog-'.$integrationId.'-'.md5((string) ($data['location_id'] ?? ''))"
+                        />
+                    @endif
+                    <div class="rounded-xl border border-white/10 bg-slate-900/40 p-4"><label class="{{ $labelClass }}">Body JSON *</label><textarea name="body" rows="12" wire:model.blur="typeData.{{ $typeKey }}.body" class="{{ $inputClass }} min-h-56 font-mono text-sm leading-6" required></textarea></div>
+                    @if($typeKey === 'gohighlevel_oportunidad')
+                        <div class="rounded-xl border border-white/10 bg-slate-900/40 p-4"><label class="{{ $labelClass }}">Body oportunidad *</label><textarea name="body_oportunidad" rows="12" wire:model.blur="typeData.gohighlevel_oportunidad.body_oportunidad" class="{{ $inputClass }} min-h-56 font-mono text-sm leading-6" required></textarea></div>
+                        <div class="rounded-xl border border-sky-300/20 bg-sky-500/10 p-4 shadow-sm shadow-sky-950/30">
+                            <input type="hidden" name="omit_empty_payload_fields" value="0">
+                            <x-toggle-switch name="omit_empty_payload_fields" value="1" wire:model.change="typeData.gohighlevel_oportunidad.omit_empty_payload_fields" label="Omitir atributos vacíos o nulos del body" :checked="(bool) ($data['omit_empty_payload_fields'] ?? true)">
+                                <span>
+                                    <span class="block text-xs text-sky-100/70">Evita enviar, por ejemplo, <code class="font-mono">&quot;email&quot;: &quot;&quot;</code> a GoHighLevel. Conserva <code class="font-mono">0</code>, <code class="font-mono">false</code> y los campos requeridos configurados.</span>
+                                </span>
+                            </x-toggle-switch>
+                        </div>
                     @endif
                 </div>
                 @break

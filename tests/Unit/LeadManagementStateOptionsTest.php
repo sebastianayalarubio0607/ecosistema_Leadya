@@ -38,6 +38,7 @@ class LeadManagementStateOptionsTest extends TestCase
         Schema::create('funnels', function (Blueprint $table) {
             $table->id();
             $table->string('name');
+            $table->unsignedInteger('orden')->nullable();
         });
         Schema::create('qualification', function (Blueprint $table) {
             $table->id();
@@ -167,6 +168,31 @@ class LeadManagementStateOptionsTest extends TestCase
 
         $this->assertSame('crm-meta', $response->getData(true)['crm_state']);
         $this->assertSame('Calificado', $response->getData(true)['qualification_name']);
+    }
+
+    public function test_options_follow_numeric_funnel_order_with_stable_ties_and_nulls_last(): void
+    {
+        DB::table('funnels')->where('id', 1)->update(['orden' => 10]);
+        DB::table('funnels')->insert([
+            ['id' => 3, 'name' => 'Ventas', 'orden' => 2],
+            ['id' => 4, 'name' => 'Ventas', 'orden' => 2],
+            ['id' => 5, 'name' => 'Inicial', 'orden' => null],
+        ]);
+        DB::table('qualification')->insert([
+            ['id' => 3, 'name' => 'Venta', 'funnel_id' => 3],
+            ['id' => 4, 'name' => 'Otra venta', 'funnel_id' => 4],
+            ['id' => 5, 'name' => 'Inicial', 'funnel_id' => 5],
+        ]);
+        $this->state('crm-oportunidad', ['meta_event_id' => 1]);
+        $this->state('crm-venta-b', ['qualification' => 3, 'meta_event_id' => 1]);
+        $this->state('crm-venta-a', ['qualification' => 3, 'meta_event_id' => 1]);
+        $this->state('crm-otra-venta', ['qualification' => 4, 'meta_event_id' => 1]);
+        $this->state('crm-inicial', ['qualification' => 5, 'meta_event_id' => 1]);
+        $this->state('crm-sin-eventos', ['qualification' => 3]);
+
+        $this->assertSame([
+            'crm-venta-a', 'crm-venta-b', 'crm-otra-venta', 'crm-oportunidad', 'crm-inicial',
+        ], $this->stateOptions()->pluck('id')->all());
     }
 
     private function state(string $id, array $attributes = []): void

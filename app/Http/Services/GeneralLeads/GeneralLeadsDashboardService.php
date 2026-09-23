@@ -1262,7 +1262,7 @@ class GeneralLeadsDashboardService
 
                 return [
                     'text' => $status['integration'].': '.$status['status_label'].$answerCode,
-                    'is_success' => $rawAnswerCode !== '' && is_numeric($rawAnswerCode) && (int) $rawAnswerCode === 200,
+                    'is_success' => $rawAnswerCode !== '' && is_numeric($rawAnswerCode) && in_array((int) $rawAnswerCode, [200, 201], true),
                 ];
             })
             ->values()

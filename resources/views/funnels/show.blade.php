@@ -18,6 +18,10 @@
     <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-6 text-white/80">
         <div class="grid gap-4">
             <div>
+                <div class="text-sm text-white/50">Orden</div>
+                <div class="mt-1">{{ $funnel->orden ?? 'Sin orden' }}</div>
+            </div>
+            <div>
                 <div class="text-sm text-white/50">ID</div>
                 <div class="mt-1">{{ $funnel->id }}</div>
             </div>

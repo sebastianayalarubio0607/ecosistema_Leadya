@@ -21,7 +21,7 @@ class FunnelWebController extends Controller
         $funnels = Funnel::query()
             ->withCount('qualifications')
             ->when($q, fn ($query) => $query->where('name', 'like', "%{$q}%"))
-            ->orderByDesc('id')
+            ->inDisplayOrder()
             ->paginate(15)
             ->withQueryString();
 
@@ -30,7 +30,7 @@ class FunnelWebController extends Controller
 
     public function create(): View
     {
-        $funnel = new Funnel();
+        $funnel = new Funnel(['orden' => min(2147483647, ((int) Funnel::query()->max('orden')) + 5)]);
 
         $qualifications = Qualification::query()
             ->orderBy('name')
@@ -54,6 +54,7 @@ class FunnelWebController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'orden' => ['required', 'integer', 'min:1', 'max:2147483647'],
             'description' => ['nullable', 'string'],
             'status' => ['required', 'in:active,inactive'],
 
@@ -119,6 +120,7 @@ class FunnelWebController extends Controller
 
         $validated = $request->validate([
             'name' => ['required', 'string', 'max:255'],
+            'orden' => ['required', 'integer', 'min:1', 'max:2147483647'],
             'description' => ['nullable', 'string'],
             'status' => ['required', 'in:active,inactive'],
 
@@ -150,6 +152,22 @@ class FunnelWebController extends Controller
         return redirect()
             ->route('funnels.index')
             ->with('success', 'Funnel actualizado correctamente.');
+    }
+
+    public function reorder(): RedirectResponse
+    {
+        DB::transaction(function (): void {
+            // Read the whole catalog, independent of search filters and pagination.
+            $funnels = Funnel::query()->inDisplayOrder()->lockForUpdate()->get(['id']);
+
+            foreach ($funnels as $index => $funnel) {
+                // Only the display order changes; relationships and timestamps stay intact.
+                DB::table('funnels')->where('id', $funnel->id)->update(['orden' => ($index + 1) * 5]);
+            }
+        });
+
+        return redirect()->route('funnels.index')
+            ->with('success', 'Valores actualizados de 5 en 5, manteniendo el orden de todos los funnels.');
     }
 
     public function destroy(Funnel $funnel): RedirectResponse

@@ -1,4 +1,4 @@
-<section class="space-y-5">
+<section class="space-y-5 rounded-2xl border border-white/10 bg-white/5 p-5 shadow-sm shadow-black/10 sm:p-6">
     <div>
         <h3 class="text-base font-semibold text-white">Datos generales</h3>
         <p class="text-sm text-white/50">Identificacion, cliente y comportamiento general de la integracion.</p>
@@ -65,25 +65,19 @@
     </div>
 
     @if($typeChanged)
-        <div class="border border-amber-300/20 bg-amber-500/10 p-4 text-sm text-amber-100">
+        <div class="rounded-xl border border-amber-300/20 bg-amber-500/10 p-4 text-sm text-amber-100">
             <p class="font-semibold">El tipo seleccionado es diferente al tipo guardado.</p>
             <p class="mt-1 text-amber-100/70">Al guardar, la logica actual puede reemplazar credenciales y configuraciones del tipo anterior.</p>
-            <label class="mt-3 inline-flex items-center gap-2">
-                <input type="checkbox" wire:model.live="confirmTypeChange" required class="rounded border-amber-200/30 bg-slate-900 text-amber-400">
-                Confirmo que deseo cambiar el tipo de integracion
-            </label>
+            <x-toggle-switch class="mt-3" wire:model.live="confirmTypeChange" required label="Confirmo que deseo cambiar el tipo de integracion" />
         </div>
     @endif
 
     @if($supportsPrefix)
         <div class="border-t border-white/10 pt-5">
-            <label class="inline-flex items-center gap-2 text-sm text-white/80">
-                <input type="hidden" name="disable_integration_id_crm_prefix" value="0">
-                <input type="checkbox" name="disable_integration_id_crm_prefix" value="1"
-                       wire:model.live="form.disable_integration_id_crm_prefix"
-                       class="rounded border-white/20 bg-slate-900 text-indigo-500">
-                Usar un prefijo manual para crm_id
-            </label>
+            <input type="hidden" name="disable_integration_id_crm_prefix" value="0">
+            <x-toggle-switch name="disable_integration_id_crm_prefix" value="1"
+                             wire:model.live="form.disable_integration_id_crm_prefix"
+                             label="Usar un prefijo manual para crm_id" />
             @if($form['disable_integration_id_crm_prefix'])
                 <div class="mt-3 max-w-md">
                     <label class="{{ $labelClass }}">Prefijo manual *</label>

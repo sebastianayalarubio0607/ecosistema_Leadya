@@ -127,7 +127,7 @@ new class extends Component {
         }
 
         $fields = [
-            'url', 'tokent', 'body', 'body_oportunidad', 'crm_Id_phone', 'crm_Id_email',
+            'url', 'tokent', 'location_id', 'body', 'body_oportunidad', 'omit_empty_payload_fields', 'crm_Id_phone', 'crm_Id_email',
             'crm_Id_service', 'crm_Id_fuente', 'client_id', 'client_secret', 'code',
             'access_token', 'refresh_token', 'territory_id', 'owner_id', 'city',
             'lead_source_id', 'custom_field', 'url_credenciales', 'username', 'password',
@@ -138,7 +138,9 @@ new class extends Component {
         foreach ($fields as $field) {
             $storedField = $field === 'access_token' ? 'tokent' : $field;
             $isSecret = in_array($field, ['tokent', 'access_token', 'client_secret', 'refresh_token', 'password'], true);
-            $value = $isSecret ? '' : ($field === 'url' ? $baseUrl : ($integration->{$storedField} ?? ''));
+            $value = $field === 'omit_empty_payload_fields'
+                ? old($field, $this->isEdit ? (bool) ($integration->{$storedField} ?? false) : true)
+                : ($isSecret ? '' : ($field === 'url' ? $baseUrl : ($integration->{$storedField} ?? '')));
             $this->typeData[$this->typeKey][$field] = (string) old($field, $value);
         }
 
@@ -232,6 +234,9 @@ new class extends Component {
         $this->typeKey = $this->typeKeyForId($id);
         $this->confirmTypeChange = false;
         $this->typeData[$this->typeKey] ??= [];
+        if ($this->typeKey === 'gohighlevel_oportunidad' && ! array_key_exists('omit_empty_payload_fields', $this->typeData[$this->typeKey])) {
+            $this->typeData[$this->typeKey]['omit_empty_payload_fields'] = '1';
+        }
     }
 
     private function typeKeyForId($id): string
@@ -345,15 +350,15 @@ new class extends Component {
 ?>
 
 @php
-    $inputClass = 'w-full rounded-lg border border-white/10 bg-slate-900/60 p-2 text-white placeholder-white/40 focus:border-indigo-400 focus:ring-indigo-400';
-    $labelClass = 'mb-1 block text-sm font-medium text-white/70';
+    $inputClass = 'w-full rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2.5 text-white placeholder-white/40 shadow-sm shadow-black/10 transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/30';
+    $labelClass = 'mb-1.5 block text-sm font-medium text-white/75';
     $typeChanged = $isEdit && (int) $form['integrationtype_id'] !== (int) $originalTypeId;
-    $supportsPrefix = in_array($typeKey, ['kommo', 'kommopipeline', 'freshworks', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad'], true);
-    $supportsVariables = in_array($typeKey, ['kommopipeline', 'atom', 'zoho', 'freshworks', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'], true);
-    $supportsMappings = in_array($typeKey, ['atom', 'zoho', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'], true);
+    $supportsPrefix = in_array($typeKey, ['kommo', 'kommopipeline', 'freshworks', 'freshworks_oportunidad', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad'], true);
+    $supportsVariables = in_array($typeKey, ['kommopipeline', 'atom', 'zoho', 'freshworks', 'freshworks_oportunidad', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'], true);
+    $supportsMappings = in_array($typeKey, ['atom', 'zoho', 'freshworks_oportunidad', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'], true);
 @endphp
 
-<div data-integration-form-version="2026-09-11-livewire" class="border border-white/10 bg-zinc-950/25 p-4 backdrop-blur sm:p-6 rounded-xl">
+<div data-integration-form-version="2026-09-11-livewire" class="rounded-2xl border border-white/10 bg-zinc-950/25 p-5 text-white/80 shadow-xl shadow-black/10 backdrop-blur sm:p-6">
     @if($embeddedInLegacyForm)
         <div class="space-y-8">
     @else
@@ -363,7 +368,7 @@ new class extends Component {
     @endif
 
         @if($errors->any())
-            <section class="border border-rose-300/20 bg-rose-500/10 p-4 text-sm text-rose-100" role="alert">
+            <section class="rounded-xl border border-rose-300/20 bg-rose-500/10 p-4 text-sm text-rose-100 shadow-sm shadow-rose-950/20" role="alert">
                 <h3 class="font-semibold">Revisa los datos del formulario</h3>
                 <ul class="mt-2 list-disc space-y-1 pl-5">
                     @foreach($errors->all() as $message)
@@ -389,25 +394,22 @@ new class extends Component {
         @endif
 
         @if($isEdit)
-            <section class="border-t border-white/10 pt-6 ">
+            <section class="rounded-2xl border border-white/10 bg-white/5 p-5">
                 <h3 class="text-sm font-semibold text-white">Public key</h3>
-                <div class="mt-2 break-all border border-white/10 bg-slate-900/60 p-3 font-mono text-xs text-white/70 rounded-xl">{{ $publicKey }}</div>
-                <label class="mt-3 inline-flex items-center gap-2 text-sm text-white/80">
-                    <input type="hidden" name="regenerate_public_key" value="0">
-                    <input type="checkbox" name="regenerate_public_key" value="1" class="rounded border-white/20 bg-slate-900 text-indigo-500">
-                    Regenerar public_key al guardar
-                </label>
+                <div class="mt-2 break-all rounded-xl border border-white/10 bg-slate-900/60 p-3 font-mono text-xs text-white/70">{{ $publicKey }}</div>
+                <input type="hidden" name="regenerate_public_key" value="0">
+                <x-toggle-switch class="mt-3" name="regenerate_public_key" value="1" label="Regenerar public_key al guardar" />
             </section>
         @endif
 
-        <div class="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 border-t border-white/10 bg-zinc-950/25 p-4 backdrop-blur rounded-xl">
+        <div class="sticky bottom-0 z-10 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-zinc-950/85 p-4 shadow-lg shadow-black/20 backdrop-blur">
             <div class="text-sm text-white/50" wire:dirty>Hay cambios pendientes.</div>
             <div class="flex gap-2">
-                <a href="{{ route('integrations.index') }}" class="rounded-lg border border-white/10 bg-white/10 px-4 py-2 text-white hover:bg-white/15">Cancelar</a>
+                <a href="{{ route('integrations.index') }}" class="rounded-xl border border-white/10 bg-white/10 px-4 py-2.5 text-white transition hover:bg-white/15">Cancelar</a>
                 <button type="submit"
                         @disabled($typeChanged && ! $confirmTypeChange)
                         wire:loading.attr="disabled"
-                        class="rounded-lg border border-indigo-300/20 bg-indigo-500/30 px-4 py-2 text-white hover:bg-indigo-500/40 disabled:cursor-not-allowed disabled:opacity-50">
+                        class="rounded-xl border border-indigo-300/20 bg-indigo-500/30 px-4 py-2.5 text-white shadow-sm shadow-indigo-950/30 transition hover:bg-indigo-500/40 disabled:cursor-not-allowed disabled:opacity-50">
                     <span wire:loading.remove>Guardar</span>
                     <span wire:loading>Actualizando...</span>
                 </button>

@@ -158,6 +158,7 @@ class IntegrationController extends Controller
             'status' => 'required|boolean',
             'priority' => ['nullable', 'integer', 'min:0'],
             'tokent' => 'nullable|string',
+            'location_id' => ['nullable', 'string', 'max:100', 'regex:/^[A-Za-z0-9_-]+$/'],
             'body' => ['nullable', 'string'],
             'body_oportunidad' => ['nullable', 'string'],
             'crm_Id_phone' => ['nullable', 'string', 'max:255'],
@@ -181,6 +182,12 @@ class IntegrationController extends Controller
         }
 
         if ($typeName === 'gohighlevel_oportunidad') {
+            $rules['tokent'] = ['required', 'string'];
+            $rules['body'] = ['required', 'string'];
+            $rules['body_oportunidad'] = ['required', 'string'];
+        }
+
+        if ($typeName === 'freshworks_oportunidad') {
             $rules['tokent'] = ['required', 'string'];
             $rules['body'] = ['required', 'string'];
             $rules['body_oportunidad'] = ['required', 'string'];

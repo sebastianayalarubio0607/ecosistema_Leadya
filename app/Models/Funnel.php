@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
@@ -13,7 +14,20 @@ class Funnel extends Model
         'description',
         'status',
         'meta_event_id',
+        'orden',
     ];
+
+    protected $casts = [
+        'orden' => 'integer',
+    ];
+
+    public function scopeInDisplayOrder(Builder $query): Builder
+    {
+        return $query->orderByRaw('funnels.orden IS NULL')
+            ->orderBy('funnels.orden')
+            ->orderBy('funnels.name')
+            ->orderBy('funnels.id');
+    }
 
     public function qualifications(): HasMany
     {

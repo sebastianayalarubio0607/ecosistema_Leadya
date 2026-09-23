@@ -8,6 +8,7 @@ use App\Http\Controllers\DashboardGerencialLeadsController;
 use App\Http\Controllers\Funnel\FunnelWebController;
 use App\Http\Controllers\GeneralLeadsDashboardController;
 use App\Http\Controllers\Integration\IntegrationWebController;
+use App\Http\Controllers\Integration\FreshworksOpportunitySyncController;
 use App\Http\Controllers\Integration\MondayBoardController;
 use App\Http\Controllers\IntegrationtypeWebController;
 use App\Http\Controllers\LeadManagementController;
@@ -52,6 +53,7 @@ Route::middleware('auth')->group(function () {
          */
     Route::resource('qualifications', QualificationWebController::class);
     Route::resource('crmstates', CrmStateWebController::class);
+    Route::post('funnels/ordenar-valores', [FunnelWebController::class, 'reorder'])->name('funnels.reorder');
     Route::resource('funnels', FunnelWebController::class);
 /**
  * Dashboard Gerencial de Leads routes for managing leads. These routes are defined for viewing the gerencial leads dashboard, listing leads, and exporting the leads list. The routes are grouped under the 'dashboard' prefix and use the DashboardGerencialLeadsController for handling the requests. Each route is named for easy reference in the application.
@@ -87,6 +89,10 @@ Route::middleware('auth')->group(function () {
         ->name('integrations.kommo.sync-boards');
     Route::post('integrations/{integration}/hubspot/sync-deal-stages', [IntegrationWebController::class, 'syncHubspotDealStages'])
         ->name('integrations.hubspot.sync-deal-stages');
+    Route::post('integrations/{integration}/gohighlevel-opportunity/sync-stages', [IntegrationWebController::class, 'syncGohighlevelOpportunityStages'])
+        ->name('integrations.gohighlevel-opportunity.sync-stages');
+    Route::post('integrations/{integration}/freshworks-opportunity/sync-stages', [FreshworksOpportunitySyncController::class, 'sync'])
+        ->name('integrations.freshworks-opportunity.sync-stages');
     Route::resource('integrations', IntegrationWebController::class);
 
     

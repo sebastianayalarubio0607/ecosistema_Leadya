@@ -4,6 +4,12 @@
 @section('subtitle', 'Listado de Funnels (asociación: Funnel → Meta Event)')
 
 @section('header_actions')
+    <form method="POST" action="{{ route('funnels.reorder') }}">
+        @csrf
+        <button type="submit" class="px-4 py-2 rounded-xl bg-white/10 hover:bg-white/15 text-white border border-white/10">
+            Ordenar valores
+        </button>
+    </form>
     <a href="{{ route('funnels.create') }}"
        class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10">
         + Nuevo
@@ -38,13 +44,16 @@
             </div>
         </form>
 
+        <p class="text-sm text-white/60">Ordenar valores reasigna 5, 10, 15... a todos los funnels, manteniendo sus posiciones, incluso si hay filtros o varias páginas. Los funnels sin orden aparecen al final.</p>
+
         <div class="overflow-x-auto rounded-xl border border-white/10">
             <table class="min-w-full text-sm">
                 <thead class="bg-white/5 text-white/70">
                     <tr>
                         <th class="text-left px-3 py-2">ID</th>
+                        <th class="text-left px-3 py-2">Orden</th>
                         <th class="text-left px-3 py-2">Nombre</th>
-                        
+                        <th class="text-left px-3 py-2">Meta Event</th>
                         <th class="text-left px-3 py-2">Estado</th>
                         <th class="text-left px-3 py-2">Qualifications</th>
                         <th class="text-left px-3 py-2 w-56">Acciones</th>
@@ -68,6 +77,7 @@
 
                         <tr class="hover:bg-white/5">
                             <td class="px-3 py-2">{{ $funnel->id }}</td>
+                            <td class="px-3 py-2">{{ $funnel->orden ?? 'Sin orden' }}</td>
                             <td class="px-3 py-2">{{ $funnel->name }}</td>
 
                             <td class="px-3 py-2">
@@ -104,7 +114,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="6" class="px-3 py-8 text-center text-white/60">No hay funnels.</td>
+                            <td colspan="7" class="px-3 py-8 text-center text-white/60">No hay funnels.</td>
                         </tr>
                     @endforelse
                 </tbody>

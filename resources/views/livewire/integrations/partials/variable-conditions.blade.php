@@ -1,17 +1,17 @@
 @php($variableNames = collect($variables)->pluck('name')->filter()->unique()->values())
 
-<section class="space-y-3 border-t border-white/10 pt-6">
+<section class="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-5 shadow-sm shadow-black/10 sm:p-6">
     <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
             <h3 class="text-base font-semibold text-white">Variables condicionales</h3>
             <p class="text-sm text-white/50">Resuelve valores mediante reglas antes de enviar el body.</p>
         </div>
-        <button type="button" wire:click="addVariableCondition" class="rounded-lg border border-white/10 bg-indigo-500/30 px-3 py-2 text-white hover:bg-indigo-500/40">Agregar condicion</button>
+        <button type="button" wire:click="addVariableCondition" class="rounded-xl border border-indigo-300/20 bg-indigo-500/30 px-3 py-2 text-white transition hover:bg-indigo-500/40">Agregar condicion</button>
     </div>
 
-    <div class="space-y-3 rounded-xl border border-white/10  p-3">
+    <div class="space-y-3 rounded-xl border border-white/10 bg-zinc-950/20 p-3">
         @forelse($variableConditions as $index => $condition)
-            <div wire:key="variable-condition-{{ $condition['_key'] }}" class="grid grid-cols-1 gap-3 border border-white/10 bg-white/5 p-3 lg:grid-cols-4 xl:grid-cols-8 rounded-xl">
+            <div wire:key="variable-condition-{{ $condition['_key'] }}" class="grid grid-cols-1 gap-3 rounded-xl border border-white/10 bg-slate-900/40 p-4 lg:grid-cols-4 xl:grid-cols-8">
                 <div>
                     <label class="{{ $labelClass }}">Variable destino</label>
                     <input name="integration_variable_conditions[{{ $index }}][target_variable]" wire:model.blur="variableConditions.{{ $index }}.target_variable" class="{{ $inputClass }} font-mono" required>
@@ -56,7 +56,7 @@
                         @foreach($this->variableTypes() as $value => $label)<option value="{{ $value }}">{{ $label }}</option>@endforeach
                     </select>
                     <input type="hidden" name="integration_variable_conditions[{{ $index }}][active]" value="0">
-                    <label class="mt-2 inline-flex items-center gap-2 text-sm text-white/80"><input type="checkbox" name="integration_variable_conditions[{{ $index }}][active]" value="1" wire:model.change="variableConditions.{{ $index }}.active" class="rounded border-white/20 bg-slate-900 text-indigo-500"> Activa</label>
+                    <x-toggle-switch name="integration_variable_conditions[{{ $index }}][active]" value="1" wire:model.change="variableConditions.{{ $index }}.active" label="Activa" />
                 </div>
                 <div class="flex items-end justify-end">
                     <input type="hidden" name="integration_variable_conditions[{{ $index }}][order]" value="{{ $index }}">

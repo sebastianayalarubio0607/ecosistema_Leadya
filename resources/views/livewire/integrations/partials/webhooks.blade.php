@@ -12,19 +12,19 @@
     $removeCondition = $isAtom ? 'removeAtomCondition' : 'removeLetyCondition';
 @endphp
 
-<div class="space-y-6">
-    <div class="border-t border-white/10 pt-5">
+<div class="space-y-5 rounded-2xl border border-white/10 bg-white/5 p-5 shadow-sm shadow-black/10 sm:p-6">
+    <div>
         <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
             <div>
                 <h4 class="font-semibold text-white">Webhooks {{ ucfirst($provider) }}</h4>
                 <p class="text-sm text-white/50">Configura los endpoints disponibles para esta integracion.</p>
             </div>
-            <button type="button" wire:click="{{ $addWebhook }}" class="rounded-lg border border-white/10 bg-indigo-500/30 px-3 py-2 text-white hover:bg-indigo-500/40">Agregar webhook</button>
+            <button type="button" wire:click="{{ $addWebhook }}" class="rounded-xl border border-indigo-300/20 bg-indigo-500/30 px-3 py-2 text-white transition hover:bg-indigo-500/40">Agregar webhook</button>
         </div>
 
         <div class="space-y-3">
             @foreach($webhooks as $index => $webhook)
-                <div wire:key="{{ $provider }}-webhook-{{ $webhook['_key'] }}" class="grid grid-cols-1 gap-3 border border-white/10 bg-white/5 p-3 {{ $isAtom ? 'lg:grid-cols-5' : 'lg:grid-cols-6' }}">
+                <div wire:key="{{ $provider }}-webhook-{{ $webhook['_key'] }}" class="grid grid-cols-1 gap-3 rounded-xl border border-white/10 bg-slate-900/40 p-4 {{ $isAtom ? 'lg:grid-cols-5' : 'lg:grid-cols-6' }}">
                     <input type="hidden" name="{{ $webhookField }}[{{ $index }}][key]" value="{{ $webhook['key'] }}">
                     <input type="hidden" name="{{ $webhookField }}[{{ $index }}][order]" value="{{ $index }}">
                     <div>
@@ -53,9 +53,7 @@
                     <div class="flex items-end justify-between gap-3">
                         <div>
                             <input type="hidden" name="{{ $webhookField }}[{{ $index }}][active]" value="0">
-                            <label class="inline-flex items-center gap-2 pb-2 text-sm text-white/80">
-                                <input type="checkbox" name="{{ $webhookField }}[{{ $index }}][active]" value="1" wire:model.change="{{ $webhookState }}.{{ $index }}.active" class="rounded border-white/20 bg-slate-900 text-indigo-500"> Activo
-                            </label>
+                            <x-toggle-switch name="{{ $webhookField }}[{{ $index }}][active]" value="1" wire:model.change="{{ $webhookState }}.{{ $index }}.active" label="Activo" />
                         </div>
                         <button type="button" wire:click="{{ $removeWebhook }}({{ $index }})" class="rounded-lg border border-rose-300/20 bg-rose-500/20 px-3 py-2 text-white hover:bg-rose-500/30">Quitar</button>
                     </div>
@@ -70,12 +68,12 @@
                 <h4 class="font-semibold text-white">Condiciones {{ ucfirst($provider) }}</h4>
                 <p class="text-sm text-white/50">Relaciona valores del lead con uno de los webhooks configurados.</p>
             </div>
-            <button type="button" wire:click="{{ $addCondition }}" class="rounded-lg border border-white/10 bg-indigo-500/30 px-3 py-2 text-white hover:bg-indigo-500/40">Agregar condicion</button>
+            <button type="button" wire:click="{{ $addCondition }}" class="rounded-xl border border-indigo-300/20 bg-indigo-500/30 px-3 py-2 text-white transition hover:bg-indigo-500/40">Agregar condicion</button>
         </div>
 
         <div class="space-y-3">
             @foreach($conditions as $index => $condition)
-                <div wire:key="{{ $provider }}-condition-{{ $condition['_key'] }}" class="grid grid-cols-1 gap-3 border border-white/10 bg-white/5 p-3 lg:grid-cols-5">
+                <div wire:key="{{ $provider }}-condition-{{ $condition['_key'] }}" class="grid grid-cols-1 gap-3 rounded-xl border border-white/10 bg-slate-900/40 p-4 lg:grid-cols-5">
                     <div>
                         <label class="{{ $labelClass }}">Campo Lead</label>
                         <select name="{{ $conditionField }}[{{ $index }}][lead_field]" wire:model.change="{{ $conditionState }}.{{ $index }}.lead_field" class="{{ $inputClass }}" required>
@@ -99,9 +97,7 @@
                     <div>
                         <label class="{{ $labelClass }}">Activa</label>
                         <input type="hidden" name="{{ $conditionField }}[{{ $index }}][active]" value="0">
-                        <label class="inline-flex items-center gap-2 pt-2 text-sm text-white/80">
-                            <input type="checkbox" name="{{ $conditionField }}[{{ $index }}][active]" value="1" wire:model.change="{{ $conditionState }}.{{ $index }}.active" class="rounded border-white/20 bg-slate-900 text-indigo-500"> Si
-                        </label>
+                        <x-toggle-switch name="{{ $conditionField }}[{{ $index }}][active]" value="1" wire:model.change="{{ $conditionState }}.{{ $index }}.active" label="Sí" />
                     </div>
                     <div class="flex items-end justify-end">
                         <input type="hidden" name="{{ $conditionField }}[{{ $index }}][order]" value="{{ $index }}">

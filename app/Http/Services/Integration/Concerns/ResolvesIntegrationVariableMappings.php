@@ -212,7 +212,9 @@ trait ResolvesIntegrationVariableMappings
             ->first(fn ($item) => (string) $item->name === $name);
 
         if (!$variable) {
-            return '';
+            $context = app(\App\Http\Services\Integration\LeadIntegrationContextService::class);
+
+            return $context->hasVariable($name) ? $context->value($lead, $name) : '';
         }
 
         Log::info($logLabel . ' CUSTOM VARIABLE RESOLVED', [

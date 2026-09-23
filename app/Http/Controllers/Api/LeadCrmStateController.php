@@ -3,6 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
+use App\Http\Services\Integration\GohighlevelPipelineSyncService;
+use App\Http\Services\Integration\FreshworksOpportunityIntegrationService;
 use App\Http\Services\Lead\LeadAdSourceClassifier;
 use App\Http\Services\Lead\LeadFunnelHistoryService;
 use App\Jobs\SendLeadToFacebook;
@@ -12,6 +14,7 @@ use App\Models\Integration;
 use App\Models\Lead;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 
 class LeadCrmStateController extends Controller
 {
@@ -27,6 +30,13 @@ class LeadCrmStateController extends Controller
 
         $integration->loadMissing('integrationtype:id,name');
 
+        // Freshworks-Oportunidad uses the same public endpoint while retaining its
+        // dedicated validation and stage/pipeline verification in an additive handler.
+        if (app(FreshworksOpportunityIntegrationService::class)->supports($integration)) {
+            return app(FreshworksOpportunityWebhookController::class)
+                ->updateForIntegration($request, $integration, $historyService);
+        }
+
         $data = $this->normalizeWebhookPayload($request);
         $statuses = data_get($data, 'leads.status', []);
         $updates = data_get($data, 'leads.update', []);
@@ -34,8 +44,9 @@ class LeadCrmStateController extends Controller
         $isKommoUpdatePayload = is_array($updates) && count($updates) > 0;
         $isFreshworksPayload = $this->isFreshworksPayload($data);
         $isHubspotPayload = $this->isHubspotPayload($integration, $data);
+        $isGohighlevelOpportunityPayload = $this->isGohighlevelOpportunityPayload($integration, $data);
 
-        if (! $isKommoStatusPayload && ! $isKommoUpdatePayload && ! $isFreshworksPayload && ! $isHubspotPayload) {
+        if (! $isKommoStatusPayload && ! $isKommoUpdatePayload && ! $isFreshworksPayload && ! $isHubspotPayload && ! $isGohighlevelOpportunityPayload) {
             Log::warning('Webhook sin payload soportado para actualizar crm_state', [
                 'public_key' => $public_key,
                 'content_type' => $request->header('content-type'),
@@ -43,7 +54,7 @@ class LeadCrmStateController extends Controller
             ]);
 
             return response()->json([
-                'message' => 'Invalid payload: leads.status, leads.update, Freshworks or HubSpot fields not found',
+                'message' => 'Invalid payload: leads.status, leads.update, Freshworks, HubSpot or GoHighLevel fields not found',
             ], 422);
         }
 
@@ -76,8 +87,8 @@ class LeadCrmStateController extends Controller
                     continue;
                 }
 
-                $crmIdToFind = $crmIdPrefix . '-' . $kommoLeadId;
-                $newCrmState = $crmIdPrefix . '-' . $statusId;
+                $crmIdToFind = $crmIdPrefix.'-'.$kommoLeadId;
+                $newCrmState = $crmIdPrefix.'-'.$statusId;
 
                 $this->processLeadStateChange(
                     $crmIdToFind,
@@ -92,7 +103,7 @@ class LeadCrmStateController extends Controller
         if ($isFreshworksPayload) {
             $contactId = (string) data_get($data, 'contact_id');
             $statusName = trim((string) data_get($data, 'contact_contact_status_name'));
-            $crmIdToFind = $crmIdPrefix . '-' . $contactId;
+            $crmIdToFind = $crmIdPrefix.'-'.$contactId;
             $newCrmState = $this->resolveFreshworksCrmStateId($crmIdPrefix, $statusName);
 
             if ($newCrmState === null) {
@@ -120,6 +131,18 @@ class LeadCrmStateController extends Controller
                 $crmIdPrefix,
                 $historyService,
                 $updated,
+                $notFound
+            );
+        }
+
+        if ($isGohighlevelOpportunityPayload) {
+            $this->processGohighlevelOpportunityUpdate(
+                $data,
+                $integration,
+                $crmIdPrefix,
+                $historyService,
+                $updated,
+                $valueUpdated,
                 $notFound
             );
         }
@@ -159,7 +182,7 @@ class LeadCrmStateController extends Controller
         $events = $data['events'] ?? $data;
 
         foreach (is_array($events) ? $events : [] as $event) {
-            if (!is_array($event)) {
+            if (! is_array($event)) {
                 continue;
             }
 
@@ -173,6 +196,68 @@ class LeadCrmStateController extends Controller
         return false;
     }
 
+    private function isGohighlevelOpportunityPayload(Integration $integration, array $data): bool
+    {
+        $type = Str::of((string) optional($integration->integrationtype)->name)
+            ->ascii()->lower()->replace([' ', '-'], '_')->replaceMatches('/_+/', '_')->trim('_')->toString();
+
+        return in_array($type, ['gohighlevel_oportunidad', 'gohighleve_oportunidad', 'gohighlevel_opportunity'], true)
+            && filled($data['crm_id_oportunidad'] ?? null)
+            && filled($data['pipeline_name'] ?? null)
+            && filled($data['stage_name'] ?? null);
+    }
+
+    private function processGohighlevelOpportunityUpdate(
+        array $data,
+        Integration $integration,
+        string $crmIdPrefix,
+        LeadFunnelHistoryService $historyService,
+        int &$updated,
+        int &$valueUpdated,
+        array &$notFound
+    ): void {
+        $opportunityId = trim((string) $data['crm_id_oportunidad']);
+        $pipelineName = trim((string) $data['pipeline_name']);
+        $stageName = trim((string) $data['stage_name']);
+        $crmOpportunityId = $crmIdPrefix.'-'.$opportunityId;
+        $expectedName = GohighlevelPipelineSyncService::crmStateName($stageName, $pipelineName);
+
+        $stateIds = CrmState::query()
+            ->where('id', 'like', $this->crmStatePrefixLike($crmIdPrefix))
+            ->whereRaw('LOWER(TRIM(name)) = ?', [mb_strtolower($expectedName)])
+            ->limit(2)
+            ->pluck('id');
+
+        if ($stateIds->count() !== 1) {
+            Log::warning('GoHighLevel webhook con estado no resoluble', [
+                'integration_id' => $integration->id,
+                'crm_id_oportunidad' => $crmOpportunityId,
+                'pipeline_name' => $pipelineName,
+                'stage_name' => $stageName,
+                'matches' => $stateIds->count(),
+            ]);
+            $notFound[] = $expectedName;
+
+            return;
+        }
+
+        $leads = Lead::query()->where('crm_id_oportunidad', $crmOpportunityId)->get();
+        if ($leads->isEmpty()) {
+            $notFound[] = $crmOpportunityId;
+
+            return;
+        }
+
+        $crmState = (string) $stateIds->first();
+        foreach ($leads as $lead) {
+            if ($this->updateLeadValueIfChanged($lead, $data['value'] ?? null)) {
+                $valueUpdated++;
+            }
+
+            $this->processLeadStateChangeForLead($lead, $crmState, $historyService, $updated);
+        }
+    }
+
     private function processHubspotDealUpdates(
         array $data,
         Integration $integration,
@@ -184,7 +269,7 @@ class LeadCrmStateController extends Controller
         $events = $data['events'] ?? $data;
 
         foreach (is_array($events) ? $events : [] as $event) {
-            if (!is_array($event) || strtolower((string) ($event['propertyName'] ?? '')) !== 'dealstage') {
+            if (! is_array($event) || strtolower((string) ($event['propertyName'] ?? '')) !== 'dealstage') {
                 continue;
             }
 
@@ -195,16 +280,17 @@ class LeadCrmStateController extends Controller
                 continue;
             }
 
-            $crmOpportunityId = $crmIdPrefix . '-' . $dealId;
-            $crmState = $crmIdPrefix . '-' . $stageId;
+            $crmOpportunityId = $crmIdPrefix.'-'.$dealId;
+            $crmState = $crmIdPrefix.'-'.$stageId;
 
-            if (!CrmState::query()->whereKey($crmState)->exists()) {
+            if (! CrmState::query()->whereKey($crmState)->exists()) {
                 Log::warning('HubSpot webhook con etapa no sincronizada', [
                     'integration_id' => $integration->id,
                     'crm_id_oportunidad' => $crmOpportunityId,
                     'crm_state' => $crmState,
                 ]);
                 $notFound[] = $crmState;
+
                 continue;
             }
 
@@ -212,6 +298,7 @@ class LeadCrmStateController extends Controller
 
             if ($leads->isEmpty()) {
                 $notFound[] = $crmOpportunityId;
+
                 continue;
             }
 
@@ -240,19 +327,20 @@ class LeadCrmStateController extends Controller
                 continue;
             }
 
-            $crmIdToFind = $crmIdPrefix . '-' . $kommoLeadId;
+            $crmIdToFind = $crmIdPrefix.'-'.$kommoLeadId;
             $leads = Lead::query()
                 ->where('crm_id', $crmIdToFind)
                 ->get();
 
             if ($leads->isEmpty()) {
                 $notFound[] = $crmIdToFind;
+
                 continue;
             }
 
             $incomingValue = $this->extractLeadValue($item);
             $statusId = (string) ($item['status_id'] ?? '');
-            $newCrmState = $statusId !== '' ? $crmIdPrefix . '-' . $statusId : null;
+            $newCrmState = $statusId !== '' ? $crmIdPrefix.'-'.$statusId : null;
 
             foreach ($leads as $lead) {
                 if ($this->updateLeadValueIfChanged($lead, $incomingValue)) {
@@ -389,9 +477,14 @@ class LeadCrmStateController extends Controller
         }
 
         return CrmState::query()
-            ->where('id', 'like', $integrationId . '-%')
+            ->where('id', 'like', $integrationId.'-%')
             ->whereRaw('LOWER(TRIM(name)) = ?', [mb_strtolower(trim($statusName))])
             ->value('id');
+    }
+
+    private function crmStatePrefixLike(string $prefix): string
+    {
+        return addcslashes($prefix, '\\%_').'-%';
     }
 
     private function processLeadStateChange(
@@ -407,6 +500,7 @@ class LeadCrmStateController extends Controller
 
         if ($leads->isEmpty()) {
             $notFound[] = $crmIdToFind;
+
             return;
         }
 
@@ -504,5 +598,4 @@ class LeadCrmStateController extends Controller
             }
         }
     }
-
 }

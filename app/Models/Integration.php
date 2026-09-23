@@ -16,6 +16,7 @@ class Integration extends Model
         'priority' => 'integer',
         'token_expires_at' => 'datetime',
         'disable_integration_id_crm_prefix' => 'boolean',
+        'omit_empty_payload_fields' => 'boolean',
     ];
 
     protected $fillable = [
@@ -26,6 +27,7 @@ class Integration extends Model
         'url',
         'urldestino',
         'tokent',
+        'location_id',
         'status',
         'priority',
         'crm_Id_phone',
@@ -54,6 +56,7 @@ class Integration extends Model
         'password',
         'body',
         'body_oportunidad',
+        'omit_empty_payload_fields',
         'url_consulta_lead',
         'url_negocio',
         'url_creacionlead',

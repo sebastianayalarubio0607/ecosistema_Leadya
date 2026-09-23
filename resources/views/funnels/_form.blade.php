@@ -1,5 +1,24 @@
 <div class="grid gap-4">
     <div>
+        <label for="funnel-orden" class="block mb-1 text-white/70">Orden *</label>
+        <input
+            id="funnel-orden"
+            type="number"
+            name="orden"
+            min="1"
+            max="2147483647"
+            step="1"
+            value="{{ old('orden', $funnel->orden) }}"
+            class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white"
+            aria-describedby="funnel-orden-help"
+            required
+        />
+        <p id="funnel-orden-help" class="mt-1 text-xs text-white/50">Los valores menores aparecen primero. Puedes usar cualquier entero positivo, por ejemplo 5, 10 o 12.</p>
+        @error('orden')
+            <div class="mt-1 text-sm text-rose-300">{{ $message }}</div>
+        @enderror
+    </div>
+    <div>
         <label class="block mb-1 text-white/70">Nombre *</label>
         <input
             name="name"

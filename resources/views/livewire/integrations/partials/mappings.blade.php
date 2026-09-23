@@ -6,18 +6,18 @@
     $removeMethod = $isFreshworksMapping ? 'removeFreshworksMapping' : 'removeIntegrationMapping';
 @endphp
 
-<section class="space-y-3 {{ $isFreshworksMapping ? 'border-t border-white/10 pt-5' : 'border-t border-white/10 pt-6' }}">
+<section class="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-5 shadow-sm shadow-black/10 {{ $isFreshworksMapping ? '' : 'sm:p-6' }}">
     <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
             <h3 class="text-base font-semibold text-white">Mapeo de variables</h3>
             <p class="text-sm text-white/50">Normaliza valores del lead antes de construir el payload.</p>
         </div>
-        <button type="button" wire:click="{{ $addMethod }}" class="rounded-lg border border-white/10 bg-indigo-500/30 px-3 py-2 text-white hover:bg-indigo-500/40">Agregar variable</button>
+        <button type="button" wire:click="{{ $addMethod }}" class="rounded-xl border border-indigo-300/20 bg-indigo-500/30 px-3 py-2 text-white transition hover:bg-indigo-500/40">Agregar variable</button>
     </div>
 
-    <div class="space-y-3 rounded-xl border border-white/10  p-3">
+    <div class="space-y-3 rounded-xl border border-white/10 bg-zinc-950/20 p-3">
         @forelse($items as $index => $mapping)
-            <div wire:key="{{ $scope }}-mapping-{{ $mapping['_key'] }}" class="grid grid-cols-1 gap-3 border border-white/10 bg-white/5 p-3 lg:grid-cols-6 rounded-xl ">
+            <div wire:key="{{ $scope }}-mapping-{{ $mapping['_key'] }}" class="grid grid-cols-1 gap-3 rounded-xl border border-white/10 bg-slate-900/40 p-4 lg:grid-cols-6">
                 <div>
                     <label class="{{ $labelClass }}">Variable</label>
                     <input name="{{ $fieldName }}[{{ $index }}][target_variable]" wire:model.blur="{{ $stateName }}.{{ $index }}.target_variable" class="{{ $inputClass }}" required>
@@ -40,9 +40,7 @@
                 <div>
                     <label class="{{ $labelClass }}">Activa</label>
                     <input type="hidden" name="{{ $fieldName }}[{{ $index }}][active]" value="0">
-                    <label class="inline-flex items-center gap-2 pt-2 text-sm text-white/80">
-                        <input type="checkbox" name="{{ $fieldName }}[{{ $index }}][active]" value="1" wire:model.change="{{ $stateName }}.{{ $index }}.active" class="rounded border-white/20 bg-slate-900 text-indigo-500"> Si
-                    </label>
+                    <x-toggle-switch name="{{ $fieldName }}[{{ $index }}][active]" value="1" wire:model.change="{{ $stateName }}.{{ $index }}.active" label="Sí" />
                 </div>
                 <div class="flex items-end justify-end">
                     <input type="hidden" name="{{ $fieldName }}[{{ $index }}][order]" value="{{ $index }}">

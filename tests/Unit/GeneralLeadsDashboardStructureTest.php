@@ -9,7 +9,9 @@ use App\Http\Services\GeneralLeads\GeneralLeadsDashboardService;
 use App\Http\Services\GeneralLeads\GeneralLeadsFilters;
 use App\Http\Services\GeneralLeads\GeneralLeadsLeadQuery;
 use App\Http\Services\GeneralLeads\GeneralLeadsPresentation;
+use App\Models\Integration;
 use App\Models\Lead;
+use App\Models\LeadIntegration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -203,6 +205,32 @@ class GeneralLeadsDashboardStructureTest extends TestCase
         $this->assertSame('123456', $method->invoke($service, null, '123456'));
         $this->assertSame('123456', $method->invoke($service, ' Sin Nombre ', '123456'));
         $this->assertSame('Marca Search', $method->invoke($service, 'Marca Search', '123456'));
+    }
+
+    public function test_integration_badges_mark_201_responses_as_successful(): void
+    {
+        $lead = new Lead;
+        $lead->setRelation('leadIntegrations', collect([
+            tap(new LeadIntegration(['answer_code' => 200, 'status' => 'completed']), function (LeadIntegration $leadIntegration) {
+                $leadIntegration->setRelation('integration', new Integration(['name' => 'HTTP 200']));
+            }),
+            tap(new LeadIntegration(['answer_code' => 201, 'status' => 'completed']), function (LeadIntegration $leadIntegration) {
+                $leadIntegration->setRelation('integration', new Integration(['name' => 'HTTP 201']));
+            }),
+            tap(new LeadIntegration(['answer_code' => 202, 'status' => 'completed']), function (LeadIntegration $leadIntegration) {
+                $leadIntegration->setRelation('integration', new Integration(['name' => 'HTTP 202']));
+            }),
+        ]));
+
+        $service = new GeneralLeadsDashboardService(new GeneralLeadsLeadQuery);
+        $method = new ReflectionMethod($service, 'leadIntegrationStatusBadges');
+        $method->setAccessible(true);
+
+        $badges = $method->invoke($service, $lead);
+
+        $this->assertTrue($badges[0]['is_success']);
+        $this->assertTrue($badges[1]['is_success']);
+        $this->assertFalse($badges[2]['is_success']);
     }
 
     public function test_google_ad_table_formats_conversion_events(): void

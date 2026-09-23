@@ -41,6 +41,7 @@ beforeEach(function () {
         $table->mediumText('tokent')->nullable();
         $table->text('body')->nullable();
         $table->text('body_oportunidad')->nullable();
+        $table->boolean('omit_empty_payload_fields')->default(false);
         $table->boolean('disable_integration_id_crm_prefix')->default(false);
         $table->string('crm_id_prefix')->nullable();
         $table->timestamps();
@@ -70,7 +71,7 @@ beforeEach(function () {
     });
 });
 
-function gohighlevelOpportunityIntegration(): Integration
+function gohighlevelOpportunityIntegration(array $overrides = []): Integration
 {
     $type = Integrationtype::create([
         'name' => 'gohighlevel-oportunidad',
@@ -78,7 +79,7 @@ function gohighlevelOpportunityIntegration(): Integration
         'status' => 1,
     ]);
 
-    return Integration::create([
+    return Integration::create(array_merge([
         'name' => 'GHL oportunidad',
         'integrationtype_id' => $type->id,
         'status' => 1,
@@ -86,7 +87,7 @@ function gohighlevelOpportunityIntegration(): Integration
         'tokent' => 'secret-token',
         'body' => '{"locationId":"loc-1","firstName":"{{ lead->name }}","lastName":"{{ lead->last_name }}","email":"{{ lead->email }}","phone":"{{ lead->phone }}"}',
         'body_oportunidad' => '{"locationId":"loc-1","pipelineId":"pipe-1","pipelineStageId":"stage-1","contactId":"{{contactId}}","name":"{{ lead->name }}","status":"open"}',
-    ]);
+    ], $overrides));
 }
 
 function gohighlevelLead(array $overrides = []): Lead
@@ -133,6 +134,35 @@ it('creates a contact and then an opportunity when no contact exists', function 
     Http::assertSent(fn (Request $request) => $request->url() === 'https://services.leadconnectorhq.com/contacts/upsert');
     Http::assertSent(fn (Request $request) => $request->url() === 'https://services.leadconnectorhq.com/opportunities/'
         && data_get($request->data(), 'contactId') === 'contact-new');
+});
+
+it('omits blank optional contact fields when the integration enables it', function () {
+    Http::fake(function (Request $request) {
+        if (str_contains($request->url(), '/contacts/search/duplicate')) {
+            return Http::response(['contact' => null], 200);
+        }
+
+        if ($request->url() === 'https://services.leadconnectorhq.com/contacts/upsert') {
+            return Http::response(['contact' => ['id' => 'contact-no-email']], 200);
+        }
+
+        if ($request->url() === 'https://services.leadconnectorhq.com/opportunities/') {
+            return Http::response(['opportunity' => ['id' => 'opp-no-email']], 201);
+        }
+
+        return Http::response([], 404);
+    });
+
+    $lead = gohighlevelLead(['email' => null]);
+    $integration = gohighlevelOpportunityIntegration(['omit_empty_payload_fields' => true]);
+
+    $response = app(GohighlevelService::class)->sendToGohighlevelOportunidad($lead, $integration);
+
+    expect($response->successful())->toBeTrue();
+    Http::assertSent(fn (Request $request) => $request->url() === 'https://services.leadconnectorhq.com/contacts/upsert'
+        && ! array_key_exists('email', $request->data())
+        && data_get($request->data(), 'firstName') === 'Ana'
+        && data_get($request->data(), 'phone') === '300 123 4567');
 });
 
 it('uses an existing phone contact and creates a new opportunity without upserting the contact', function () {

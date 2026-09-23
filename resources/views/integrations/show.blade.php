@@ -30,6 +30,8 @@
 
     $canSyncKommoBoards = in_array($normalizedIntegrationType, ['kommo', 'kommopipeline', 'kommo_pipeline'], true);
     $canSyncHubspotDealStages = $normalizedIntegrationType === 'hubspot';
+    $canSyncGohighlevelOpportunityStages = $normalizedIntegrationType === 'gohighlevel_oportunidad';
+    $canSyncFreshworksOpportunityStages = $normalizedIntegrationType === 'freshworks_oportunidad';
 @endphp
 
 @section('header_actions')
@@ -116,6 +118,23 @@
                         </div>
                     @endif
                 </div>
+
+                @if($canSyncGohighlevelOpportunityStages)
+                    <livewire:gohighlevel-pipeline-catalog
+                        :integration-id="$integration->id"
+                        :location-id="(string) ($integration->location_id ?? '')"
+                        :sync-url="route('integrations.gohighlevel-opportunity.sync-stages', $integration)"
+                        :key="'gohighlevel-show-catalog-'.$integration->id"
+                    />
+                @endif
+
+                @if($canSyncFreshworksOpportunityStages)
+                    <livewire:freshworks-opportunity-pipeline-catalog
+                        :integration-id="$integration->id"
+                        :sync-url="route('integrations.freshworks-opportunity.sync-stages', $integration)"
+                        :key="'freshworks-opportunity-show-catalog-'.$integration->id"
+                    />
+                @endif
 
                 <div>
                     <div class="text-sm text-white/50">Status</div>
@@ -396,7 +415,7 @@ charset=utf-8</pre>
             </div>
         @endif
 
-        @if (in_array($normalizedIntegrationType, ['kommopipeline', 'atom', 'zoho', 'freshworks', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'], true))
+        @if (in_array($normalizedIntegrationType, ['kommopipeline', 'atom', 'zoho', 'freshworks', 'freshworks_oportunidad', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'], true))
             <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-6 text-white/80">
                 <div class="mb-4">
                     <h3 class="text-lg font-semibold text-white">Variables del body</h3>
@@ -436,7 +455,7 @@ charset=utf-8</pre>
             </div>
         @endif
 
-        @if (in_array($normalizedIntegrationType, ['atom', 'zoho', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'], true))
+        @if (in_array($normalizedIntegrationType, ['atom', 'zoho', 'freshworks_oportunidad', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'], true))
             <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-6 text-white/80">
                 <div class="mb-4">
                     <h3 class="text-lg font-semibold text-white">Mapeo de variables</h3>
@@ -474,7 +493,7 @@ charset=utf-8</pre>
             </div>
         @endif
 
-        @if (in_array($normalizedIntegrationType, ['kommopipeline', 'atom', 'zoho', 'freshworks', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'], true))
+        @if (in_array($normalizedIntegrationType, ['kommopipeline', 'atom', 'zoho', 'freshworks', 'freshworks_oportunidad', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'], true))
             <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-6 text-white/80">
                 <div class="mb-4">
                     <h3 class="text-lg font-semibold text-white">Variables condicionales</h3>

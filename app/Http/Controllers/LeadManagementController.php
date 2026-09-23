@@ -244,7 +244,10 @@ class LeadManagementController extends Controller
                             });
                     });
             })
+            ->orderByRaw('f_options.orden IS NULL')
+            ->orderBy('f_options.orden')
             ->orderBy('f_options.name')
+            ->orderBy('f_options.id')
             ->orderBy('crm_state.name')
             ->orderBy('crm_state.id')
             ->get(['crm_state.id', 'crm_state.name', 'q_options.name as qualification_name', 'f_options.name as funnel_name']);

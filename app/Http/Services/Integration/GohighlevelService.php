@@ -14,10 +14,70 @@ class GohighlevelService
     use ResolvesIntegrationVariableMappings;
 
     private const DEFAULT_CONTACTS_UPSERT_URL = 'https://services.leadconnectorhq.com/contacts/upsert';
+
     private const DEFAULT_CONTACTS_DUPLICATE_SEARCH_URL = 'https://services.leadconnectorhq.com/contacts/search/duplicate';
+
     private const DEFAULT_OPPORTUNITIES_URL = 'https://services.leadconnectorhq.com/opportunities/';
+
     private const LEAD_TOKEN_PREFIX = '__gohighlevel_lead_field__:';
+
     private const CONTEXT_TOKEN_PREFIX = '__gohighlevel_context_field__:';
+
+    public function getPipelines(Integration $integration, string $locationId): array
+    {
+        $response = Http::acceptJson()
+            ->withToken($this->resolveToken($integration))
+            ->withHeaders(['Version' => 'v3'])
+            ->connectTimeout(5)
+            ->timeout(15)
+            ->get(self::DEFAULT_OPPORTUNITIES_URL.'pipelines', ['locationId' => $locationId]);
+
+        if (! $response->successful()) {
+            // Do not expose upstream response bodies, which may contain credentials.
+            throw new RuntimeException(match ($response->status()) {
+                401 => 'Token no válido. Revisa el token guardado y sus permisos.',
+                403 => 'Sin acceso. Revisa el locationId y el permiso opportunities.readonly del token.',
+                400, 422 => 'GoHighLevel rechazó la consulta. Revisa el locationId.',
+                429 => 'GoHighLevel alcanzó el límite de consultas. Intenta nuevamente más tarde.',
+                default => 'No fue posible consultar GoHighLevel. Intenta nuevamente.',
+            });
+        }
+
+        $pipelines = $response->json('pipelines');
+        if (! is_array($pipelines)) {
+            throw new RuntimeException('GoHighLevel devolvió una respuesta de pipelines no válida.');
+        }
+
+        return collect($pipelines)
+            ->filter(fn ($pipeline) => is_array($pipeline) && is_string($pipeline['id'] ?? null) && is_string($pipeline['name'] ?? null))
+            ->map(function (array $pipeline) {
+                $stages = collect(is_array($pipeline['stages'] ?? null) ? $pipeline['stages'] : [])
+                    ->filter(fn ($stage) => is_array($stage) && is_string($stage['id'] ?? null) && is_string($stage['name'] ?? null))
+                    ->map(fn (array $stage) => $this->pipelineCatalogFields($stage, [
+                        'id', 'name', 'position', 'showInFunnel', 'showInPieChart', 'stageWinProbability', 'originId',
+                    ]))
+                    ->sortBy('position', SORT_NUMERIC)->values()->all();
+
+                return $this->pipelineCatalogFields($pipeline, [
+                    'id', 'name', 'showInFunnel', 'showInPieChart', 'useOpportunityProbability', 'dateAdded', 'dateUpdated',
+                ]) + ['stages' => $stages];
+            })->values()->all();
+    }
+
+    public function supportsOpportunity(Integration $integration): bool
+    {
+        $type = \Illuminate\Support\Str::of((string) optional($integration->integrationtype)->name)
+            ->ascii()->lower()->replace([' ', '-'], '_')->replaceMatches('/_+/', '_')->trim('_')->toString();
+
+        return in_array($type, ['gohighlevel_oportunidad', 'gohighleve_oportunidad', 'gohighlevel_opportunity'], true);
+    }
+
+    private function pipelineCatalogFields(array $item, array $fields): array
+    {
+        return collect($fields)->mapWithKeys(fn ($field) => [
+            $field => is_scalar($item[$field] ?? null) ? $item[$field] : null,
+        ])->all();
+    }
 
     public function sendToGohighlevel(Lead $lead, Integration $integration)
     {
@@ -52,6 +112,7 @@ class GohighlevelService
         $url = $this->resolveUrl($integration);
         $token = $this->resolveToken($integration);
         $contactPayload = $this->buildPayloadFromTemplate((string) $integration->body, $lead, $integration);
+        $contactPayload = $this->omitEmptyPayloadFieldsWhenEnabled($contactPayload, $integration);
         $locationId = $this->resolveLocationId($contactPayload, $lead, $integration);
 
         Log::info('[gohighlevel-oportunidad] Iniciando integracion', [
@@ -103,6 +164,9 @@ class GohighlevelService
             'contactId' => $contactId,
         ]);
         $payload['contactId'] = $contactId;
+        $payload = $this->omitEmptyPayloadFieldsWhenEnabled($payload, $integration);
+        // The service owns this structural field; it is never optional.
+        $payload['contactId'] = $contactId;
 
         Log::info('[gohighlevel-oportunidad] Creando oportunidad', [
             'integration_id' => $integration->id,
@@ -136,7 +200,7 @@ class GohighlevelService
                 throw new RuntimeException('GoHighLevel creo la oportunidad pero no devolvio id.');
             }
 
-            $lead->crm_id_oportunidad = $integration->crmIdPrefix() . '-' . $opportunityId;
+            $lead->crm_id_oportunidad = $integration->crmIdPrefix().'-'.$opportunityId;
             $lead->save();
 
             Log::info('[gohighlevel-oportunidad] Oportunidad creada', [
@@ -157,6 +221,43 @@ class GohighlevelService
         return $url !== '' ? $url : self::DEFAULT_CONTACTS_UPSERT_URL;
     }
 
+    /**
+     * GoHighLevel validates an empty optional email as an invalid email. The
+     * opt-in flag preserves legacy integrations while allowing bodies to omit
+     * optional null/blank attributes. Numeric zero and false remain intact.
+     */
+    private function omitEmptyPayloadFieldsWhenEnabled(array $payload, Integration $integration): array
+    {
+        if (! $integration->omit_empty_payload_fields) {
+            return $payload;
+        }
+
+        return $this->omitEmptyObjectFields($payload);
+    }
+
+    private function omitEmptyObjectFields(array $payload): array
+    {
+        $clean = [];
+
+        foreach ($payload as $key => $value) {
+            if (is_array($value)) {
+                $clean[$key] = array_is_list($value)
+                    ? array_map(fn ($item) => is_array($item) && ! array_is_list($item) ? $this->omitEmptyObjectFields($item) : $item, $value)
+                    : $this->omitEmptyObjectFields($value);
+
+                continue;
+            }
+
+            if ($value === null || (is_string($value) && trim($value) === '')) {
+                continue;
+            }
+
+            $clean[$key] = $value;
+        }
+
+        return $clean;
+    }
+
     private function buildPayloadFromTemplate(string $template, $lead, Integration $integration, string $field = 'body', array $context = []): array
     {
         $template = trim($template);
@@ -165,7 +266,7 @@ class GohighlevelService
         }
 
         $decoded = $this->decodeJsonTemplate($template, $context);
-        if (!is_array($decoded)) {
+        if (! is_array($decoded)) {
             throw new RuntimeException("El campo {$field} de GoHighLevel debe ser un JSON valido.");
         }
 
@@ -244,7 +345,7 @@ class GohighlevelService
             return $resolved;
         }
 
-        if (!is_string($value)) {
+        if (! is_string($value)) {
             return $value;
         }
 
@@ -252,11 +353,11 @@ class GohighlevelService
             return $this->resolveIntegrationVariableTokenValue($value, $lead, $integration, 'GOHIGHLEVEL');
         }
 
-        if (preg_match('/^' . preg_quote(self::CONTEXT_TOKEN_PREFIX, '/') . '(.+)$/', $value, $matches)) {
+        if (preg_match('/^'.preg_quote(self::CONTEXT_TOKEN_PREFIX, '/').'(.+)$/', $value, $matches)) {
             return data_get($context, $matches[1], '');
         }
 
-        if (!preg_match('/^' . preg_quote(self::LEAD_TOKEN_PREFIX, '/') . '(.+)$/', $value, $matches)) {
+        if (! preg_match('/^'.preg_quote(self::LEAD_TOKEN_PREFIX, '/').'(.+)$/', $value, $matches)) {
             return $value;
         }
 
@@ -273,7 +374,7 @@ class GohighlevelService
 
     private function placeholderToken(string $field): string
     {
-        return self::LEAD_TOKEN_PREFIX . $field;
+        return self::LEAD_TOKEN_PREFIX.$field;
     }
 
     private function placeholderTokenForExpression(string $expression, array $context = []): ?string
@@ -281,7 +382,7 @@ class GohighlevelService
         $contextField = $this->normalizeContextField($expression, $context);
 
         if ($contextField !== null) {
-            return self::CONTEXT_TOKEN_PREFIX . $contextField;
+            return self::CONTEXT_TOKEN_PREFIX.$contextField;
         }
 
         $field = $this->normalizeLeadField($expression);
@@ -299,7 +400,7 @@ class GohighlevelService
     {
         $expression = trim($expression);
 
-        if (!preg_match('/^\$?lead\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/', $expression, $matches)) {
+        if (! preg_match('/^\$?lead\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/', $expression, $matches)) {
             return null;
         }
 
@@ -429,8 +530,8 @@ class GohighlevelService
 
     private function postContactPayload(string $url, string $token, array $payload, string $label = 'GOHIGHLEVEL')
     {
-        Log::info($label . ' CONTACT URL', ['url' => $url]);
-        Log::info($label . ' CONTACT PAYLOAD JSON', $label === 'GOHIGHLEVEL'
+        Log::info($label.' CONTACT URL', ['url' => $url]);
+        Log::info($label.' CONTACT PAYLOAD JSON', $label === 'GOHIGHLEVEL'
             ? ['json' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)]
             : ['payload_keys' => array_keys($payload)]);
 
@@ -442,7 +543,7 @@ class GohighlevelService
             ])
             ->post($url, $payload);
 
-        Log::info($label . ' CONTACT RESPONSE', $label === 'GOHIGHLEVEL'
+        Log::info($label.' CONTACT RESPONSE', $label === 'GOHIGHLEVEL'
             ? ['status' => $response->status(), 'body' => $response->body()]
             : ['status' => $response->status(), 'response_message' => $response->json('message')]);
 
@@ -451,7 +552,7 @@ class GohighlevelService
 
     private function storeContactCrmId(Lead $lead, Integration $integration, string $contactId): void
     {
-        $lead->crm_id = $integration->crmIdPrefix() . '-' . $contactId;
+        $lead->crm_id = $integration->crmIdPrefix().'-'.$contactId;
         $lead->save();
 
         Log::info('LEAD UPDATED crm_id', [
@@ -480,7 +581,7 @@ class GohighlevelService
             return $phone;
         }
 
-        return str_starts_with($phone, '+') ? '+' . $digits : $digits;
+        return str_starts_with($phone, '+') ? '+'.$digits : $digits;
     }
 
     private function logGohighlevelError(string $message, $response, array $context = []): void
@@ -496,14 +597,13 @@ class GohighlevelService
         $message = trim((string) ($response->json('message') ?? $response->body()));
 
         if ($response->status() === 401) {
-            return 'GoHighLevel no autorizo ' . $action . ': revisa token y scopes.';
+            return 'GoHighLevel no autorizo '.$action.': revisa token y scopes.';
         }
 
         if ($response->status() === 403 && str_contains(strtolower($message), 'location')) {
             return 'GoHighLevel no permite acceder al locationId configurado.';
         }
 
-        return 'GoHighLevel fallo al ' . $action . ($message !== '' ? ': ' . $message : '.');
+        return 'GoHighLevel fallo al '.$action.($message !== '' ? ': '.$message : '.');
     }
-
 }

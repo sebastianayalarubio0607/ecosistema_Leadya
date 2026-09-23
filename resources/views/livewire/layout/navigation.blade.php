@@ -185,6 +185,7 @@ new class extends Component {
 
     {{-- Nav --}}
     <nav class="flex-1 px-2 py-4 space-y-1">
+        <livewire:alerts.alert-bell />
         @foreach ($navItems as $item)
             @php $active = $isActive($item['active']); @endphp
 

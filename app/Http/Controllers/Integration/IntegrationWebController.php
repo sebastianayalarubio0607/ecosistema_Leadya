@@ -3,13 +3,15 @@
 namespace App\Http\Controllers\Integration;
 
 use App\Http\Controllers\Controller;
+use App\Http\Services\Integration\GohighlevelPipelineSyncService;
 use App\Http\Services\Integration\HubspotPipelineSyncService;
 use App\Http\Services\Integration\KommoPipelineSyncService;
+use App\Http\Services\Integration\LeadIntegrationContextService;
 use App\Models\Customer;
 use App\Models\Integration;
 use App\Models\Integrationtype;
-use Illuminate\Http\Request;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Schema;
@@ -20,9 +22,13 @@ use Illuminate\Validation\ValidationException;
 class IntegrationWebController extends Controller
 {
     private const DEFAULT_GOHIGHLEVEL_URL = 'https://services.leadconnectorhq.com/contacts/upsert';
-    private const VARIABLE_MAPPING_INTEGRATION_TYPES = ['atom', 'zoho', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'];
-    private const CUSTOM_VARIABLE_INTEGRATION_TYPES = ['kommopipeline', 'atom', 'zoho', 'freshworks', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'];
+
+    private const VARIABLE_MAPPING_INTEGRATION_TYPES = ['atom', 'zoho', 'freshworks_oportunidad', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'];
+
+    private const CUSTOM_VARIABLE_INTEGRATION_TYPES = ['kommopipeline', 'atom', 'zoho', 'freshworks', 'freshworks_oportunidad', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'];
+
     private const CUSTOM_VARIABLE_TYPES = ['text', 'number', 'boolean', 'binary', 'url', 'json', 'any'];
+
     private const VARIABLE_CONDITION_OPERATORS = [
         'equals', 'not_equals', 'greater_than', 'less_than', 'greater_or_equal', 'less_or_equal',
         'and_logic', 'or_logic', 'negation', 'exists', 'not_exists', 'empty', 'not_empty',
@@ -73,7 +79,7 @@ class IntegrationWebController extends Controller
 
     public function create()
     {
-        $integration = new Integration();
+        $integration = new Integration;
         $customers = Customer::orderBy('name')->get(['id', 'name']);
         $types = Integrationtype::orderBy('name')->get(['id', 'name']);
         $leadFields = $this->leadFields();
@@ -209,7 +215,7 @@ class IntegrationWebController extends Controller
 
         $validated = $this->preserveExistingSensitiveValues($validated, $integration, $typeName);
 
-        $payload = $this->normalizePayloadByType($validated);
+        $payload = $this->normalizePayloadByType($validated, $integration);
         $payload = $this->hydrateSalesforceTokenFromCredentials($payload);
 
         if ($request->boolean('regenerate_public_key')) {
@@ -317,6 +323,32 @@ class IntegrationWebController extends Controller
             ->with('success', "Etapas de HubSpot sincronizadas. Estados creados: {$result['created']}. Estados actualizados: {$result['updated']}.");
     }
 
+    public function syncGohighlevelOpportunityStages(Request $request, Integration $integration, GohighlevelPipelineSyncService $service): RedirectResponse
+    {
+        $pipelineId = (string) $request->validate([
+            'pipeline_id' => ['required', 'string', 'max:255'],
+        ])['pipeline_id'];
+
+        try {
+            $result = $service->syncCrmStates($integration, $pipelineId);
+        } catch (\Throwable $exception) {
+            Log::error('GOHIGHLEVEL OPPORTUNITY CRM STATES SYNC FAILED', [
+                'integration_id' => $integration->id,
+                'message' => $exception->getMessage(),
+            ]);
+
+            return redirect()->route('integrations.show', $integration)
+                ->withErrors(['sync' => $exception instanceof \RuntimeException
+                    ? $exception->getMessage()
+                    : 'No fue posible sincronizar los estados de GoHighLevel.']);
+        }
+
+        return redirect()->route('integrations.show', $integration)->with(
+            'success',
+            "Estados de GoHighLevel sincronizados. Estados creados: {$result['created']}. Estados actualizados: {$result['updated']}."
+        );
+    }
+
     private function rules(Request $request, bool $updating = false, ?Integration $integration = null): array
     {
         $typeName = $this->normalizeIntegrationTypeName(
@@ -353,11 +385,13 @@ class IntegrationWebController extends Controller
             'lead_source_id' => ['nullable', 'string', 'max:255'],
             'custom_field' => ['nullable', 'string'],
             'tokent' => ['nullable', 'string'],
+            'location_id' => ['nullable', 'string', 'max:100', 'regex:/^[A-Za-z0-9_-]+$/'],
             'url_credenciales' => ['nullable', 'url', 'max:255'],
             'username' => ['nullable', 'string', 'max:255'],
             'password' => ['nullable', 'string'],
             'body' => ['nullable', 'string'],
             'body_oportunidad' => ['nullable', 'string'],
+            'omit_empty_payload_fields' => ['nullable', 'boolean'],
             'url_consulta_lead' => ['nullable', 'url', 'max:255'],
             'url_negocio' => ['nullable', 'url', 'max:255'],
             'url_creacionlead' => ['nullable', 'url', 'max:255'],
@@ -447,6 +481,12 @@ class IntegrationWebController extends Controller
             $rules['custom_field'] = ['required', 'string'];
         }
 
+        if ($typeName === 'freshworks_oportunidad') {
+            $rules['tokent'] = $this->sensitiveValueRule($updating, $integration, $typeName, 'tokent');
+            $rules['body'] = ['required', 'string'];
+            $rules['body_oportunidad'] = ['required', 'string'];
+        }
+
         if ($typeName === 'zapnito_invitacion') {
             $rules['tokent'] = $this->sensitiveValueRule($updating, $integration, $typeName, 'tokent');
             $rules['body'] = ['required', 'string'];
@@ -494,7 +534,7 @@ class IntegrationWebController extends Controller
         return $rules;
     }
 
-    private function normalizePayloadByType(array $validated): array
+    private function normalizePayloadByType(array $validated, ?Integration $existingIntegration = null): array
     {
         $validated['status'] = array_key_exists('status', $validated) ? (int) $validated['status'] : 1;
 
@@ -515,7 +555,7 @@ class IntegrationWebController extends Controller
 
         $this->validateIntegrationVariablesPayload($validated, $typeName);
 
-        if (!in_array($typeName, ['hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'atom', 'lety'], true) && empty($validated['url'])) {
+        if (! in_array($typeName, ['hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'atom', 'lety'], true) && empty($validated['url'])) {
             throw ValidationException::withMessages([
                 'url' => 'El campo URL es obligatorio.',
             ]);
@@ -590,6 +630,16 @@ class IntegrationWebController extends Controller
             $validated = $this->validateCrmIdPrefixPayload($validated, 'Freshworks');
         }
 
+        if ($typeName === 'freshworks_oportunidad') {
+            $validated = $this->clearKommoFields($validated);
+            $validated = $this->clearZohoFieldsPreservingToken($validated);
+            $validated = $this->clearFreshworksFields($validated);
+            $validated = $this->clearSalesforceCredentialFields($validated);
+            $validated = $this->clearHubspotEndpointFields($validated);
+            $validated = $this->validateFreshworksOpportunityPayload($validated);
+            $validated = $this->validateCrmIdPrefixPayload($validated, 'Freshworks-Oportunidad');
+        }
+
         if ($typeName === 'zapnito_invitacion') {
             $validated = $this->clearKommoFields($validated);
             $validated = $this->clearZohoFieldsPreservingToken($validated);
@@ -639,6 +689,9 @@ class IntegrationWebController extends Controller
                 $validated['url_creacionlead'] = null;
                 $validated['dealname'] = null;
                 $validated['dealstage'] = null;
+                $validated['omit_empty_payload_fields'] = array_key_exists('omit_empty_payload_fields', $validated)
+                    ? (bool) $validated['omit_empty_payload_fields']
+                    : (bool) ($existingIntegration?->omit_empty_payload_fields ?? true);
             } else {
                 $validated = $this->clearHubspotFields($validated);
             }
@@ -649,13 +702,18 @@ class IntegrationWebController extends Controller
             $validated = $this->validateCrmIdPrefixPayload($validated, 'GoHighLevel');
         }
 
-        if (!in_array($typeName, ['google_sheets', 'kommo', 'kommopipeline', 'atom', 'lety', 'zoho', 'freshworks', 'zapnito_invitacion', 'salesforce', 'monday', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad'], true)) {
+        if (! in_array($typeName, ['google_sheets', 'kommo', 'kommopipeline', 'atom', 'lety', 'zoho', 'freshworks', 'freshworks_oportunidad', 'zapnito_invitacion', 'salesforce', 'monday', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad'], true)) {
             $validated = $this->clearHubspotFields($validated);
             $validated = $this->clearCrmIdPrefixFields($validated);
         }
 
         if ($typeName !== 'kommopipeline') {
             $validated = $this->clearKommoPipelineFields($validated);
+        }
+
+        if ($typeName !== 'gohighlevel_oportunidad') {
+            $validated['location_id'] = null;
+            unset($validated['omit_empty_payload_fields']);
         }
 
         unset($validated['kommo_pipeline_conditions']);
@@ -767,7 +825,7 @@ class IntegrationWebController extends Controller
             }
         }
 
-        if (!empty($payload['custom_field']) && !$this->isValidFreshworksCustomField($payload['custom_field'], $this->customVariableNamesFromPayload($payload))) {
+        if (! empty($payload['custom_field']) && ! $this->isValidFreshworksCustomField($payload['custom_field'], $this->customVariableNamesFromPayload($payload))) {
             $messages['custom_field'] = 'custom_field debe ser un JSON valido.';
         }
 
@@ -776,6 +834,53 @@ class IntegrationWebController extends Controller
         }
 
         return $payload;
+    }
+
+    /** Validation dedicated to the additive Freshworks-Oportunidad type. */
+    private function validateFreshworksOpportunityPayload(array $payload): array
+    {
+        $messages = [];
+        foreach (['url' => 'URL principal', 'tokent' => 'token', 'body' => 'body de contacto', 'body_oportunidad' => 'body de oportunidad'] as $field => $label) {
+            if (blank($payload[$field] ?? null)) {
+                $messages[$field] = "Para Freshworks-Oportunidad el campo {$label} es obligatorio.";
+            }
+        }
+
+        $url = trim((string) ($payload['url'] ?? ''));
+        $parts = parse_url($url);
+        if (($parts['scheme'] ?? null) !== 'https' || empty($parts['host']) || trim((string) ($parts['path'] ?? ''), '/') !== '' || isset($parts['query'], $parts['fragment'], $parts['user'], $parts['pass'])) {
+            $messages['url'] = 'Guarda únicamente la URL principal HTTPS de Freshworks, sin rutas ni parámetros.';
+        } else {
+            $payload['url'] = 'https://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '');
+        }
+
+        $customVariables = $this->customVariableNamesFromPayload($payload);
+
+        foreach (['body' => 'contacto', 'body_oportunidad' => 'oportunidad'] as $field => $label) {
+            if (filled($payload[$field] ?? null) && ! $this->isValidFreshworksOpportunityTemplate((string) $payload[$field], $field === 'body_oportunidad', $customVariables)) {
+                $messages[$field] = "El body JSON de {$label} debe ser un objeto válido y solo acepta {{lead->campo}}, {{lead.campo}}, variables configuradas".($field === 'body_oportunidad' ? ' o {{contactId}}.' : '.');
+            }
+        }
+
+        if ($messages !== []) {
+            throw ValidationException::withMessages($messages);
+        }
+
+        return $payload;
+    }
+
+    private function isValidFreshworksOpportunityTemplate(string $template, bool $allowContactId, array $allowedCustomVariables = []): bool
+    {
+        if ($allowContactId) {
+            $template = preg_replace('/"\s*\{\{\s*contactId\s*\}\}\s*"/', '"__freshworks_contact_id__"', $template);
+            $template = preg_replace('/\{\{\s*contactId\s*\}\}/', '"__freshworks_contact_id__"', (string) $template);
+        }
+
+        $decoded = json_decode((string) $template, true);
+
+        return is_array($decoded)
+            && ! array_is_list($decoded)
+            && $this->isValidJsonTemplate((string) $template, '__freshworks_opportunity_lead__:', true, $allowedCustomVariables);
     }
 
     private function validateZapnitoInvitationPayload(array $payload): array
@@ -795,11 +900,11 @@ class IntegrationWebController extends Controller
 
         $customVariables = $this->customVariableNamesFromPayload($payload);
 
-        if (!empty($payload['body']) && !$this->isValidJsonTemplate($payload['body'], '__zapnito_lead_field__:', true, $customVariables)) {
+        if (! empty($payload['body']) && ! $this->isValidJsonTemplate($payload['body'], '__zapnito_lead_field__:', true, $customVariables)) {
             $messages['body'] = 'body debe ser un JSON valido y solo acepta variables {{$lead->campo}} o {{$lead.campo}}.';
         }
 
-        if (!empty($payload['url'])) {
+        if (! empty($payload['url'])) {
             $payload['url'] = $this->normalizeZapnitoBaseUrl((string) $payload['url']);
         }
 
@@ -829,7 +934,7 @@ class IntegrationWebController extends Controller
             }
         }
 
-        if (!empty($payload['body']) && !$this->isValidKommoPipelineJsonTemplate($payload['body'], $this->customVariableNamesFromPayload($payload))) {
+        if (! empty($payload['body']) && ! $this->isValidKommoPipelineJsonTemplate($payload['body'], $this->customVariableNamesFromPayload($payload))) {
             $messages['body'] = 'El payload JSON debe ser valido y solo acepta {{$lead->campo}}, {{pipeline_id}} y {{status_id}}.';
         }
 
@@ -856,7 +961,7 @@ class IntegrationWebController extends Controller
 
         if (empty($payload['body'])) {
             $messages['body'] = 'Para Atom el body JSON es obligatorio.';
-        } elseif (!$this->isValidAtomJsonTemplate($payload['body'], $this->customVariableNamesFromPayload($payload))) {
+        } elseif (! $this->isValidAtomJsonTemplate($payload['body'], $this->customVariableNamesFromPayload($payload))) {
             $messages['body'] = 'El body Atom debe ser JSON valido y solo acepta variables {{$lead->campo}} o {{$lead.campo}}.';
         }
 
@@ -882,7 +987,7 @@ class IntegrationWebController extends Controller
             ->all();
 
         foreach ($conditions as $index => $condition) {
-            if (!in_array((string) ($condition['webhook_key'] ?? ''), $webhookKeys, true)) {
+            if (! in_array((string) ($condition['webhook_key'] ?? ''), $webhookKeys, true)) {
                 $messages["atom_conditions.{$index}.webhook_key"] = 'La condicion Atom debe apuntar a un webhook configurado.';
             }
         }
@@ -920,16 +1025,17 @@ class IntegrationWebController extends Controller
         foreach ($webhooks as $index => $webhook) {
             if (empty($webhook['body'])) {
                 $messages["lety_webhooks.{$index}.body"] = 'El payload de Lety es obligatorio.';
+
                 continue;
             }
 
-            if (!$this->isValidLetyFormTemplate((string) $webhook['body'], $this->customVariableNamesFromPayload($payload))) {
+            if (! $this->isValidLetyFormTemplate((string) $webhook['body'], $this->customVariableNamesFromPayload($payload))) {
                 $messages["lety_webhooks.{$index}.body"] = 'El payload de Lety debe usar lineas campo=valor y solo acepta variables {{$lead->campo}} o {{$lead.campo}}.';
             }
         }
 
         foreach ($conditions as $index => $condition) {
-            if (!in_array((string) ($condition['webhook_key'] ?? ''), $webhookKeys, true)) {
+            if (! in_array((string) ($condition['webhook_key'] ?? ''), $webhookKeys, true)) {
                 $messages["lety_conditions.{$index}.webhook_key"] = 'La condicion Lety debe apuntar a un webhook configurado.';
             }
         }
@@ -957,7 +1063,7 @@ class IntegrationWebController extends Controller
             }
         }
 
-        if (!empty($payload['body']) && !$this->isValidJsonTemplate($payload['body'], '__salesforce_lead_field__:', false, $this->customVariableNamesFromPayload($payload))) {
+        if (! empty($payload['body']) && ! $this->isValidJsonTemplate($payload['body'], '__salesforce_lead_field__:', false, $this->customVariableNamesFromPayload($payload))) {
             $messages['body'] = 'body debe ser un JSON valido.';
         }
 
@@ -997,17 +1103,17 @@ class IntegrationWebController extends Controller
 
         $baseUrl = $this->normalizeHubspotBaseUrl((string) ($payload['url'] ?? ''));
         $payload['url'] = $baseUrl;
-        $payload['url_consulta_lead'] = $baseUrl . '/crm/v3/objects/contacts/search';
-        $payload['url_creacionlead'] = $baseUrl . '/crm/v3/objects/contacts';
-        $payload['url_negocio'] = $baseUrl . '/crm/v3/objects/deals';
+        $payload['url_consulta_lead'] = $baseUrl.'/crm/v3/objects/contacts/search';
+        $payload['url_creacionlead'] = $baseUrl.'/crm/v3/objects/contacts';
+        $payload['url_negocio'] = $baseUrl.'/crm/v3/objects/deals';
 
         $customVariables = $this->customVariableNamesFromPayload($payload);
 
-        if (!empty($payload['body']) && !$this->isValidJsonTemplate($payload['body'], '__integration_lead_field__:', false, $customVariables)) {
+        if (! empty($payload['body']) && ! $this->isValidJsonTemplate($payload['body'], '__integration_lead_field__:', false, $customVariables)) {
             $messages['body'] = 'body debe ser un JSON valido.';
         }
 
-        if (!empty($payload['body_oportunidad']) && !$this->isValidJsonTemplate($payload['body_oportunidad'], '__integration_lead_field__:', false, $customVariables)) {
+        if (! empty($payload['body_oportunidad']) && ! $this->isValidJsonTemplate($payload['body_oportunidad'], '__integration_lead_field__:', false, $customVariables)) {
             $messages['body_oportunidad'] = 'body_oportunidad debe ser un JSON valido.';
         }
 
@@ -1022,26 +1128,26 @@ class IntegrationWebController extends Controller
     {
         $parts = parse_url(trim($url));
 
-        if (!isset($parts['scheme'], $parts['host'])) {
+        if (! isset($parts['scheme'], $parts['host'])) {
             throw ValidationException::withMessages([
                 'url' => 'La URL base de HubSpot debe incluir protocolo y dominio.',
             ]);
         }
 
-        return $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
+        return $parts['scheme'].'://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '');
     }
 
     private function normalizeZapnitoBaseUrl(string $url): string
     {
         $parts = parse_url(trim($url));
 
-        if (!isset($parts['scheme'], $parts['host'])) {
+        if (! isset($parts['scheme'], $parts['host'])) {
             throw ValidationException::withMessages([
                 'url' => 'La URL base de Zapnito debe incluir protocolo y dominio.',
             ]);
         }
 
-        return $parts['scheme'] . '://' . $parts['host'] . (isset($parts['port']) ? ':' . $parts['port'] : '');
+        return $parts['scheme'].'://'.$parts['host'].(isset($parts['port']) ? ':'.$parts['port'] : '');
     }
 
     private function validateGohighlevelPayload(array $payload): array
@@ -1064,7 +1170,7 @@ class IntegrationWebController extends Controller
 
         $customVariables = $this->customVariableNamesFromPayload($payload);
 
-        if (!empty($payload['body']) && !$this->isValidGohighlevelJsonTemplate($payload['body'], [], $customVariables)) {
+        if (! empty($payload['body']) && ! $this->isValidGohighlevelJsonTemplate($payload['body'], [], $customVariables)) {
             $messages['body'] = 'body debe ser un JSON valido y solo acepta variables {{$lead->campo}} simples.';
         }
 
@@ -1113,16 +1219,16 @@ class IntegrationWebController extends Controller
             'code' => trim((string) $payload['code']),
         ];
 
-        $response = Http::acceptJson()->post($accountsUrl . '/oauth/v2/token?' . http_build_query($query));
+        $response = Http::acceptJson()->post($accountsUrl.'/oauth/v2/token?'.http_build_query($query));
         $json = $response->json();
 
-        if (!$response->successful() || !is_array($json) || isset($json['error']) || empty($json['access_token'])) {
+        if (! $response->successful() || ! is_array($json) || isset($json['error']) || empty($json['access_token'])) {
             $message = is_array($json)
                 ? ($json['error'] ?? 'No fue posible obtener tokens de Zoho.')
                 : 'No fue posible obtener tokens de Zoho.';
 
             throw ValidationException::withMessages([
-                'code' => 'Zoho OAuth error: ' . $message,
+                'code' => 'Zoho OAuth error: '.$message,
             ]);
         }
 
@@ -1155,13 +1261,13 @@ class IntegrationWebController extends Controller
 
         $json = $response->json();
 
-        if (!$response->successful() || !is_array($json) || isset($json['error']) || empty($json['access_token'])) {
+        if (! $response->successful() || ! is_array($json) || isset($json['error']) || empty($json['access_token'])) {
             $message = is_array($json)
                 ? ($json['error'] ?? 'No fue posible obtener token de Salesforce.')
                 : 'No fue posible obtener token de Salesforce.';
 
             throw ValidationException::withMessages([
-                'username' => 'Salesforce auth error: ' . $message,
+                'username' => 'Salesforce auth error: '.$message,
             ]);
         }
 
@@ -1285,31 +1391,31 @@ class IntegrationWebController extends Controller
             $path = $this->normalizeFreshworksPlaceholderPath($matches[2]);
 
             if ($path !== null) {
-                return json_encode($tokenPrefix . $path, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                return json_encode($tokenPrefix.$path, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             }
 
             $variable = $this->normalizeCustomVariableExpression($matches[2], $allowedCustomVariables);
 
             return $variable === null
                 ? $matches[0]
-                : json_encode('__integration_variable__:' . $variable, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                : json_encode('__integration_variable__:'.$variable, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }, $value);
 
         $normalized = preg_replace_callback($inlinePattern, function ($matches) use ($tokenPrefix, $allowedCustomVariables) {
             $path = $this->normalizeFreshworksPlaceholderPath($matches[1]);
 
             if ($path !== null) {
-                return json_encode($tokenPrefix . $path, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                return json_encode($tokenPrefix.$path, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             }
 
             $variable = $this->normalizeCustomVariableExpression($matches[1], $allowedCustomVariables);
 
             return $variable === null
                 ? $matches[0]
-                : json_encode('__integration_variable__:' . $variable, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                : json_encode('__integration_variable__:'.$variable, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }, $normalized);
 
-        return (!$rejectUnresolvedPlaceholders || !preg_match('/\{\{.*?\}\}/s', $normalized))
+        return (! $rejectUnresolvedPlaceholders || ! preg_match('/\{\{.*?\}\}/s', $normalized))
             && is_array(json_decode($normalized, true));
     }
 
@@ -1328,31 +1434,31 @@ class IntegrationWebController extends Controller
             $field = $this->normalizeGohighlevelPlaceholderField($matches[2], $allowedContextVariables);
 
             if ($field !== null) {
-                return json_encode('__gohighlevel_lead_field__:' . $field, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                return json_encode('__gohighlevel_lead_field__:'.$field, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             }
 
             $variable = $this->normalizeCustomVariableExpression($matches[2], $allowedCustomVariables);
 
             return $variable === null
                 ? $matches[0]
-                : json_encode('__integration_variable__:' . $variable, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                : json_encode('__integration_variable__:'.$variable, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }, $value);
 
         $normalized = preg_replace_callback($inlinePattern, function ($matches) use ($allowedContextVariables, $allowedCustomVariables) {
             $field = $this->normalizeGohighlevelPlaceholderField($matches[1], $allowedContextVariables);
 
             if ($field !== null) {
-                return json_encode('__gohighlevel_lead_field__:' . $field, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                return json_encode('__gohighlevel_lead_field__:'.$field, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             }
 
             $variable = $this->normalizeCustomVariableExpression($matches[1], $allowedCustomVariables);
 
             return $variable === null
                 ? $matches[0]
-                : json_encode('__integration_variable__:' . $variable, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                : json_encode('__integration_variable__:'.$variable, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         }, $normalized);
 
-        return !preg_match('/\{\{.*?\}\}/s', $normalized)
+        return ! preg_match('/\{\{.*?\}\}/s', $normalized)
             && is_array(json_decode($normalized, true));
     }
 
@@ -1428,7 +1534,7 @@ class IntegrationWebController extends Controller
             return false;
         }
 
-        if (!$this->containsOnlySupportedLeadPlaceholders($value, $allowedCustomVariables)) {
+        if (! $this->containsOnlySupportedLeadPlaceholders($value, $allowedCustomVariables)) {
             return false;
         }
 
@@ -1442,14 +1548,14 @@ class IntegrationWebController extends Controller
                 continue;
             }
 
-            if (!str_contains($pair, '=')) {
+            if (! str_contains($pair, '=')) {
                 return false;
             }
 
             [$key] = explode('=', $pair, 2);
             $key = trim(rawurldecode($key));
 
-            if (!preg_match('/^[A-Za-z0-9_.\-\[\]]+$/', $key)) {
+            if (! preg_match('/^[A-Za-z0-9_.\-\[\]]+$/', $key)) {
                 return false;
             }
 
@@ -1493,26 +1599,28 @@ class IntegrationWebController extends Controller
         for ($i = 0; $i < $length; $i++) {
             $char = $template[$i];
 
-            if ($char === '"' && !$escaped) {
-                $inString = !$inString;
+            if ($char === '"' && ! $escaped) {
+                $inString = ! $inString;
                 $result .= $char;
+
                 continue;
             }
 
-            if (!$inString && $char === '{' && ($template[$i + 1] ?? null) === '{') {
+            if (! $inString && $char === '{' && ($template[$i + 1] ?? null) === '{') {
                 $end = strpos($template, '}}', $i + 2);
 
                 if ($end !== false) {
                     $expression = trim(substr($template, $i + 2, $end - ($i + 2)));
-                    $result .= json_encode('{{' . $expression . '}}', JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    $result .= json_encode('{{'.$expression.'}}', JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
                     $i = $end + 1;
                     $escaped = false;
+
                     continue;
                 }
             }
 
             $result .= $char;
-            $escaped = $char === '\\' && !$escaped;
+            $escaped = $char === '\\' && ! $escaped;
 
             if ($char !== '\\') {
                 $escaped = false;
@@ -1532,7 +1640,7 @@ class IntegrationWebController extends Controller
             }
         }
 
-        if (!preg_match('/^\$?lead\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/', $expression, $matches)) {
+        if (! preg_match('/^\$?lead\s*(?:->|\.)\s*([A-Za-z_][A-Za-z0-9_]*)\s*$/', $expression, $matches)) {
             return null;
         }
 
@@ -1543,7 +1651,7 @@ class IntegrationWebController extends Controller
     {
         $expression = trim($expression);
 
-        if (!preg_match('/^\$?lead(?:(?:->|\.)[A-Za-z_][A-Za-z0-9_]*)+$/', $expression)) {
+        if (! preg_match('/^\$?lead(?:(?:->|\.)[A-Za-z_][A-Za-z0-9_]*)+$/', $expression)) {
             return null;
         }
 
@@ -1552,7 +1660,7 @@ class IntegrationWebController extends Controller
         $path = trim((string) $path, '.');
 
         if (str_starts_with($path, 'campaign_origin.')) {
-            $path = 'campaignOrigin.' . substr($path, strlen('campaign_origin.'));
+            $path = 'campaignOrigin.'.substr($path, strlen('campaign_origin.'));
         }
 
         return $path !== '' ? $path : null;
@@ -1589,6 +1697,18 @@ class IntegrationWebController extends Controller
         return $payload;
     }
 
+    /** Clears HubSpot-only endpoint fields without erasing the new type's body_oportunidad. */
+    private function clearHubspotEndpointFields(array $payload): array
+    {
+        $payload['url_consulta_lead'] = null;
+        $payload['url_negocio'] = null;
+        $payload['url_creacionlead'] = null;
+        $payload['dealname'] = null;
+        $payload['dealstage'] = null;
+
+        return $payload;
+    }
+
     private function clearKommoPipelineFields(array $payload): array
     {
         $payload['kommo_pipeline_default_pipeline_id'] = null;
@@ -1611,6 +1731,7 @@ class IntegrationWebController extends Controller
 
         if ($typeName !== 'kommopipeline') {
             $integration->kommoPipelineConditions()->delete();
+
             return;
         }
 
@@ -1647,6 +1768,7 @@ class IntegrationWebController extends Controller
         if ($typeName !== 'atom') {
             $integration->atomConditions()->delete();
             $integration->atomWebhooks()->delete();
+
             return;
         }
 
@@ -1704,6 +1826,7 @@ class IntegrationWebController extends Controller
         if ($typeName !== 'lety') {
             $integration->letyConditions()->delete();
             $integration->letyWebhooks()->delete();
+
             return;
         }
 
@@ -1760,6 +1883,7 @@ class IntegrationWebController extends Controller
 
         if ($typeName !== 'freshworks') {
             $integration->freshworksVariableMappings()->delete();
+
             return;
         }
 
@@ -1793,8 +1917,9 @@ class IntegrationWebController extends Controller
             );
         }
 
-        if (!in_array($typeName, self::VARIABLE_MAPPING_INTEGRATION_TYPES, true)) {
+        if (! in_array($typeName, self::VARIABLE_MAPPING_INTEGRATION_TYPES, true)) {
             $integration->variableMappings()->delete();
+
             return;
         }
 
@@ -1828,8 +1953,9 @@ class IntegrationWebController extends Controller
             );
         }
 
-        if (!in_array($typeName, self::CUSTOM_VARIABLE_INTEGRATION_TYPES, true)) {
+        if (! in_array($typeName, self::CUSTOM_VARIABLE_INTEGRATION_TYPES, true)) {
             $integration->variables()->delete();
+
             return;
         }
 
@@ -1860,8 +1986,9 @@ class IntegrationWebController extends Controller
             );
         }
 
-        if (!in_array($typeName, self::CUSTOM_VARIABLE_INTEGRATION_TYPES, true)) {
+        if (! in_array($typeName, self::CUSTOM_VARIABLE_INTEGRATION_TYPES, true)) {
             $integration->variableConditions()->delete();
+
             return;
         }
 
@@ -1898,7 +2025,7 @@ class IntegrationWebController extends Controller
             return;
         }
 
-        if (!in_array($typeName, self::CUSTOM_VARIABLE_INTEGRATION_TYPES, true)) {
+        if (! in_array($typeName, self::CUSTOM_VARIABLE_INTEGRATION_TYPES, true)) {
             return;
         }
 
@@ -1916,11 +2043,11 @@ class IntegrationWebController extends Controller
 
             $names[] = $name;
 
-            if ($type === 'url' && $value !== '' && !str_contains($value, '{{') && filter_var($value, FILTER_VALIDATE_URL) === false) {
+            if ($type === 'url' && $value !== '' && ! str_contains($value, '{{') && filter_var($value, FILTER_VALIDATE_URL) === false) {
                 $messages["integration_variables.{$index}.value"] = 'Las variables URL deben tener una URL valida cuando el valor no usa placeholders.';
             }
 
-            if ($type === 'json' && $value !== '' && !str_contains($value, '{{') && json_decode($value, true) === null && json_last_error() !== JSON_ERROR_NONE) {
+            if ($type === 'json' && $value !== '' && ! str_contains($value, '{{') && json_decode($value, true) === null && json_last_error() !== JSON_ERROR_NONE) {
                 $messages["integration_variables.{$index}.value"] = 'Las variables JSON deben tener JSON valido cuando el valor no usa placeholders.';
             }
         }
@@ -1939,6 +2066,7 @@ class IntegrationWebController extends Controller
         return $variables
             ->map(fn ($name) => trim((string) $name))
             ->filter(fn ($name) => preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $name) === 1)
+            ->merge(LeadIntegrationContextService::variableNames())
             ->unique()
             ->values()
             ->all();
@@ -1952,7 +2080,7 @@ class IntegrationWebController extends Controller
             $expression = $matches[1];
         }
 
-        if (!preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $expression)) {
+        if (! preg_match('/^[A-Za-z_][A-Za-z0-9_]*$/', $expression)) {
             return null;
         }
 
@@ -1974,9 +2102,9 @@ class IntegrationWebController extends Controller
 
         $response = Http::acceptJson()
             ->withToken($token)
-            ->get($url . $path);
+            ->get($url.$path);
 
-        if (!$response->successful()) {
+        if (! $response->successful()) {
             abort($response->status(), $response->body());
         }
 
@@ -2021,7 +2149,7 @@ class IntegrationWebController extends Controller
     private function generatePublicKey(): string
     {
         do {
-            $key = 'pk_' . Str::random(32);
+            $key = 'pk_'.Str::random(32);
         } while (Integration::where('public_key', $key)->exists());
 
         return $key;
