@@ -8,8 +8,8 @@ use App\Models\GoogleAdsCampaign;
 use App\Models\Lead;
 use App\Models\MetaAd;
 use App\Models\Origin;
-use App\Models\Platform;
 use Illuminate\Support\Facades\Schema;
+use Throwable;
 
 /**
  * Builds the attribution values that are safe to send to an external CRM.
@@ -71,8 +71,10 @@ class LeadIntegrationContextService
             return (array) $lead->getRelation(self::RELATION_CACHE_KEY);
         }
 
-        $origin = $this->origin($lead);
-        $platform = $this->platform($lead);
+        $originAttribution = $this->originAttribution($lead);
+        $origin = $originAttribution['origin'];
+        $source = $originAttribution['source'];
+        $platform = $originAttribution['platform'];
         $advertising = $this->advertising($lead);
         $campaign = $advertising['campaign'];
         $adGroup = $advertising['ad_group'];
@@ -92,8 +94,8 @@ class LeadIntegrationContextService
             'campaign_origin_name' => $origin['name'],
             'origin_name' => $origin['name'],
             'origin_relation' => $origin,
-            'source_name' => $origin['source']['name'],
-            'source_relation' => $origin['source'],
+            'source_name' => $source['name'],
+            'source_relation' => $source,
             'platform_name' => $platform['name'],
             'platform_relation' => $platform,
             'attribution_relation' => [
@@ -101,7 +103,7 @@ class LeadIntegrationContextService
                 'ad_group' => $adGroup,
                 'ad' => $ad,
                 'origin' => $origin,
-                'source' => $origin['source'],
+                'source' => $source,
                 'platform' => $platform,
             ],
         ];
@@ -233,44 +235,92 @@ class LeadIntegrationContextService
         ];
     }
 
-    /** @return array{code:?string,name:string,resolved:bool,source:array{code:?string,name:string,resolved:bool}} */
-    private function origin(Lead $lead): array
+    /**
+     * Resolves campaign origin through its own local relationship only:
+     * Origin -> Source -> Platform. Lead::plataforma is never used as a
+     * standalone lookup; it can only select among the platforms related to
+     * the resolved source. This avoids sending an unrelated platform.
+     *
+     * @return array{origin:array<string,mixed>,source:array{code:?string,name:string,resolved:bool},platform:array{code:?string,name:string,resolved:bool}}
+     */
+    private function originAttribution(Lead $lead): array
     {
-        $code = $this->firstFilled($lead->campaign_origin);
-        $origin = null;
+        $fallback = $this->firstFilled($lead->campaign_origin) ?? '';
+        $fallbackRelation = [
+            'code' => $fallback !== '' ? $fallback : null,
+            'name' => $fallback,
+            'resolved' => false,
+        ];
 
-        if ($code !== null && $this->hasTable('origins')) {
-            $query = Origin::query()->where('code', $code);
-            $origin = $this->hasTable('sources') ? $query->with('source')->first() : $query->first();
+        $result = [
+            'origin' => $fallbackRelation,
+            'source' => $fallbackRelation,
+            'platform' => $fallbackRelation,
+        ];
+
+        if ($fallback === '' || ! $this->hasTable('origins') || ! $this->hasTable('sources')) {
+            return $this->withOriginRelations($result);
         }
 
-        $source = $origin?->source;
+        try {
+            $withPlatforms = $this->hasTable('platforms') && $this->hasTable('platform_source');
+            $origin = Origin::query()
+                ->where('code', $fallback)
+                ->with($withPlatforms ? 'source.platforms' : 'source')
+                ->first();
 
-        return [
-            'code' => $code,
-            'name' => $this->firstFilled($origin?->name, $code) ?? '',
-            'resolved' => $origin !== null,
-            'source' => [
-                'code' => $this->firstFilled($source?->code),
-                'name' => $this->firstFilled($source?->name) ?? '',
-                'resolved' => $source !== null,
-            ],
-        ];
+            if ($origin === null) {
+                return $this->withOriginRelations($result);
+            }
+
+            $result['origin'] = [
+                'code' => $this->firstFilled($origin->code, $fallback),
+                'name' => $this->firstFilled($origin->name, $fallback) ?? $fallback,
+                'resolved' => $this->firstFilled($origin->name) !== null,
+            ];
+
+            $source = $origin->source;
+            if ($source === null) {
+                return $this->withOriginRelations($result);
+            }
+
+            $result['source'] = [
+                'code' => $this->firstFilled($source->code, $fallback),
+                'name' => $this->firstFilled($source->name, $fallback) ?? $fallback,
+                'resolved' => $this->firstFilled($source->name) !== null,
+            ];
+
+            // A source can belong to several platforms. Prefer the value
+            // already on the lead only when it is one of those platforms;
+            // otherwise only a single unambiguous related platform is used.
+            $platforms = $withPlatforms ? $source->platforms : collect();
+            $leadPlatformCode = $this->firstFilled($lead->plataforma);
+            $platform = $leadPlatformCode === null
+                ? ($platforms->count() === 1 ? $platforms->first() : null)
+                : $platforms->first(fn ($item) => $this->firstFilled($item->code) === $leadPlatformCode);
+
+            if ($platform !== null) {
+                $result['platform'] = [
+                    'code' => $this->firstFilled($platform->code, $fallback),
+                    'name' => $this->firstFilled($platform->name, $fallback) ?? $fallback,
+                    'resolved' => $this->firstFilled($platform->name) !== null,
+                ];
+            }
+        } catch (Throwable) {
+            // A local catalogue issue must not block the destination CRM.
+            // The lead's campaign_origin remains the documented fallback.
+        }
+
+        return $this->withOriginRelations($result);
     }
 
-    /** @return array{code:?string,name:string,resolved:bool} */
-    private function platform(Lead $lead): array
+    /** @param array{origin:array<string,mixed>,source:array{code:?string,name:string,resolved:bool},platform:array{code:?string,name:string,resolved:bool}} $attribution */
+    private function withOriginRelations(array $attribution): array
     {
-        $code = $this->firstFilled($lead->plataforma);
-        $platform = $code !== null && $this->hasTable('platforms')
-            ? Platform::query()->where('code', $code)->first()
-            : null;
+        $attribution['origin']['source'] = $attribution['source'];
+        $attribution['origin']['platform'] = $attribution['platform'];
 
-        return [
-            'code' => $code,
-            'name' => $this->firstFilled($platform?->name, $code) ?? '',
-            'resolved' => $platform !== null,
-        ];
+        return $attribution;
     }
 
     private function hasTable(string $table): bool

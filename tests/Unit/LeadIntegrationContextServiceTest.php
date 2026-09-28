@@ -67,6 +67,11 @@ class LeadIntegrationContextServiceTest extends TestCase
             $table->boolean('is_active')->default(true);
             $table->timestamps();
         });
+        Schema::create('platform_source', function (Blueprint $table) {
+            $table->unsignedBigInteger('platform_id');
+            $table->unsignedBigInteger('source_id');
+            $table->timestamps();
+        });
         Schema::create('google_ads_campaigns', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('customer_id');
@@ -124,6 +129,7 @@ class LeadIntegrationContextServiceTest extends TestCase
         DB::table('sources')->insert(['id' => 1, 'code' => 'paid', 'name' => 'Medios pagos', 'created_at' => now(), 'updated_at' => now()]);
         DB::table('origins')->insert(['source_id' => 1, 'code' => 'google', 'name' => 'Google Ads', 'created_at' => now(), 'updated_at' => now()]);
         DB::table('platforms')->insert(['code' => 'google_ads', 'name' => 'Google Ads', 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('platform_source')->insert(['platform_id' => 1, 'source_id' => 1, 'created_at' => now(), 'updated_at' => now()]);
         DB::table('google_ads_campaigns')->insert([
             ['customer_id' => 9, 'google_campaign_id' => 'g-1', 'campaign_name' => 'Nombre anterior', 'report_date' => '2026-09-20', 'created_at' => now(), 'updated_at' => now()],
             ['customer_id' => 9, 'google_campaign_id' => 'g-1', 'campaign_name' => 'Nombre actualizado', 'report_date' => '2026-09-21', 'created_at' => now(), 'updated_at' => now()],
@@ -154,10 +160,10 @@ class LeadIntegrationContextServiceTest extends TestCase
         $this->assertSame('m-1', $context['campaign_id']);
         $this->assertSame('Meta vigente', $context['campaign_name']);
         $this->assertSame('origen_no_catalogado', $context['origin_name']);
-        $this->assertSame('medio_no_catalogado', $context['platform_name']);
+        $this->assertSame('origen_no_catalogado', $context['platform_name']);
         $this->assertFalse(data_get($context, 'origin_relation.resolved'));
         $this->assertFalse(data_get($context, 'platform_relation.resolved'));
-        $this->assertSame('', $context['source_name']);
+        $this->assertSame('origen_no_catalogado', $context['source_name']);
 
         $unresolvedLead = Lead::create(['customer_id' => 9, 'google_campaign_id' => 'g-no-catalogo']);
         $unresolved = app(LeadIntegrationContextService::class)->context($unresolvedLead);
@@ -271,5 +277,37 @@ class LeadIntegrationContextServiceTest extends TestCase
         $this->assertFalse(data_get($context, 'campaign_relation.resolved'));
         $this->assertFalse(data_get($context, 'ad_group_relation.resolved'));
         $this->assertFalse(data_get($context, 'ad_relation.resolved'));
+    }
+
+    public function test_it_resolves_platform_from_the_origin_source_relation_and_falls_back_when_ambiguous(): void
+    {
+        DB::table('sources')->insert(['id' => 1, 'code' => 'paid', 'name' => 'Medios pagos', 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('origins')->insert(['source_id' => 1, 'code' => 'meta', 'name' => 'Meta Ads', 'created_at' => now(), 'updated_at' => now()]);
+        DB::table('platforms')->insert([
+            ['id' => 1, 'code' => 'meta_ads', 'name' => 'Meta Ads', 'created_at' => now(), 'updated_at' => now()],
+            ['id' => 2, 'code' => 'google_ads', 'name' => 'Google Ads', 'created_at' => now(), 'updated_at' => now()],
+        ]);
+        DB::table('platform_source')->insert([
+            ['platform_id' => 1, 'source_id' => 1, 'created_at' => now(), 'updated_at' => now()],
+            ['platform_id' => 2, 'source_id' => 1, 'created_at' => now(), 'updated_at' => now()],
+        ]);
+
+        $context = app(LeadIntegrationContextService::class)->context(Lead::create([
+            'campaign_origin' => 'meta',
+            'plataforma' => 'meta_ads',
+        ]));
+
+        $this->assertSame('Meta Ads', $context['origin_name']);
+        $this->assertSame('Medios pagos', $context['source_name']);
+        $this->assertSame('Meta Ads', $context['platform_name']);
+        $this->assertSame('Meta Ads', data_get($context, 'origin_relation.platform.name'));
+
+        $ambiguous = app(LeadIntegrationContextService::class)->context(Lead::create([
+            'campaign_origin' => 'meta',
+            'plataforma' => 'no_relacionada',
+        ]));
+
+        $this->assertSame('meta', $ambiguous['platform_name']);
+        $this->assertFalse(data_get($ambiguous, 'platform_relation.resolved'));
     }
 }

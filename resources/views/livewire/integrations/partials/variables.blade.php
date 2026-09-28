@@ -18,11 +18,11 @@
                 'campaign_origin_name' => 'Nombre del origen; respalda con campaign_origin del lead.',
                 'origin_name' => 'Alias de campaign_origin_name para payloads que usen el término origen.',
                 'source_name' => 'Nombre de la fuente relacionada con el origen.',
-                'platform_name' => 'Nombre de la plataforma; respalda con plataforma del lead.',
+                'platform_name' => 'Plataforma relacionada con la fuente del origen. plataforma del lead solo desambigua; sin relación válida respalda con campaign_origin.',
                 'campaign_relation' => 'JSON con proveedor, ID, nombre y estado de resolución.',
                 'ad_group_relation' => 'JSON con la relación del grupo de anuncios.',
                 'ad_relation' => 'JSON con la relación del anuncio.',
-                'attribution_relation' => 'JSON completo con campaña, origen, fuente y plataforma.',
+                'attribution_relation' => 'JSON completo con campaña, origen, fuente y plataforma. origin_relation incluye sus relaciones source y platform.',
             ] as $name => $description)
                 <div class="rounded-lg border border-sky-200/10 bg-slate-950/25 p-2">
                     <code class="font-mono text-xs text-sky-200">&#123;&#123;{{ $name }}&#125;&#125;</code>
