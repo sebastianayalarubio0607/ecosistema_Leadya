@@ -183,7 +183,7 @@ class FacebookConversionsService
                     'lead_id' => $leadIdMeta,
                     'lead_key' => $this->buildLeadKey($lead),
                     'event_source' => $isInstantForm ? 'crm' : null,
-                    'lead_event_source' => $isInstantForm ? 'Lead Quality' : null,
+                    'lead_event_source' => $isInstantForm ? 'crm' : null,
 
                     'status' => $lead->status ?? null,
                     'page' => $lead->page ?? null,
