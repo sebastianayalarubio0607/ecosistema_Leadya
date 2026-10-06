@@ -19,6 +19,8 @@ class GohighlevelService
 
     private const DEFAULT_OPPORTUNITIES_URL = 'https://services.leadconnectorhq.com/opportunities/';
 
+    private const OPPORTUNITY_SEARCH_URL = 'https://services.leadconnectorhq.com/opportunities/search';
+
     private const LEAD_TOKEN_PREFIX = '__gohighlevel_lead_field__:';
 
     private const CONTEXT_TOKEN_PREFIX = '__gohighlevel_context_field__:';
@@ -62,6 +64,61 @@ class GohighlevelService
                     'id', 'name', 'showInFunnel', 'showInPieChart', 'useOpportunityProbability', 'dateAdded', 'dateUpdated',
                 ]) + ['stages' => $stages];
             })->values()->all();
+    }
+
+    /**
+     * Search all opportunities in one pipeline. The caller filters them against
+     * locally configured stage IDs, while this method handles GHL pagination.
+     */
+    public function iterateOpportunitiesForPipeline(Integration $integration, string $locationId, string $pipelineId): \Generator
+    {
+        $page = 1;
+
+        do {
+            $response = Http::acceptJson()
+                ->withToken($this->resolveToken($integration))
+                ->withHeaders(['Version' => 'v3'])
+                ->connectTimeout(5)
+                ->timeout(30)
+                ->get(self::OPPORTUNITY_SEARCH_URL, [
+                    'locationId' => $locationId,
+                    'pipelineId' => $pipelineId,
+                    'limit' => 100,
+                    'page' => $page,
+                ]);
+
+            if (! $response->successful()) {
+                throw new RuntimeException(match ($response->status()) {
+                    401 => 'Token no válido al consultar oportunidades de GoHighLevel.',
+                    403 => 'El token no tiene acceso a oportunidades de este locationId.',
+                    429 => 'GoHighLevel alcanzó el límite de consultas de oportunidades.',
+                    default => 'No fue posible consultar oportunidades de GoHighLevel (HTTP '.$response->status().').',
+                });
+            }
+
+            $pageItems = $response->json('opportunities');
+            if (! is_array($pageItems)) {
+                throw new RuntimeException('GoHighLevel devolvió una lista de oportunidades no válida.');
+            }
+
+            foreach ($pageItems as $opportunity) {
+                if (is_array($opportunity)) {
+                    yield $opportunity;
+                }
+            }
+
+            $meta = $response->json('meta', []);
+            $nextPage = is_array($meta) ? ($meta['nextPage'] ?? null) : null;
+            $currentPage = is_array($meta) ? (int) ($meta['currentPage'] ?? $page) : $page;
+            if (is_numeric($nextPage) && (int) $nextPage > $currentPage) {
+                $page = (int) $nextPage;
+            } elseif ($nextPage || count($pageItems) === 100) {
+                $page++;
+            } else {
+                $page = 0;
+            }
+        } while ($page > 0);
+
     }
 
     public function supportsOpportunity(Integration $integration): bool

@@ -127,7 +127,7 @@ new class extends Component {
         }
 
         $fields = [
-            'url', 'tokent', 'location_id', 'body', 'body_oportunidad', 'omit_empty_payload_fields', 'crm_Id_phone', 'crm_Id_email',
+            'url', 'tokent', 'location_id', 'gohighlevel_return_mode', 'body', 'body_oportunidad', 'omit_empty_payload_fields', 'crm_Id_phone', 'crm_Id_email',
             'crm_Id_service', 'crm_Id_fuente', 'client_id', 'client_secret', 'code',
             'access_token', 'refresh_token', 'territory_id', 'owner_id', 'city',
             'lead_source_id', 'custom_field', 'url_credenciales', 'username', 'password',
@@ -141,6 +141,9 @@ new class extends Component {
             $value = $field === 'omit_empty_payload_fields'
                 ? old($field, $this->isEdit ? (bool) ($integration->{$storedField} ?? false) : true)
                 : ($isSecret ? '' : ($field === 'url' ? $baseUrl : ($integration->{$storedField} ?? '')));
+            if ($field === 'gohighlevel_return_mode') {
+                $value = old($field, $this->isEdit ? (string) ($integration->{$storedField} ?? 'webhook') : 'webhook');
+            }
             $this->typeData[$this->typeKey][$field] = (string) old($field, $value);
         }
 

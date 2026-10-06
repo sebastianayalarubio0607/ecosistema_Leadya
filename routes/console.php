@@ -6,11 +6,13 @@ use App\Jobs\MetaAdAccountSubscriptionScanJob;
 use App\Jobs\MetaPageSubscriptionScanJob;
 use App\Jobs\MetaWhatsappSubscriptionScanJob;
 use App\Jobs\PruneCustomerAndGoogleAdsHistoriesJob;
+use App\Jobs\PruneGohighlevelOpportunitySyncLogsJob;
 use App\Jobs\PruneMetaSubscriptionFailedJobs;
 use App\Jobs\SyncGoogleAdsDailyMetricsJob;
 use App\Jobs\SyncMetaAssetStatusesJob;
 use App\Jobs\SyncMetaFormsJob;
 use App\Jobs\SyncMetaLeadsJob;
+use App\Jobs\QueueGohighlevelOpportunitySyncRunsJob;
 use App\Jobs\SyncMetaPagesJob;
 use Illuminate\Support\Facades\Schedule;
 use Illuminate\Foundation\Inspiring;
@@ -101,5 +103,15 @@ Schedule::job(new SyncMetaFormsJob())
     // Sincroniza los leads de Meta Lead Ads cada hora  
 Schedule::job(new SyncMetaLeadsJob())
     ->hourly()
+    ->timezone('America/Bogota')
+    ->withoutOverlapping();
+
+Schedule::job(new QueueGohighlevelOpportunitySyncRunsJob('scheduled'))
+    ->everyTwoHours()
+    ->timezone('America/Bogota')
+    ->withoutOverlapping();
+
+Schedule::job(new PruneGohighlevelOpportunitySyncLogsJob())
+    ->dailyAt('02:30')
     ->timezone('America/Bogota')
     ->withoutOverlapping();

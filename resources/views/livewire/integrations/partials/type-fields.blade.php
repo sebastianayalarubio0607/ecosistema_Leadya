@@ -229,6 +229,14 @@
                     <div class="rounded-xl border border-white/10 bg-slate-900/40 p-4"><label class="{{ $labelClass }}">Token LeadConnector / GoHighLevel *</label><input name="tokent" type="password" wire:model.live.blur="typeData.{{ $typeKey }}.tokent" autocomplete="new-password" class="{{ $inputClass }}" placeholder="{{ $tokenStored ? 'Token guardado; deja vacio para conservarlo' : '' }}" @required(!$tokenStored)></div>
                     @if($typeKey === 'gohighlevel_oportunidad')
                         <div class="rounded-xl border border-white/10 bg-slate-900/40 p-4"><label class="{{ $labelClass }}">locationId</label><input name="location_id" wire:model.live.blur="typeData.gohighlevel_oportunidad.location_id" maxlength="100" autocomplete="off" class="{{ $inputClass }}" placeholder="ID de la subcuenta de GoHighLevel"></div>
+                        <div class="rounded-xl border border-white/10 bg-slate-900/40 p-4">
+                            <label for="gohighlevel-return-mode" class="{{ $labelClass }}">Devolución de conversiones</label>
+                            <select id="gohighlevel-return-mode" name="gohighlevel_return_mode" wire:model="typeData.gohighlevel_oportunidad.gohighlevel_return_mode" class="{{ $inputClass }} bg-slate-900 text-white [color-scheme:dark]" style="color-scheme: dark">
+                                <option value="webhook" class="bg-slate-900 text-white">Webhook en tiempo real</option>
+                                <option value="api" class="bg-slate-900 text-white">Consulta API cada 2 horas</option>
+                            </select>
+                            <p class="mt-2 text-xs text-white/50">Los webhooks entrantes seguirán siendo aceptados en ambos modos. La consulta automática y los botones manuales solo se habilitan en modo API.</p>
+                        </div>
                     @endif
                     @if($typeKey === 'gohighlevel_oportunidad' && $tokenStored)
                         <livewire:gohighlevel-pipeline-catalog

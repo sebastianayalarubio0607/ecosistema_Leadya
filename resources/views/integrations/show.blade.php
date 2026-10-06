@@ -35,6 +35,12 @@
 @endphp
 
 @section('header_actions')
+    @if($canSyncGohighlevelOpportunityStages)
+        <a href="{{ route('integrations.gohighlevel-opportunity-sync') }}"
+           class="px-4 py-2 rounded-xl bg-sky-500/20 hover:bg-sky-500/30 text-white border border-sky-300/20">
+            Ver sincronizaciones GoHighLevel
+        </a>
+    @endif
     @if($canSyncKommoBoards)
         <form method="POST" action="{{ route('integrations.kommo.sync-boards', $integration) }}">
             @csrf
@@ -125,6 +131,10 @@
                         :location-id="(string) ($integration->location_id ?? '')"
                         :sync-url="route('integrations.gohighlevel-opportunity.sync-stages', $integration)"
                         :key="'gohighlevel-show-catalog-'.$integration->id"
+                    />
+                    <livewire:gohighlevel-opportunity-sync-panel
+                        :integration-id="$integration->id"
+                        :key="'gohighlevel-sync-panel-'.$integration->id"
                     />
                 @endif
 

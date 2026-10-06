@@ -26,13 +26,15 @@ class SendLeadToGoogleAds implements ShouldQueue
 
     public int $leadId;
     public ?string $crmStateId;
+    public ?int $gohighlevelSyncLogId = null;
 
     public $tries = 5;
 
-    public function __construct(int $leadId, ?string $crmStateId = null)
+    public function __construct(int $leadId, ?string $crmStateId = null, ?int $gohighlevelSyncLogId = null)
     {
         $this->leadId = $leadId;
         $this->crmStateId = $crmStateId;
+        $this->gohighlevelSyncLogId = $gohighlevelSyncLogId;
         $this->onQueue('tracking');
     }
 
@@ -54,6 +56,7 @@ class SendLeadToGoogleAds implements ShouldQueue
 
         if (! $lead) {
             $this->recordFailed(null, null, null, 'Lead no encontrado.', null);
+            $this->updateGohighlevelSyncLog('failed', 'Lead no encontrado al procesar conversión de Google Ads.');
             return;
         }
 
@@ -61,11 +64,13 @@ class SendLeadToGoogleAds implements ShouldQueue
 
         if (! $customer) {
             $this->recordFailed($lead, null, $lead->crmState, 'El lead no tiene customer asociado.', null);
+            $this->updateGohighlevelSyncLog('failed', 'El lead no tiene customer asociado.');
             return;
         }
 
         if (! $customer->id_Gads) {
             $this->recordFailed($lead, $customer, $lead->crmState, 'El customer no tiene id_Gads configurado.', null);
+            $this->updateGohighlevelSyncLog('failed', 'El customer no tiene id_Gads configurado.');
             return;
         }
 
@@ -73,12 +78,14 @@ class SendLeadToGoogleAds implements ShouldQueue
 
         if (! $crmState) {
             $this->recordFailed($lead, $customer, null, 'No existe CrmState configurable para el lead.', null);
+            $this->updateGohighlevelSyncLog('failed', 'No existe CrmState configurable para el lead.');
             return;
         }
 
         $orderId = $service->buildOrderId($lead, $crmState);
 
         if ($this->alreadySent($lead->id, $orderId)) {
+            $this->updateGohighlevelSyncLog('sent');
             Log::info('Google Ads conversion skipped because it was already sent.', [
                 'lead_id' => $lead->id,
                 'customer_id' => $customer->id,
@@ -101,12 +108,14 @@ class SendLeadToGoogleAds implements ShouldQueue
                 'click_identifier_value' => null,
                 'skipped' => true,
             ]);
+            $this->updateGohighlevelSyncLog('omitted', 'El CrmState no tiene habilitado el envío a Google Ads.');
             return;
         }
 
         $result = $service->sendLeadConversion($lead, $customer, $crmState);
 
         if ($result['skip_job_record'] ?? false) {
+            $this->updateGohighlevelSyncLog('omitted', 'No hay acción de conversión configurada para este cliente.');
             Log::info('Google Ads conversion skipped because the lead customer has no configured conversion action.', [
                 'lead_id' => $lead->id,
                 'customer_id' => $customer->id,
@@ -117,6 +126,7 @@ class SendLeadToGoogleAds implements ShouldQueue
         }
 
         $this->recordConversionJob($lead, $customer, $crmState, $result);
+        $this->updateGohighlevelSyncLog(($result['success'] ?? false) ? 'sent' : (($result['skipped'] ?? false) ? 'omitted' : 'pending'), $result['error_message'] ?? null);
 
         if (! ($result['success'] ?? false) && ! ($result['skipped'] ?? false)) {
             throw new \RuntimeException($result['error_message'] ?? 'Error enviando conversion a Google Ads.');
@@ -125,6 +135,7 @@ class SendLeadToGoogleAds implements ShouldQueue
 
     public function failed(Throwable $e): void
     {
+        $this->updateGohighlevelSyncLog('failed', $e->getMessage());
         $lead = Lead::query()
             ->with(['customer', 'crmState', 'integration'])
             ->find($this->leadId);
@@ -144,6 +155,17 @@ class SendLeadToGoogleAds implements ShouldQueue
             'crm_state_id' => $this->crmStateId,
             'message' => $e->getMessage(),
         ]);
+    }
+
+    protected function updateGohighlevelSyncLog(string $status, ?string $message = null): void
+    {
+        if (! $this->gohighlevelSyncLogId) {
+            return;
+        }
+
+        \App\Models\GohighlevelOpportunitySyncLog::query()
+            ->whereKey($this->gohighlevelSyncLogId)
+            ->update(['google_ads_conversion_status' => $status, 'message' => $message, 'updated_at' => now()]);
     }
 
     protected function resolveCrmState(Lead $lead): ?CrmState

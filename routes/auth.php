@@ -91,6 +91,8 @@ Route::middleware('auth')->group(function () {
         ->name('integrations.hubspot.sync-deal-stages');
     Route::post('integrations/{integration}/gohighlevel-opportunity/sync-stages', [IntegrationWebController::class, 'syncGohighlevelOpportunityStages'])
         ->name('integrations.gohighlevel-opportunity.sync-stages');
+    Route::view('integrations/gohighlevel-opportunity-sync', 'integrations.gohighlevel-opportunity-sync')
+        ->name('integrations.gohighlevel-opportunity-sync');
     Route::post('integrations/{integration}/freshworks-opportunity/sync-stages', [FreshworksOpportunitySyncController::class, 'sync'])
         ->name('integrations.freshworks-opportunity.sync-stages');
     Route::resource('integrations', IntegrationWebController::class);

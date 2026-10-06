@@ -386,6 +386,7 @@ class IntegrationWebController extends Controller
             'custom_field' => ['nullable', 'string'],
             'tokent' => ['nullable', 'string'],
             'location_id' => ['nullable', 'string', 'max:100', 'regex:/^[A-Za-z0-9_-]+$/'],
+            'gohighlevel_return_mode' => ['nullable', 'string', Rule::in(['webhook', 'api'])],
             'url_credenciales' => ['nullable', 'url', 'max:255'],
             'username' => ['nullable', 'string', 'max:255'],
             'password' => ['nullable', 'string'],
@@ -692,8 +693,12 @@ class IntegrationWebController extends Controller
                 $validated['omit_empty_payload_fields'] = array_key_exists('omit_empty_payload_fields', $validated)
                     ? (bool) $validated['omit_empty_payload_fields']
                     : (bool) ($existingIntegration?->omit_empty_payload_fields ?? true);
+                $validated['gohighlevel_return_mode'] = in_array($validated['gohighlevel_return_mode'] ?? null, ['api', 'webhook'], true)
+                    ? $validated['gohighlevel_return_mode']
+                    : ($existingIntegration?->gohighlevel_return_mode ?: 'webhook');
             } else {
                 $validated = $this->clearHubspotFields($validated);
+                $validated['gohighlevel_return_mode'] = 'webhook';
             }
             $validated = $this->validateGohighlevelPayload($validated);
             if ($typeName === 'gohighlevel_oportunidad') {
@@ -713,6 +718,7 @@ class IntegrationWebController extends Controller
 
         if ($typeName !== 'gohighlevel_oportunidad') {
             $validated['location_id'] = null;
+            $validated['gohighlevel_return_mode'] = 'webhook';
             unset($validated['omit_empty_payload_fields']);
         }
 

@@ -28,6 +28,7 @@ class Integration extends Model
         'urldestino',
         'tokent',
         'location_id',
+        'gohighlevel_return_mode',
         'status',
         'priority',
         'crm_Id_phone',
@@ -82,6 +83,11 @@ class Integration extends Model
     public function customer(): BelongsTo
     {
         return $this->belongsTo(Customer::class);
+    }
+
+    public function gohighlevelOpportunitySyncRuns(): HasMany
+    {
+        return $this->hasMany(GohighlevelOpportunitySyncRun::class);
     }
 
     public function integrationtype(): BelongsTo

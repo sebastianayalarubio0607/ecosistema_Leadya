@@ -43,6 +43,15 @@ return [
             'after_commit' => false,
         ],
 
+        'gohighlevel_sync' => [
+            'driver' => 'database',
+            'connection' => env('DB_QUEUE_CONNECTION'),
+            'table' => 'gohighlevel_sync_jobs',
+            'queue' => 'gohighlevel-sync',
+            'retry_after' => (int) env('GOHIGHLEVEL_SYNC_RETRY_AFTER', 3700),
+            'after_commit' => false,
+        ],
+
         'meta_ad_account_subscriptions' => [
             'driver' => 'database',
             'connection' => env('DB_QUEUE_CONNECTION'),
