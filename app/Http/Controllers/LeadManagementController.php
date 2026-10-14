@@ -55,7 +55,7 @@ class LeadManagementController extends Controller
                 ->contains((string) $request->input('crm_state'));
 
             if (! $allowed) {
-                $validator->errors()->add('crm_state', 'El estado CRM no esta disponible para este lead: debe pertenecer al cliente y tener un funnel y un evento configurados.');
+                $validator->errors()->add('crm_state', 'El estado CRM no esta disponible para este lead: debe pertenecer al cliente, tener funnel y una conversion o avance configurado.');
             }
         });
 
@@ -225,6 +225,7 @@ class LeadManagementController extends Controller
             ->where(function ($query) use ($customerId): void {
                 $query->whereNotNull('crm_state.meta_event_id')
                     ->orWhereNotNull('crm_state.whatsapp_event_id')
+                    ->orWhereNotNull('crm_state.progress_percentage')
                     ->orWhere(function ($googleQuery) use ($customerId): void {
                         $googleQuery->where('crm_state.google_ads_conversion_enabled', true)
                             ->where(function ($conversionQuery) use ($customerId): void {

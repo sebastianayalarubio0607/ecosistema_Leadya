@@ -3,6 +3,7 @@
 namespace App\Http\Services\Integration;
 
 use App\Http\Services\Integration\Concerns\ResolvesIntegrationVariableMappings;
+use App\Http\Services\Lead\LeadCrmStateProgressionService;
 use App\Models\CrmState;
 use App\Models\Integration;
 use App\Models\Lead;
@@ -259,8 +260,7 @@ class HubspotIntegrationService
             return;
         }
 
-        $lead->crm_state = $crmState;
-        $lead->save();
+        app(LeadCrmStateProgressionService::class)->transition($lead, $crmState);
     }
 
     private function extractHubspotIdFromCrmId(Lead $lead, Integration $integration): ?string

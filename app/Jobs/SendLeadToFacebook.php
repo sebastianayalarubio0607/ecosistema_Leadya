@@ -27,11 +27,24 @@ class SendLeadToFacebook implements ShouldQueue
     public int $customerId;
     public ?string $eventNameOverride;
     public ?int $gohighlevelSyncLogId = null;
+    public ?string $crmStateId = null;
+    public bool $continueChainAfterFailure = false;
+    public ?int $leadCrmStateConversionSequenceId = null;
+    public ?int $leadCrmStateConversionPosition = null;
 
     public $tries = 4;
     public $backoff = [60, 120, 300, 600];
 
-    public function __construct(int $leadId, int $customerId, $eventNameOverride = null, ?int $gohighlevelSyncLogId = null)
+    public function __construct(
+        int $leadId,
+        int $customerId,
+        $eventNameOverride = null,
+        ?int $gohighlevelSyncLogId = null,
+        ?string $crmStateId = null,
+        bool $continueChainAfterFailure = false,
+        ?int $leadCrmStateConversionSequenceId = null,
+        ?int $leadCrmStateConversionPosition = null
+    )
     {
         $this->leadId = $leadId;
         $this->customerId = $customerId;
@@ -39,7 +52,17 @@ class SendLeadToFacebook implements ShouldQueue
             ? trim($eventNameOverride)
             : null;
         $this->gohighlevelSyncLogId = $gohighlevelSyncLogId;
+        $this->crmStateId = $crmStateId;
+        $this->continueChainAfterFailure = $continueChainAfterFailure;
+        $this->leadCrmStateConversionSequenceId = $leadCrmStateConversionSequenceId;
+        $this->leadCrmStateConversionPosition = $leadCrmStateConversionPosition;
         $this->onQueue('tracking');
+    }
+
+    public function setLeadCrmStateSequence(int $sequenceId, int $position): void
+    {
+        $this->leadCrmStateConversionSequenceId = $sequenceId;
+        $this->leadCrmStateConversionPosition = $position;
     }
 /**
  * función que maneja el envío del lead a Facebook Conversions API
@@ -54,6 +77,8 @@ class SendLeadToFacebook implements ShouldQueue
         $lead = Lead::find($this->leadId);
         if (!$lead) {
             $this->updateGohighlevelSyncLog('failed', 'Lead no encontrado al procesar conversión de Meta.');
+            $this->completeLeadCrmStateConversionSequence();
+
             return;
         }
 
@@ -61,7 +86,7 @@ class SendLeadToFacebook implements ShouldQueue
          * Envía el lead a Facebook Conversions API
          */
         // Usar el customerId del job, no el del lead
-        $result = $svc->sendLeadEvent($lead, $this->customerId, $this->eventNameOverride);
+        $result = $svc->sendLeadEvent($lead, $this->customerId, $this->eventNameOverride, $this->crmStateId);
         $requestPayload = $result['request'] ?? null;
         $eventPayload = data_get($requestPayload, 'data.0', []);
         $userData = data_get($eventPayload, 'user_data', []);
@@ -110,6 +135,8 @@ class SendLeadToFacebook implements ShouldQueue
 
             throw new \RuntimeException('Error enviando Lead a Facebook');
         }
+
+        $this->completeLeadCrmStateConversionSequence();
     }
 
     public function failed(Throwable $e): void
@@ -120,6 +147,18 @@ class SendLeadToFacebook implements ShouldQueue
             'customer_id' => $this->customerId,
             'message'     => $e->getMessage(),
         ]);
+
+        if ($this->continueChainAfterFailure) {
+            $this->dispatchNextJobInChain();
+        }
+
+        $this->completeLeadCrmStateConversionSequence();
+    }
+
+    private function completeLeadCrmStateConversionSequence(): void
+    {
+        app(\App\Http\Services\Lead\LeadCrmStateConversionQueueService::class)
+            ->completePosition($this->leadCrmStateConversionSequenceId, $this->leadCrmStateConversionPosition);
     }
 
     private function updateGohighlevelSyncLog(string $status, ?string $message = null): void
@@ -128,8 +167,11 @@ class SendLeadToFacebook implements ShouldQueue
             return;
         }
 
-        \App\Models\GohighlevelOpportunitySyncLog::query()
-            ->whereKey($this->gohighlevelSyncLogId)
-            ->update(['facebook_conversion_status' => $status, 'message' => $message, 'updated_at' => now()]);
+        $query = \App\Models\GohighlevelOpportunitySyncLog::query()->whereKey($this->gohighlevelSyncLogId);
+        if ($status !== 'failed') {
+            $query->where('facebook_conversion_status', '!=', 'failed');
+        }
+
+        $query->update(['facebook_conversion_status' => $status, 'message' => $message, 'updated_at' => now()]);
     }
 }

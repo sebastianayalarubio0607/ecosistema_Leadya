@@ -162,6 +162,7 @@ class CrmStateWebController extends Controller
         $crmstate = CrmState::create([
             'id' => $finalId,
             'name' => $request->string('name'),
+            'progress_percentage' => $request->input('progress_percentage'),
             'qualification' => $request->input('qualification'),
             'meta_event_id' => $request->input('meta_event_id'),
             'whatsapp_event_id' => $request->input('whatsapp_event_id'),
@@ -233,6 +234,7 @@ class CrmStateWebController extends Controller
         $firstConversion = $conversionRows[0] ?? [];
 
         $validated['unmanaged'] = $request->boolean('unmanaged');
+        $validated['progress_percentage'] = $request->input('progress_percentage');
         $validated['google_ads_conversion_enabled'] = $request->boolean('google_ads_conversion_enabled');
         $validated['google_ads_conversion_action_id'] = $firstConversion['conversion_action_id'] ?? null;
         $validated['google_ads_conversion_action_name'] = $firstConversion['conversion_action_name'] ?? null;
@@ -267,6 +269,7 @@ class CrmStateWebController extends Controller
             'external_id' => $creating ? ['required', 'string', 'max:50', 'regex:/^[A-Za-z0-9_-]+$/'] : null,
             'id' => $creating ? ['required', 'string', 'max:255', Rule::unique('crm_state', 'id')] : null,
             'name' => ['required', 'string', 'max:255'],
+            'progress_percentage' => ['nullable', 'numeric', 'min:0'],
             'qualification' => ['required', 'exists:qualification,id'],
             'meta_event_id' => ['nullable', 'exists:meta_events,id'],
             'whatsapp_event_id' => ['nullable', 'exists:whatsapp_events,id'],

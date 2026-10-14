@@ -5,10 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Services\Integration\GohighlevelPipelineSyncService;
 use App\Http\Services\Integration\FreshworksOpportunityIntegrationService;
-use App\Http\Services\Lead\LeadAdSourceClassifier;
+use App\Http\Services\Lead\LeadCrmStateProgressionService;
 use App\Http\Services\Lead\LeadFunnelHistoryService;
-use App\Jobs\SendLeadToFacebook;
-use App\Jobs\SendLeadToGoogleAds;
 use App\Models\CrmState;
 use App\Models\Integration;
 use App\Models\Lead;
@@ -520,17 +518,9 @@ class LeadCrmStateController extends Controller
         LeadFunnelHistoryService $historyService,
         int &$updated
     ): void {
-        if ((string) $lead->crm_state === (string) $newCrmState) {
-            return;
+        if (app(LeadCrmStateProgressionService::class)->transition($lead, $newCrmState)) {
+            $updated++;
         }
-
-        $lead->crm_state = $newCrmState;
-        $lead->save();
-
-        $historyService->recordIfFunnelChanged($lead);
-        $updated++;
-
-        $this->dispatchTrackingJobsForLead($lead, $newCrmState);
     }
 
     public function changeLeadStateForLead(
@@ -550,52 +540,4 @@ class LeadCrmStateController extends Controller
         return $updated > 0;
     }
 
-    private function dispatchTrackingJobsForLead(Lead $lead, string $newCrmState): void
-    {
-        $adSource = LeadAdSourceClassifier::classify($lead);
-
-        if ($adSource['is_meta_ads']) {
-            if (empty($lead->crm_state)) {
-                return;
-            }
-
-            $lead->unsetRelation('crmState');
-            $lead->load('crmState.metaEvent', 'crmState.whatsappEvent', 'customer');
-
-            $isWhatsappDataset = (string) $lead->campaign_origin === 'whatsapp'
-                && (bool) $lead->customer?->Meta_whatsapp_dataset;
-
-            $hasConversionEvent = $isWhatsappDataset
-                ? (! empty($lead->crmState?->whatsapp_event_id) || ! empty($lead->crmState?->meta_event_id))
-                : ! empty($lead->crmState?->meta_event_id);
-
-            if (! $hasConversionEvent) {
-                return;
-            }
-
-            try {
-                SendLeadToFacebook::dispatch($lead->id, $lead->customer_id);
-            } catch (\Throwable $exception) {
-                Log::warning('No fue posible despachar SendLeadToFacebook desde cambio de crm_state', [
-                    'lead_id' => $lead->id,
-                    'campaign_origin' => $lead->campaign_origin,
-                    'source_name' => $adSource['source_name'],
-                    'crm_state' => $newCrmState,
-                    'message' => $exception->getMessage(),
-                ]);
-            }
-        } elseif ($adSource['is_google_ads']) {
-            try {
-                SendLeadToGoogleAds::dispatch($lead->id, $newCrmState);
-            } catch (\Throwable $exception) {
-                Log::warning('No fue posible despachar SendLeadToGoogleAds desde cambio de crm_state', [
-                    'lead_id' => $lead->id,
-                    'campaign_origin' => $lead->campaign_origin,
-                    'source_name' => $adSource['source_name'],
-                    'crm_state' => $newCrmState,
-                    'message' => $exception->getMessage(),
-                ]);
-            }
-        }
-    }
 }

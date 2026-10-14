@@ -89,6 +89,19 @@
             </div>
 
             <div class="md:col-span-2">
+                <label class="block mb-1 text-white/70">Pipeline</label>
+                <select name="pipeline_id" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+                    <option value="">Todos</option>
+                    <option value="none" @selected((string) ($pipelineId ?? request('pipeline_id')) === 'none')>Sin pipeline</option>
+                    @foreach($pipelines as $pipeline)
+                        <option value="{{ $pipeline->id }}" @selected((string) ($pipelineId ?? request('pipeline_id')) === (string) $pipeline->id)>
+                            {{ $pipeline->name }}
+                        </option>
+                    @endforeach
+                </select>
+            </div>
+
+            <div class="md:col-span-2">
                 <label class="block mb-1 text-white/70">Meta Event</label>
                 <select name="meta_event_id" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
                     <option value="">Todos</option>
@@ -140,9 +153,11 @@
                     <tr>
                         <th class="text-left px-3 py-2">ID</th>
                         <th class="text-left px-3 py-2">Nombre</th>
+                        <th class="text-left px-3 py-2">Avance</th>
                         <th class="text-left px-3 py-2">Cliente</th>
                         <th class="text-left px-3 py-2">Tipo</th>
                         <th class="text-left px-3 py-2">Integration</th>
+                        <th class="text-left px-3 py-2">Pipeline</th>
                         <th class="text-left px-3 py-2">Sin gestionar</th>
                         <th class="text-left px-3 py-2">Qualification</th>
                         <th class="text-left px-3 py-2">Meta Event</th>
@@ -162,6 +177,7 @@
                                 </div>
                             </td>
                             <td class="px-3 py-2">{{ $it->name }}</td>
+                            <td class="px-3 py-2">{{ $it->progress_percentage !== null ? $it->progress_percentage.'%' : 'Sin configurar' }}</td>
                             <td class="px-3 py-2">{{ $it->matchedIntegration?->customer?->name ?? '--' }}</td>
                             <td class="px-3 py-2">{{ $it->matchedIntegration?->integrationtype?->name ?? '--' }}</td>
                             <td class="px-3 py-2">
@@ -170,6 +186,7 @@
                                     Prefix: {{ $it->integration_prefix ?? '--' }}
                                 </div>
                             </td>
+                            <td class="px-3 py-2">{{ $it->pipeline?->name ?? 'Sin pipeline' }}</td>
                             <td class="px-3 py-2">{{ $it->unmanaged ? 'Si' : 'No' }}</td>
                             <td class="px-3 py-2">{{ $it->qualificationModel?->name ?? '--' }}</td>
                             <td class="px-3 py-2">{{ $it->metaEvent?->nombre ?? '--' }}</td>
@@ -211,7 +228,7 @@
                         </tr>
                     @empty
                         <tr>
-                            <td colspan="10" class="px-3 py-8 text-center text-white/60">No hay CRM States.</td>
+                            <td colspan="13" class="px-3 py-8 text-center text-white/60">No hay CRM States.</td>
                         </tr>
                     @endforelse
                 </tbody>

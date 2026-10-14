@@ -18,7 +18,7 @@
 
 @section('content')
     <div class="rounded-2xl border border-white/10 bg-zinc-950/25 backdrop-blur p-4 space-y-4">
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
+        <div class="grid grid-cols-1 md:grid-cols-6 gap-3">
             <div class="rounded-xl border border-white/10 bg-white/5 p-3">
                 <div class="text-xs text-white/50">CRM State ID</div>
                 <div class="text-white">{{ $crmstate->id }}</div>
@@ -30,8 +30,17 @@
             </div>
 
             <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                <div class="text-xs text-white/50">Avance del funnel</div>
+                <div class="text-white">{{ $crmstate->progress_percentage !== null ? $crmstate->progress_percentage.'%' : 'Sin configurar' }}</div>
+            </div>
+
+            <div class="rounded-xl border border-white/10 bg-white/5 p-3">
                 <div class="text-xs text-white/50">Qualification</div>
                 <div class="text-white">{{ $crmstate->qualificationModel?->name ?? '--' }}</div>
+            </div>
+            <div class="rounded-xl border border-white/10 bg-white/5 p-3">
+                <div class="text-xs text-white/50">Pipeline</div>
+                <div class="text-white">{{ $crmstate->pipeline?->name ?? 'Sin pipeline' }}</div>
             </div>
             <div class="rounded-xl border border-white/10 bg-white/5 p-3">
                 <div class="text-xs text-white/50">Sin gestionar</div>

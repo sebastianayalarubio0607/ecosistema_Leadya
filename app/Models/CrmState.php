@@ -17,6 +17,7 @@ class CrmState extends Model
     protected $fillable = [
         'id',
         'name',
+        'progress_percentage',
         'qualification',
         'meta_event_id',
         'whatsapp_event_id',
@@ -33,6 +34,7 @@ class CrmState extends Model
         'unmanaged' => 'boolean',
         'google_ads_conversion_enabled' => 'boolean',
         'google_ads_conversion_value' => 'decimal:2',
+        'progress_percentage' => 'decimal:2',
     ];
 
     public function leads()

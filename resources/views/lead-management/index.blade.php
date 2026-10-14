@@ -159,7 +159,7 @@
                                             </div>
                                         </div>
                                         @if($stateOptions->isEmpty())
-                                            <p class="mt-1 text-xs text-white/50">Sin estados con funnel y eventos configurados para este cliente.</p>
+                                            <p class="mt-1 text-xs text-white/50">Sin estados con funnel y conversión o avance configurado para este cliente.</p>
                                         @endif
                                     </td>
                                     <td class="max-w-48 truncate whitespace-nowrap px-3 py-2" data-lead-qualification title="{{ $lead->qualification_name }}">{{ $lead->qualification_name }}</td>

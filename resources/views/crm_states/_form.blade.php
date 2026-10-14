@@ -86,6 +86,30 @@
         @error('name') <div class="text-rose-300 text-xs mt-1">{{ $message }}</div> @enderror
     </div>
 
+    <div>
+        <label class="block mb-1 text-white/70">Avance del funnel (%)</label>
+        <input type="number" step="0.01" min="0" name="progress_percentage"
+               value="{{ old('progress_percentage', $crmstate?->progress_percentage) }}"
+               class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white placeholder-white/40"
+               placeholder="Ej: 0, 25, 100 o más">
+        <p class="text-xs text-white/50 mt-1">Déjalo vacío para conservar el flujo actual sin recorrer estados intermedios.</p>
+        @error('progress_percentage') <div class="text-rose-300 text-xs mt-1">{{ $message }}</div> @enderror
+    </div>
+
+    <div>
+        <label class="block mb-1 text-white/70">Pipeline (opcional)</label>
+        <select name="pipeline_id" class="w-full rounded-xl border border-white/10 p-2 bg-slate-900/60 text-white">
+            <option value="">-- Sin pipeline --</option>
+            @foreach($pipelines ?? collect() as $pipeline)
+                <option value="{{ $pipeline->id }}" @selected((string) old('pipeline_id', $crmstate?->pipeline_id) === (string) $pipeline->id)>
+                    {{ $pipeline->name }} ({{ $pipeline->integration?->name ?? $pipeline->external_id }})
+                </option>
+            @endforeach
+        </select>
+        <p class="text-xs text-white/50 mt-1">Opcional. Los estados intermedios solo se comparan dentro del mismo pipeline.</p>
+        @error('pipeline_id') <div class="text-rose-300 text-xs mt-1">{{ $message }}</div> @enderror
+    </div>
+
     <div class="grid grid-cols-1 md:grid-cols-12 gap-3">
         <div class="md:col-span-6">
             <label class="block mb-1 text-white/70">Qualification</label>

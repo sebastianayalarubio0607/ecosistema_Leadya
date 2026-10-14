@@ -37,6 +37,8 @@ use App\Http\Controllers\Meta\MetaSyncController;
 use App\Http\Controllers\Meta\MetaWhatsappController;
 use App\Http\Controllers\Meta\MetaWhatsappSubscriptionJobController;
 use App\Http\Controllers\Qualification\QualificationWebController;
+use App\Http\Controllers\Pipeline\PipelineWebController;
+use App\Http\Controllers\Pipeline\PipelineWebController;
 use Illuminate\Support\Facades\Route;
 use Livewire\Volt\Volt;
 
@@ -53,6 +55,8 @@ Route::middleware('auth')->group(function () {
          */
     Route::resource('qualifications', QualificationWebController::class);
     Route::resource('crmstates', CrmStateWebController::class);
+    Route::resource('pipelines', PipelineWebController::class);
+    Route::resource('pipelines', PipelineWebController::class);
     Route::post('funnels/ordenar-valores', [FunnelWebController::class, 'reorder'])->name('funnels.reorder');
     Route::resource('funnels', FunnelWebController::class);
 /**

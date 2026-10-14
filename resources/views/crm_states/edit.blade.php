@@ -24,6 +24,7 @@
                 'qualifications' => $qualifications,
                 'metaEvents' => $metaEvents,
                 'whatsappEvents' => $whatsappEvents,
+                'pipelines' => $pipelines,
                 'isCreate' => false,
                 'submitText' => 'Guardar cambios',
                 'cancelUrl' => route('crmstates.show', $crmstate),

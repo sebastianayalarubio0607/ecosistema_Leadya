@@ -55,6 +55,14 @@ class GohighlevelPipelineSyncService
                 $exists = $crmState->exists;
                 $crmState->name = self::crmStateName((string) $stage['name'], (string) $pipeline['name']);
 
+                // GoHighLevel is the only integration that owns an upstream
+                // stage probability. Preserve existing values when the API
+                // omits it; newly discovered stages safely remain unconfigured.
+                if (is_numeric($stage['stageWinProbability'] ?? null)
+                    && (float) $stage['stageWinProbability'] >= 0) {
+                    $crmState->progress_percentage = $stage['stageWinProbability'];
+                }
+
                 if (! $exists) {
                     $crmState->qualification = $qualificationId;
                 }

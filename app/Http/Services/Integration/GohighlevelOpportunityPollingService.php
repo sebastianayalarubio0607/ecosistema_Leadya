@@ -2,16 +2,12 @@
 
 namespace App\Http\Services\Integration;
 
-use App\Http\Services\Lead\LeadAdSourceClassifier;
-use App\Http\Services\Lead\LeadFunnelHistoryService;
-use App\Jobs\SendLeadToFacebook;
-use App\Jobs\SendLeadToGoogleAds;
+use App\Http\Services\Lead\LeadCrmStateProgressionService;
 use App\Models\GohighlevelOpportunitySyncLog;
 use App\Models\GohighlevelOpportunitySyncRun;
 use App\Models\Integration;
 use App\Models\Lead;
 use App\Models\CrmState;
-use Illuminate\Support\Facades\Log;
 use RuntimeException;
 
 class GohighlevelOpportunityPollingService
@@ -120,8 +116,14 @@ class GohighlevelOpportunityPollingService
                     ]);
 
                     if ($stateChanged) {
-                        $this->applyLeadStateChange($lead, $newCrmState, $syncLog, app(LeadFunnelHistoryService::class));
-                        $leadsUpdated++;
+                        if ($this->applyLeadStateChange($lead, $newCrmState, $syncLog)) {
+                            $leadsUpdated++;
+                        } else {
+                            $syncLog->forceFill([
+                                'state_status' => 'unchanged',
+                                'message' => 'El estado ya estaba sincronizado por otro proceso.',
+                            ])->save();
+                        }
                     }
                 }
             }
@@ -199,62 +201,8 @@ class GohighlevelOpportunityPollingService
     private function applyLeadStateChange(
         Lead $lead,
         string $newCrmState,
-        GohighlevelOpportunitySyncLog $syncLog,
-        LeadFunnelHistoryService $historyService
-    ): void {
-        $lead->crm_state = $newCrmState;
-        $lead->save();
-        $historyService->recordIfFunnelChanged($lead);
-
-        // Keep this new polling path aligned with the CRM-state controller's
-        // existing conversion eligibility rules without changing its webhook.
-        $adSource = LeadAdSourceClassifier::classify($lead);
-        if ($adSource['is_meta_ads']) {
-            $lead->unsetRelation('crmState');
-            $lead->load('crmState.metaEvent', 'crmState.whatsappEvent', 'customer');
-            $isWhatsappDataset = (string) $lead->campaign_origin === 'whatsapp'
-                && (bool) $lead->customer?->Meta_whatsapp_dataset;
-            $hasConversionEvent = $isWhatsappDataset
-                ? (! empty($lead->crmState?->whatsapp_event_id) || ! empty($lead->crmState?->meta_event_id))
-                : ! empty($lead->crmState?->meta_event_id);
-
-            if (! $hasConversionEvent) {
-                return;
-            }
-
-            $syncLog->forceFill([
-                'conversion_channel' => $isWhatsappDataset && ! empty($lead->crmState?->whatsapp_event_id) ? 'whatsapp' : 'meta',
-                'facebook_conversion_status' => 'pending',
-                'conversion_requested_at' => now(),
-            ])->save();
-
-            try {
-                SendLeadToFacebook::dispatch($lead->id, $lead->customer_id, null, (int) $syncLog->id);
-            } catch (\Throwable $exception) {
-                $syncLog->forceFill(['facebook_conversion_status' => 'failed', 'message' => $exception->getMessage()])->save();
-                Log::warning('No fue posible despachar SendLeadToFacebook desde polling GoHighLevel', [
-                    'lead_id' => $lead->id,
-                    'crm_state' => $newCrmState,
-                    'message' => $exception->getMessage(),
-                ]);
-            }
-        } elseif ($adSource['is_google_ads']) {
-            $syncLog->forceFill([
-                'conversion_channel' => 'google_ads',
-                'google_ads_conversion_status' => 'pending',
-                'conversion_requested_at' => now(),
-            ])->save();
-
-            try {
-                SendLeadToGoogleAds::dispatch($lead->id, $newCrmState, (int) $syncLog->id);
-            } catch (\Throwable $exception) {
-                $syncLog->forceFill(['google_ads_conversion_status' => 'failed', 'message' => $exception->getMessage()])->save();
-                Log::warning('No fue posible despachar SendLeadToGoogleAds desde polling GoHighLevel', [
-                    'lead_id' => $lead->id,
-                    'crm_state' => $newCrmState,
-                    'message' => $exception->getMessage(),
-                ]);
-            }
-        }
+        GohighlevelOpportunitySyncLog $syncLog
+    ): bool {
+        return app(LeadCrmStateProgressionService::class)->transition($lead, $newCrmState, (int) $syncLog->id);
     }
 }

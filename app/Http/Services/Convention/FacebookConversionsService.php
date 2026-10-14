@@ -3,6 +3,7 @@
 namespace App\Http\Services\Convention;
 
 use App\Models\Customer;
+use App\Models\CrmState;
 use App\Models\Lead;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Str;
@@ -18,9 +19,35 @@ class FacebookConversionsService
     private const DEFAULT_CURRENCY = 'COP';
     private const DEFAULT_VALUE = 100000;
 
-    public function sendLeadEvent(Lead $lead, int $customerId, ?string $eventNameOverride = null): array
+    public function sendLeadEvent(
+        Lead $lead,
+        int $customerId,
+        ?string $eventNameOverride = null,
+        ?string $crmStateId = null
+    ): array
     {
         $customer = Customer::findOrFail($customerId);
+
+        if ($crmStateId !== null) {
+            $crmState = CrmState::query()
+                ->with(['metaEvent', 'whatsappEvent'])
+                ->find($crmStateId);
+
+            if (! $crmState) {
+                return [
+                    'ok' => false,
+                    'error' => 'El CRM State capturado para la conversión ya no existe.',
+                    'request' => null,
+                    'pixel_id' => null,
+                    'test_event_code' => null,
+                    'event_name' => null,
+                    'lead_id' => $lead->id,
+                ];
+            }
+
+            $lead->setRelation('crmState', $crmState);
+        }
+
         $isInstantForm = $this->isMetaInstantForm($lead);
         $isWhatsappDataset = $this->usesWhatsappDataset($lead, $customer);
 
