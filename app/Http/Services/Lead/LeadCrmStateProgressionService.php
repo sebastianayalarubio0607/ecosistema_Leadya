@@ -83,6 +83,11 @@ class LeadCrmStateProgressionService
 
     private function statesToApply(Lead $lead, string $previousCrmState, CrmState $targetState): array
     {
+        $targetState->loadMissing('qualificationModel.funnel');
+        if (mb_strtolower(trim((string) $targetState->qualificationModel?->funnel?->name)) === 'lead no efectivo') {
+            return [$targetState];
+        }
+
         $hasPreviousStateId = trim($previousCrmState) !== '';
         $previousState = $hasPreviousStateId ? CrmState::query()->find($previousCrmState) : null;
         $targetProgress = $targetState->progress_percentage;
@@ -119,12 +124,26 @@ class LeadCrmStateProgressionService
             return [$targetState];
         }
 
+        // If either endpoint has a Pipeline, scope intermediate states to the
+        // destination Pipeline when available; otherwise use the source one.
+        // With both endpoints unassigned, keep the integration-wide behavior.
+        $pipelineId = $targetState->pipeline_id ?: $previousState?->pipeline_id;
+        if ($pipelineId) {
+            $pipelineBelongsToIntegration = $integration->pipelines()
+                ->whereKey($pipelineId)
+                ->exists();
+            if (! $pipelineBelongsToIntegration) {
+                return [$targetState];
+            }
+        }
+
         $prefix = $integration->crmIdPrefix();
         $escapedPrefix = addcslashes($prefix, '\\%_');
         $intermediateStates = CrmState::query()
             ->where('id', 'like', $escapedPrefix.'-%')
             ->where('progress_percentage', '>', $previousProgress)
             ->where('progress_percentage', '<', $targetProgress)
+            ->when($pipelineId, fn ($query) => $query->where('pipeline_id', $pipelineId))
             ->orderBy('progress_percentage')
             ->orderBy('id')
             ->get()

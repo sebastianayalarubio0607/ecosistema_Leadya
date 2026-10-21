@@ -74,12 +74,6 @@ new class extends Component {
             'icon' => 'funnel',
         ],
         [
-            'label' => 'Pipelines',
-            'route' => 'pipelines.index',
-            'active' => ['pipelines.*'],
-            'icon' => 'funnel',
-        ],
-        [
             'label' => 'Integration Types',
             'route' => 'integrationtypes.index',
             'active' => ['integrationtypes.*'],

@@ -4,6 +4,7 @@ namespace App\Http\Services\Integration;
 
 use App\Models\CrmState;
 use App\Models\Integration;
+use App\Models\Pipeline;
 use App\Models\Qualification;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -47,7 +48,12 @@ class GohighlevelPipelineSyncService
         $created = 0;
         $updated = 0;
 
-        DB::transaction(function () use ($stages, $pipeline, $qualificationId, $prefix, &$created, &$updated): void {
+        DB::transaction(function () use ($integration, $stages, $pipeline, $qualificationId, $prefix, &$created, &$updated): void {
+            $localPipeline = Pipeline::query()->updateOrCreate(
+                ['integration_id' => $integration->id, 'external_id' => (string) $pipeline['id']],
+                ['name' => trim((string) ($pipeline['name'] ?? 'Pipeline')) ?: 'Pipeline']
+            );
+
             foreach ($stages as $stage) {
                 $crmState = CrmState::query()->firstOrNew([
                     'id' => $prefix.'-'.(string) $stage['id'],
@@ -55,10 +61,18 @@ class GohighlevelPipelineSyncService
                 $exists = $crmState->exists;
                 $crmState->name = self::crmStateName((string) $stage['name'], (string) $pipeline['name']);
 
-                // GoHighLevel is the only integration that owns an upstream
-                // stage probability. Preserve existing values when the API
-                // omits it; newly discovered stages safely remain unconfigured.
-                if (is_numeric($stage['stageWinProbability'] ?? null)
+                if ($crmState->pipeline_id && (int) $crmState->pipeline_id !== (int) $localPipeline->id) {
+                    throw new RuntimeException(sprintf(
+                        'El stage "%s" ya está asociado a otro Pipeline de esta integración. No se cambió para evitar mezclar estados.',
+                        (string) $stage['name']
+                    ));
+                }
+                $crmState->pipeline_id = $localPipeline->id;
+
+                // Preserve every manually configured probability. GHL values
+                // only initialize new or still-unconfigured CRM states.
+                if (blank($crmState->progress_percentage)
+                    && is_numeric($stage['stageWinProbability'] ?? null)
                     && (float) $stage['stageWinProbability'] >= 0) {
                     $crmState->progress_percentage = $stage['stageWinProbability'];
                 }

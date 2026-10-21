@@ -90,6 +90,11 @@ class Integration extends Model
         return $this->hasMany(GohighlevelOpportunitySyncRun::class);
     }
 
+    public function pipelines(): HasMany
+    {
+        return $this->hasMany(Pipeline::class);
+    }
+
     public function integrationtype(): BelongsTo
     {
         return $this->belongsTo(Integrationtype::class, 'integrationtype_id');

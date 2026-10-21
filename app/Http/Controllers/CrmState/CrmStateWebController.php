@@ -6,8 +6,8 @@ use App\Http\Controllers\Controller;
 use App\Models\CrmState;
 use App\Models\Customer;
 use App\Models\Integration;
-use App\Models\Integrationtype;
 use App\Models\MetaEvent;
+use App\Models\Pipeline;
 use App\Models\Qualification;
 use App\Models\WhatsAppEvent;
 use Illuminate\Http\Request;
@@ -28,12 +28,14 @@ class CrmStateWebController extends Controller
         $metaEventId = $request->get('meta_event_id');
         $whatsappEventId = $request->get('whatsapp_event_id');
         $googleAdsEnabled = $request->get('google_ads_conversion_enabled');
+        $pipelineId = $request->get('pipeline_id');
 
         $integrationFiltersActive = filled($customerId) || filled($typeId) || filled($integrationId);
 
         $crmstates = CrmState::query()
             ->with([
                 'qualificationModel:id,name',
+                'pipeline:id,integration_id,name,external_id',
                 'metaEvent:id,nombre',
                 'whatsappEvent:id,event_name,description,funnel_usefulness',
                 'googleAdsConversions.customer:id,name,id_Gads',
@@ -47,6 +49,8 @@ class CrmStateWebController extends Controller
             ->when($name, fn ($query) => $query->where('name', 'like', "%{$name}%"))
             ->when($unmanaged !== null && $unmanaged !== '', fn ($query) => $query->where('unmanaged', (bool) $unmanaged))
             ->when($qualificationId, fn ($query) => $query->where('qualification', $qualificationId))
+            ->when($pipelineId === 'none', fn ($query) => $query->whereNull('pipeline_id'))
+            ->when(filled($pipelineId) && $pipelineId !== 'none', fn ($query) => $query->where('pipeline_id', $pipelineId))
             ->when($metaEventId !== null && $metaEventId !== '', function ($query) use ($metaEventId) {
                 $metaEventId === 'none'
                     ? $query->whereNull('meta_event_id')
@@ -90,35 +94,7 @@ class CrmStateWebController extends Controller
 
         $this->attachIntegrationContext($crmstates->getCollection(), $integrations);
 
-        $customers = Customer::orderBy('name')->get(['id', 'name']);
-        $types = Integrationtype::orderBy('name')->get(['id', 'name']);
-        $qualifications = Qualification::orderBy('name')->get(['id', 'name']);
-        $metaEvents = MetaEvent::orderBy('nombre')->get(['id', 'nombre']);
-        $whatsappEvents = WhatsAppEvent::query()
-            ->where('active', true)
-            ->orderBy('sort_order')
-            ->orderBy('event_name')
-            ->get(['id', 'event_name', 'description', 'funnel_usefulness']);
-
-        return view('crm_states.index', compact(
-            'crmstates',
-            'q',
-            'name',
-            'customerId',
-            'typeId',
-            'integrationId',
-            'unmanaged',
-            'qualificationId',
-            'metaEventId',
-            'whatsappEventId',
-            'googleAdsEnabled',
-            'customers',
-            'types',
-            'integrations',
-            'qualifications',
-            'metaEvents',
-            'whatsappEvents'
-        ));
+        return view('crm_states.index', compact('crmstates'));
     }
 
     public function create()
@@ -133,8 +109,9 @@ class CrmStateWebController extends Controller
         $qualifications = Qualification::orderBy('name')->get(['id', 'name']);
         $metaEvents = MetaEvent::orderBy('nombre')->get(['id', 'nombre', 'estados']);
         $whatsappEvents = $this->whatsappEvents();
+        $pipelines = Pipeline::query()->with('integration:id,name')->orderBy('name')->get();
 
-        return view('crm_states.create', compact('crmstate', 'integrations', 'customers', 'qualifications', 'metaEvents', 'whatsappEvents'));
+        return view('crm_states.create', compact('crmstate', 'integrations', 'customers', 'qualifications', 'metaEvents', 'whatsappEvents', 'pipelines'));
     }
 
     public function store(Request $request)
@@ -154,6 +131,12 @@ class CrmStateWebController extends Controller
             'external_id.regex' => 'El ID ingresado solo puede tener letras, numeros, guion (-) y guion bajo (_).',
         ]);
         $this->validateGoogleAdsConversions($validator, $request);
+        $validator->after(function ($validator) use ($request, $integration): void {
+            $pipelineId = $request->input('pipeline_id');
+            if ($pipelineId && (! $integration || ! Pipeline::query()->whereKey($pipelineId)->where('integration_id', $integration->id)->exists())) {
+                $validator->errors()->add('pipeline_id', 'Selecciona un Pipeline de la integración elegida.');
+            }
+        });
         $validator->validate();
 
         $conversionRows = $this->googleAdsConversionRows($request);
@@ -164,6 +147,7 @@ class CrmStateWebController extends Controller
             'name' => $request->string('name'),
             'progress_percentage' => $request->input('progress_percentage'),
             'qualification' => $request->input('qualification'),
+            'pipeline_id' => $request->input('pipeline_id') ?: null,
             'meta_event_id' => $request->input('meta_event_id'),
             'whatsapp_event_id' => $request->input('whatsapp_event_id'),
             'unmanaged' => $request->boolean('unmanaged'),
@@ -186,6 +170,7 @@ class CrmStateWebController extends Controller
     {
         $crmstate->load([
             'qualificationModel:id,name',
+            'pipeline:id,integration_id,name,external_id',
             'metaEvent:id,nombre,estados',
             'whatsappEvent:id,event_name,description,funnel_usefulness',
             'googleAdsConversions.customer:id,name,id_Gads',
@@ -211,6 +196,7 @@ class CrmStateWebController extends Controller
         $qualifications = Qualification::orderBy('name')->get(['id', 'name']);
         $metaEvents = MetaEvent::orderBy('nombre')->get(['id', 'nombre', 'estados']);
         $whatsappEvents = $this->whatsappEvents();
+        $pipelines = Pipeline::query()->with('integration:id,name')->orderBy('name')->get();
 
         return view('crm_states.edit', compact(
             'crmstate',
@@ -220,7 +206,8 @@ class CrmStateWebController extends Controller
             'customers',
             'qualifications',
             'metaEvents',
-            'whatsappEvents'
+            'whatsappEvents',
+            'pipelines'
         ));
     }
 
@@ -228,6 +215,13 @@ class CrmStateWebController extends Controller
     {
         $validator = Validator::make($request->all(), $this->rules());
         $this->validateGoogleAdsConversions($validator, $request);
+        [, , $integration] = $this->resolveCrmStateParts($crmstate);
+        $validator->after(function ($validator) use ($request, $integration): void {
+            $pipelineId = $request->input('pipeline_id');
+            if ($pipelineId && (! $integration || ! Pipeline::query()->whereKey($pipelineId)->where('integration_id', $integration->id)->exists())) {
+                $validator->errors()->add('pipeline_id', 'Selecciona un Pipeline de la integración de este estado.');
+            }
+        });
         $validated = $validator->validate();
 
         $conversionRows = $this->googleAdsConversionRows($request);
@@ -235,6 +229,7 @@ class CrmStateWebController extends Controller
 
         $validated['unmanaged'] = $request->boolean('unmanaged');
         $validated['progress_percentage'] = $request->input('progress_percentage');
+        $validated['pipeline_id'] = $request->input('pipeline_id') ?: null;
         $validated['google_ads_conversion_enabled'] = $request->boolean('google_ads_conversion_enabled');
         $validated['google_ads_conversion_action_id'] = $firstConversion['conversion_action_id'] ?? null;
         $validated['google_ads_conversion_action_name'] = $firstConversion['conversion_action_name'] ?? null;
@@ -270,6 +265,7 @@ class CrmStateWebController extends Controller
             'id' => $creating ? ['required', 'string', 'max:255', Rule::unique('crm_state', 'id')] : null,
             'name' => ['required', 'string', 'max:255'],
             'progress_percentage' => ['nullable', 'numeric', 'min:0'],
+            'pipeline_id' => ['nullable', 'integer', 'exists:pipelines,id'],
             'qualification' => ['required', 'exists:qualification,id'],
             'meta_event_id' => ['nullable', 'exists:meta_events,id'],
             'whatsapp_event_id' => ['nullable', 'exists:whatsapp_events,id'],

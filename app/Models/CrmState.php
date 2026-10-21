@@ -19,6 +19,7 @@ class CrmState extends Model
         'name',
         'progress_percentage',
         'qualification',
+        'pipeline_id',
         'meta_event_id',
         'whatsapp_event_id',
         'unmanaged',
@@ -45,6 +46,11 @@ class CrmState extends Model
     public function qualificationModel()
     {
         return $this->belongsTo(Qualification::class, 'qualification', 'id');
+    }
+
+    public function pipeline(): BelongsTo
+    {
+        return $this->belongsTo(Pipeline::class);
     }
 
     public function metaEvent(): BelongsTo

@@ -48,10 +48,10 @@
                         <x-sort-header :index="2" label="FB Pixel ID" class="w-44" />
                         <x-sort-header :index="3" label="Meta_dataset" class="w-32" />
                         <x-sort-header :index="4" label="Meta_dataset_id" class="w-48" />
-                        <x-sort-header :index="5" label="Meta_dataset_token" class="w-72" />
+                        
                         <x-sort-header :index="6" label="WA Meta_dataset" class="w-36" />
                         <x-sort-header :index="7" label="WA Meta_dataset_id" class="w-52" />
-                        <x-sort-header :index="8" label="WA Meta_dataset_token" class="w-72" />
+                        
                         <x-sort-header :index="9" label="FB Test Event Code" class="w-44" />
                         <x-sort-header :index="10" label="ID Google Ads" class="w-40" />
                         <x-sort-header :index="11" label="Divisa" class="w-24" />
@@ -82,11 +82,7 @@
                                     {{ $customer->Meta_dataset_id ?: '—' }}
                                 </div>
                             </td>
-                            <td class="px-3 py-2">
-                                <div class="text-xs break-all rounded-lg border border-white/10 bg-white/5 px-2 py-1">
-                                    {{ $customer->Meta_dataset_token ?: '—' }}
-                                </div>
-                            </td>
+
                             <td class="px-3 py-2">
                                 <span class="inline-flex px-2 py-1 rounded-lg text-xs border {{ (int) $customer->Meta_whatsapp_dataset === 1 ? 'bg-emerald-500/10 border-emerald-300/20 text-emerald-200' : 'bg-white/10 border-white/10 text-white/70' }}">
                                     {{ (int) $customer->Meta_whatsapp_dataset === 1 ? 'Activo' : 'Inactivo' }}
@@ -97,11 +93,7 @@
                                     {{ $customer->Meta_whatsapp_dataset_id ?: '—' }}
                                 </div>
                             </td>
-                            <td class="px-3 py-2">
-                                <div class="text-xs break-all rounded-lg border border-white/10 bg-white/5 px-2 py-1">
-                                    {{ $customer->Meta_whatsapp_dataset_token ?: '—' }}
-                                </div>
-                            </td>
+
                             <td class="px-3 py-2">{{ $customer->fb_test_event_code ?: '—' }}</td>
                             <td class="px-3 py-2 break-all">{{ $customer->id_Gads ?: '—' }}</td>
                             <td class="px-3 py-2 font-mono">{{ $customer->defaultCurrency?->code ?? 'COP' }}</td>
