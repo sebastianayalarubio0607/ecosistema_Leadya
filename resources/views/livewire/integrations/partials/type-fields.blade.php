@@ -78,13 +78,13 @@
                             <input type="hidden" name="kommo_pipeline_default_pipeline_name" value="{{ $data['kommo_pipeline_default_pipeline_name'] ?? '' }}">
                             <select name="kommo_pipeline_default_pipeline_id"
                                     wire:model="typeData.kommopipeline.kommo_pipeline_default_pipeline_id"
-                                    wire:change="loadDefaultKommoStatuses" class="{{ $inputClass }}">
-                                <option value="">{{ $integrationId ? 'Seleccione...' : 'Guarda URL y token primero' }}</option>
+                                    wire:change="loadDefaultKommoStatuses($event.target.value)" class="{{ $inputClass }}">
+                                <option value="" @selected(($data['kommo_pipeline_default_pipeline_id'] ?? '') === '')>{{ $integrationId ? 'Seleccione...' : 'Guarda URL y token primero' }}</option>
                                 @if(($data['kommo_pipeline_default_pipeline_id'] ?? '') !== '' && !collect($kommoPipelines)->contains('id', (string) $data['kommo_pipeline_default_pipeline_id']))
-                                    <option value="{{ $data['kommo_pipeline_default_pipeline_id'] }}">{{ $data['kommo_pipeline_default_pipeline_name'] ?: $data['kommo_pipeline_default_pipeline_id'] }}</option>
+                                    <option value="{{ $data['kommo_pipeline_default_pipeline_id'] }}" selected>{{ $data['kommo_pipeline_default_pipeline_name'] ?: $data['kommo_pipeline_default_pipeline_id'] }}</option>
                                 @endif
                                 @foreach($kommoPipelines as $pipeline)
-                                    <option value="{{ $pipeline['id'] }}">{{ $pipeline['name'] }}</option>
+                                    <option value="{{ $pipeline['id'] }}" @selected((string) ($data['kommo_pipeline_default_pipeline_id'] ?? '') === (string) $pipeline['id'])>{{ $pipeline['name'] }}</option>
                                 @endforeach
                             </select>
                         </div>
@@ -93,18 +93,19 @@
                             <input type="hidden" name="kommo_pipeline_default_status_name" value="{{ $data['kommo_pipeline_default_status_name'] ?? '' }}">
                             <select name="kommo_pipeline_default_status_id"
                                     wire:model="typeData.kommopipeline.kommo_pipeline_default_status_id"
-                                    wire:change="setDefaultKommoStatusName" class="{{ $inputClass }}">
-                                <option value="">Seleccione un pipeline...</option>
+                                    wire:change="setDefaultKommoStatusName($event.target.value)" class="{{ $inputClass }}">
+                                <option value="" @selected(($data['kommo_pipeline_default_status_id'] ?? '') === '')>Seleccione un pipeline...</option>
                                 @if(($data['kommo_pipeline_default_status_id'] ?? '') !== '' && !collect($defaultKommoStatuses)->contains('id', (string) $data['kommo_pipeline_default_status_id']))
-                                    <option value="{{ $data['kommo_pipeline_default_status_id'] }}">{{ $data['kommo_pipeline_default_status_name'] ?: $data['kommo_pipeline_default_status_id'] }}</option>
+                                    <option value="{{ $data['kommo_pipeline_default_status_id'] }}" selected>{{ $data['kommo_pipeline_default_status_name'] ?: $data['kommo_pipeline_default_status_id'] }}</option>
                                 @endif
                                 @foreach($defaultKommoStatuses as $status)
-                                    <option value="{{ $status['id'] }}">{{ $status['name'] }}</option>
+                                    <option value="{{ $status['id'] }}" @selected((string) ($data['kommo_pipeline_default_status_id'] ?? '') === (string) $status['id'])>{{ $status['name'] }}</option>
                                 @endforeach
                             </select>
                         </div>
                     </div>
                     <div class="border-t border-white/10 pt-5">
+                        <input type="hidden" name="kommo_pipeline_conditions_present" value="1">
                         <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
                             <div>
                                 <h4 class="font-semibold text-white">Condicionalidades</h4>
@@ -130,23 +131,23 @@
                                     <div>
                                         <label class="{{ $labelClass }}">Pipeline</label>
                                         <input type="hidden" name="kommo_pipeline_conditions[{{ $index }}][pipeline_name]" value="{{ $condition['pipeline_name'] ?? '' }}">
-                                        <select name="kommo_pipeline_conditions[{{ $index }}][pipeline_id]" wire:model="kommoConditions.{{ $index }}.pipeline_id" wire:change="loadConditionKommoStatuses({{ $index }})" class="{{ $inputClass }}" required>
+                                        <select name="kommo_pipeline_conditions[{{ $index }}][pipeline_id]" wire:model="kommoConditions.{{ $index }}.pipeline_id" wire:change="loadConditionKommoStatuses({{ $index }}, $event.target.value)" class="{{ $inputClass }}" required>
                                             <option value="">Seleccione...</option>
                                             @if(($condition['pipeline_id'] ?? '') !== '' && !collect($kommoPipelines)->contains('id', (string) $condition['pipeline_id']))
-                                                <option value="{{ $condition['pipeline_id'] }}">{{ $condition['pipeline_name'] ?: $condition['pipeline_id'] }}</option>
+                                                <option value="{{ $condition['pipeline_id'] }}" selected>{{ $condition['pipeline_name'] ?: $condition['pipeline_id'] }}</option>
                                             @endif
-                                            @foreach($kommoPipelines as $pipeline)<option value="{{ $pipeline['id'] }}">{{ $pipeline['name'] }}</option>@endforeach
+                                            @foreach($kommoPipelines as $pipeline)<option value="{{ $pipeline['id'] }}" @selected((string) ($condition['pipeline_id'] ?? '') === (string) $pipeline['id'])>{{ $pipeline['name'] }}</option>@endforeach
                                         </select>
                                     </div>
                                     <div>
                                         <label class="{{ $labelClass }}">Status</label>
                                         <input type="hidden" name="kommo_pipeline_conditions[{{ $index }}][status_name]" value="{{ $condition['status_name'] ?? '' }}">
-                                        <select name="kommo_pipeline_conditions[{{ $index }}][status_id]" wire:model="kommoConditions.{{ $index }}.status_id" wire:change="setConditionKommoStatusName({{ $index }})" class="{{ $inputClass }}" required>
+                                        <select name="kommo_pipeline_conditions[{{ $index }}][status_id]" wire:model="kommoConditions.{{ $index }}.status_id" wire:change="setConditionKommoStatusName({{ $index }}, $event.target.value)" class="{{ $inputClass }}" required>
                                             <option value="">Seleccione...</option>
                                             @if(($condition['status_id'] ?? '') !== '' && !collect($conditionKommoStatuses[$index] ?? [])->contains('id', (string) $condition['status_id']))
-                                                <option value="{{ $condition['status_id'] }}">{{ $condition['status_name'] ?: $condition['status_id'] }}</option>
+                                                <option value="{{ $condition['status_id'] }}" selected>{{ $condition['status_name'] ?: $condition['status_id'] }}</option>
                                             @endif
-                                            @foreach($conditionKommoStatuses[$index] ?? [] as $status)<option value="{{ $status['id'] }}">{{ $status['name'] }}</option>@endforeach
+                                            @foreach($conditionKommoStatuses[$index] ?? [] as $status)<option value="{{ $status['id'] }}" @selected((string) ($condition['status_id'] ?? '') === (string) $status['id'])>{{ $status['name'] }}</option>@endforeach
                                         </select>
                                     </div>
                                     <div>
@@ -279,6 +280,14 @@
             @case('hubspot')
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div class="md:col-span-2"><label class="{{ $labelClass }}">access_token *</label><input name="access_token" type="password" wire:model="typeData.hubspot.access_token" autocomplete="new-password" class="{{ $inputClass }}" placeholder="{{ $accessTokenStored ? 'Valor guardado; deja vacio para conservarlo' : '' }}" @required(!$accessTokenStored)></div>
+                    <div class="md:col-span-2 rounded-xl border border-white/10 bg-slate-900/40 p-4">
+                        <label for="hubspot-return-mode" class="{{ $labelClass }}">Consulta de estados de oportunidades</label>
+                        <select id="hubspot-return-mode" name="hubspot_return_mode" wire:model="typeData.hubspot.hubspot_return_mode" class="{{ $inputClass }} bg-slate-900 text-white [color-scheme:dark]" style="color-scheme: dark">
+                            <option value="webhook" class="bg-slate-900 text-white">Solo webhook</option>
+                            <option value="api" class="bg-slate-900 text-white">API cada 2 horas y webhook</option>
+                        </select>
+                        <p class="mt-2 text-xs text-white/50">En modo API se consultará el estado cada dos horas; los cambios entrantes por webhook seguirán activos.</p>
+                    </div>
                     <div><label class="{{ $labelClass }}">Body contacto *</label><textarea name="body" rows="10" wire:model.blur="typeData.hubspot.body" class="{{ $inputClass }} font-mono text-sm" required></textarea></div>
                     <div><label class="{{ $labelClass }}">Body oportunidad *</label><textarea name="body_oportunidad" rows="10" wire:model.blur="typeData.hubspot.body_oportunidad" class="{{ $inputClass }} font-mono text-sm" required></textarea></div>
                 </div>

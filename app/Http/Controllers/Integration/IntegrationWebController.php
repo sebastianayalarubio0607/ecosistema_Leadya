@@ -295,7 +295,7 @@ class IntegrationWebController extends Controller
             );
     }
 
-    public function syncHubspotDealStages(Integration $integration, HubspotPipelineSyncService $service): RedirectResponse
+    public function syncHubspotDealStages(Request $request, Integration $integration, HubspotPipelineSyncService $service): RedirectResponse
     {
         $integration->loadMissing('integrationtype:id,name');
 
@@ -305,8 +305,12 @@ class IntegrationWebController extends Controller
                 ->withErrors(['sync' => 'Esta integracion no permite sincronizar etapas de HubSpot.']);
         }
 
+        $pipelineId = (string) $request->validate([
+            'pipeline_id' => ['required', 'string', 'max:255'],
+        ])['pipeline_id'];
+
         try {
-            $result = $service->syncCrmStates($integration);
+            $result = $service->syncCrmStates($integration, $pipelineId);
         } catch (\Throwable $exception) {
             Log::error('HUBSPOT CRM STATES SYNC FAILED', [
                 'integration_id' => $integration->id,
@@ -320,7 +324,7 @@ class IntegrationWebController extends Controller
 
         return redirect()
             ->route('integrations.show', $integration)
-            ->with('success', "Etapas de HubSpot sincronizadas. Estados creados: {$result['created']}. Estados actualizados: {$result['updated']}.");
+            ->with('success', "Etapas del pipeline {$pipelineId} sincronizadas. Estados creados: {$result['created']}. Estados actualizados: {$result['updated']}.");
     }
 
     public function syncGohighlevelOpportunityStages(Request $request, Integration $integration, GohighlevelPipelineSyncService $service): RedirectResponse
@@ -387,6 +391,8 @@ class IntegrationWebController extends Controller
             'tokent' => ['nullable', 'string'],
             'location_id' => ['nullable', 'string', 'max:100', 'regex:/^[A-Za-z0-9_-]+$/'],
             'gohighlevel_return_mode' => ['nullable', 'string', Rule::in(['webhook', 'api'])],
+            'hubspot_return_mode' => ['nullable', 'string', Rule::in(['webhook', 'api'])],
+            'hubspot_pipeline_id' => ['nullable', 'string', 'max:255'],
             'url_credenciales' => ['nullable', 'url', 'max:255'],
             'username' => ['nullable', 'string', 'max:255'],
             'password' => ['nullable', 'string'],
@@ -403,6 +409,7 @@ class IntegrationWebController extends Controller
             'kommo_pipeline_default_status_id' => ['nullable', 'string', 'max:255', 'required_with:kommo_pipeline_default_pipeline_id'],
             'kommo_pipeline_default_status_name' => ['nullable', 'string', 'max:255'],
             'kommo_pipeline_conditions' => ['nullable', 'array'],
+            'kommo_pipeline_conditions_present' => ['nullable', 'boolean'],
             'kommo_pipeline_conditions.*.lead_field' => ['required_with:kommo_pipeline_conditions', 'string', Rule::in($this->leadFields())],
             'kommo_pipeline_conditions.*.expected_value' => ['required_with:kommo_pipeline_conditions', 'string', 'max:255'],
             'kommo_pipeline_conditions.*.pipeline_id' => ['required_with:kommo_pipeline_conditions', 'string', 'max:255'],
@@ -676,6 +683,10 @@ class IntegrationWebController extends Controller
             $validated = $this->clearFreshworksFields($validated);
             $validated = $this->clearSalesforceCredentialFields($validated);
             $validated = $this->validateHubspotPayload($validated);
+            $validated['hubspot_return_mode'] = in_array($validated['hubspot_return_mode'] ?? null, ['api', 'webhook'], true)
+                ? $validated['hubspot_return_mode']
+                : ($existingIntegration?->hubspot_return_mode ?: 'webhook');
+            $validated['hubspot_pipeline_id'] = trim((string) ($validated['hubspot_pipeline_id'] ?? $existingIntegration?->hubspot_pipeline_id)) ?: null;
             $validated = $this->validateCrmIdPrefixPayload($validated, 'HubSpot');
         }
 
@@ -722,7 +733,12 @@ class IntegrationWebController extends Controller
             unset($validated['omit_empty_payload_fields']);
         }
 
-        unset($validated['kommo_pipeline_conditions']);
+        if ($typeName !== 'hubspot') {
+            $validated['hubspot_return_mode'] = 'webhook';
+            $validated['hubspot_pipeline_id'] = null;
+        }
+
+        unset($validated['kommo_pipeline_conditions'], $validated['kommo_pipeline_conditions_present']);
         unset($validated['atom_webhooks'], $validated['atom_conditions'], $validated['lety_webhooks'], $validated['lety_conditions'], $validated['freshworks_variable_mappings'], $validated['integration_variable_mappings'], $validated['integration_variables'], $validated['integration_variable_conditions']);
 
         return $validated;
@@ -1738,6 +1754,14 @@ class IntegrationWebController extends Controller
         if ($typeName !== 'kommopipeline') {
             $integration->kommoPipelineConditions()->delete();
 
+            return;
+        }
+
+        // A missing condition list means the caller did not submit this section.
+        // Keep the stored rules in that case; the hidden marker lets the current
+        // form explicitly submit an empty list when the user removes every row.
+        if (! array_key_exists('kommo_pipeline_conditions', $validated)
+            && ! array_key_exists('kommo_pipeline_conditions_present', $validated)) {
             return;
         }
 

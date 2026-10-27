@@ -127,7 +127,7 @@ new class extends Component {
         }
 
         $fields = [
-            'url', 'tokent', 'location_id', 'gohighlevel_return_mode', 'body', 'body_oportunidad', 'omit_empty_payload_fields', 'crm_Id_phone', 'crm_Id_email',
+            'url', 'tokent', 'location_id', 'gohighlevel_return_mode', 'hubspot_return_mode', 'body', 'body_oportunidad', 'omit_empty_payload_fields', 'crm_Id_phone', 'crm_Id_email',
             'crm_Id_service', 'crm_Id_fuente', 'client_id', 'client_secret', 'code',
             'access_token', 'refresh_token', 'territory_id', 'owner_id', 'city',
             'lead_source_id', 'custom_field', 'url_credenciales', 'username', 'password',
@@ -142,6 +142,9 @@ new class extends Component {
                 ? old($field, $this->isEdit ? (bool) ($integration->{$storedField} ?? false) : true)
                 : ($isSecret ? '' : ($field === 'url' ? $baseUrl : ($integration->{$storedField} ?? '')));
             if ($field === 'gohighlevel_return_mode') {
+                $value = old($field, $this->isEdit ? (string) ($integration->{$storedField} ?? 'webhook') : 'webhook');
+            }
+            if ($field === 'hubspot_return_mode') {
                 $value = old($field, $this->isEdit ? (string) ($integration->{$storedField} ?? 'webhook') : 'webhook');
             }
             $this->typeData[$this->typeKey][$field] = (string) old($field, $value);
@@ -293,29 +296,35 @@ new class extends Component {
         }
     }
 
-    public function loadDefaultKommoStatuses(): void
+    public function loadDefaultKommoStatuses(?string $selectedPipelineId = null): void
     {
-        $pipelineId = $this->typeData['kommopipeline']['kommo_pipeline_default_pipeline_id'] ?? '';
+        $pipelineId = $selectedPipelineId ?? ($this->typeData['kommopipeline']['kommo_pipeline_default_pipeline_id'] ?? '');
+        $this->typeData['kommopipeline']['kommo_pipeline_default_pipeline_id'] = (string) $pipelineId;
         $this->typeData['kommopipeline']['kommo_pipeline_default_pipeline_name'] = $this->labelFor($this->kommoPipelines, $pipelineId);
         $this->defaultKommoStatuses = $this->loadKommoStatuses($pipelineId);
     }
 
-    public function loadConditionKommoStatuses(int $index): void
+    public function loadConditionKommoStatuses(int $index, ?string $selectedPipelineId = null): void
     {
-        $pipelineId = $this->kommoConditions[$index]['pipeline_id'] ?? '';
+        if (! isset($this->kommoConditions[$index])) return;
+        $pipelineId = $selectedPipelineId ?? ($this->kommoConditions[$index]['pipeline_id'] ?? '');
+        $this->kommoConditions[$index]['pipeline_id'] = (string) $pipelineId;
         $this->kommoConditions[$index]['pipeline_name'] = $this->labelFor($this->kommoPipelines, $pipelineId);
         $this->conditionKommoStatuses[$index] = $this->loadKommoStatuses($pipelineId);
     }
 
-    public function setDefaultKommoStatusName(): void
+    public function setDefaultKommoStatusName(?string $selectedStatusId = null): void
     {
-        $id = $this->typeData['kommopipeline']['kommo_pipeline_default_status_id'] ?? '';
+        $id = $selectedStatusId ?? ($this->typeData['kommopipeline']['kommo_pipeline_default_status_id'] ?? '');
+        $this->typeData['kommopipeline']['kommo_pipeline_default_status_id'] = (string) $id;
         $this->typeData['kommopipeline']['kommo_pipeline_default_status_name'] = $this->labelFor($this->defaultKommoStatuses, $id);
     }
 
-    public function setConditionKommoStatusName(int $index): void
+    public function setConditionKommoStatusName(int $index, ?string $selectedStatusId = null): void
     {
-        $id = $this->kommoConditions[$index]['status_id'] ?? '';
+        if (! isset($this->kommoConditions[$index])) return;
+        $id = $selectedStatusId ?? ($this->kommoConditions[$index]['status_id'] ?? '');
+        $this->kommoConditions[$index]['status_id'] = (string) $id;
         $this->kommoConditions[$index]['status_name'] = $this->labelFor($this->conditionKommoStatuses[$index] ?? [], $id);
     }
 

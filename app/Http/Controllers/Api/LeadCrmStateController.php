@@ -8,6 +8,8 @@ use App\Http\Services\Integration\FreshworksOpportunityIntegrationService;
 use App\Http\Services\Lead\LeadCrmStateProgressionService;
 use App\Http\Services\Lead\LeadFunnelHistoryService;
 use App\Models\CrmState;
+use App\Models\HubspotOpportunitySyncLog;
+use App\Models\HubspotOpportunitySyncRun;
 use App\Models\Integration;
 use App\Models\Lead;
 use Illuminate\Http\Request;
@@ -265,6 +267,15 @@ class LeadCrmStateController extends Controller
         array &$notFound
     ): void {
         $events = $data['events'] ?? $data;
+        $run = HubspotOpportunitySyncRun::query()->create([
+            'integration_id' => $integration->id,
+            'trigger_source' => 'webhook',
+            'status' => 'running',
+            'started_at' => now(),
+        ]);
+        $opportunitiesChecked = 0;
+        $leadsUpdated = 0;
+        $leadsNotFound = 0;
 
         foreach (is_array($events) ? $events : [] as $event) {
             if (! is_array($event) || strtolower((string) ($event['propertyName'] ?? '')) !== 'dealstage') {
@@ -278,17 +289,43 @@ class LeadCrmStateController extends Controller
                 continue;
             }
 
+            $opportunitiesChecked++;
+
             $crmOpportunityId = $crmIdPrefix.'-'.$dealId;
             $crmState = $crmIdPrefix.'-'.$stageId;
 
-            if (! CrmState::query()->whereKey($crmState)->exists()) {
+            $state = CrmState::query()->with('pipeline')->whereKey($crmState)->first();
+            if (! $state) {
                 Log::warning('HubSpot webhook con etapa no sincronizada', [
                     'integration_id' => $integration->id,
                     'crm_id_oportunidad' => $crmOpportunityId,
                     'crm_state' => $crmState,
                 ]);
                 $notFound[] = $crmState;
+                $leadsNotFound++;
+                HubspotOpportunitySyncLog::query()->create([
+                    'sync_run_id' => $run->id,
+                    'integration_id' => $integration->id,
+                    'opportunity_id' => $dealId,
+                    'stage_id' => $stageId,
+                    'state_status' => 'not_found',
+                    'message' => 'No existe un crm_state sincronizado para la etapa recibida.',
+                ]);
 
+                continue;
+            }
+
+            if (filled($integration->hubspot_pipeline_id)
+                && (string) $state->pipeline?->external_id !== (string) $integration->hubspot_pipeline_id) {
+                HubspotOpportunitySyncLog::query()->create([
+                    'sync_run_id' => $run->id,
+                    'integration_id' => $integration->id,
+                    'opportunity_id' => $dealId,
+                    'pipeline_id' => (string) ($state->pipeline?->external_id ?? ''),
+                    'stage_id' => $stageId,
+                    'state_status' => 'skipped',
+                    'message' => 'El webhook corresponde a un pipeline distinto del seleccionado para esta integración.',
+                ]);
                 continue;
             }
 
@@ -296,14 +333,49 @@ class LeadCrmStateController extends Controller
 
             if ($leads->isEmpty()) {
                 $notFound[] = $crmOpportunityId;
+                $leadsNotFound++;
+                HubspotOpportunitySyncLog::query()->create([
+                    'sync_run_id' => $run->id,
+                    'integration_id' => $integration->id,
+                    'opportunity_id' => $dealId,
+                    'stage_id' => $stageId,
+                    'state_status' => 'not_found',
+                    'message' => 'No se encontró un lead asociado al ID de oportunidad.',
+                ]);
 
                 continue;
             }
 
             foreach ($leads as $lead) {
-                $this->processLeadStateChangeForLead($lead, $crmState, $historyService, $updated);
+                $previousState = (string) $lead->crm_state;
+                $stateChanged = app(LeadCrmStateProgressionService::class)->transition($lead, $crmState, null, true);
+                if ($stateChanged) {
+                    $updated++;
+                    $leadsUpdated++;
+                }
+
+                HubspotOpportunitySyncLog::query()->create([
+                    'sync_run_id' => $run->id,
+                    'integration_id' => $integration->id,
+                    'lead_id' => $lead->id,
+                    'opportunity_id' => $dealId,
+                    'previous_crm_state' => $previousState !== '' ? $previousState : null,
+                    'new_crm_state' => $crmState,
+                    'pipeline_id' => $state->pipeline?->external_id,
+                    'stage_id' => $stageId,
+                    'state_status' => $stateChanged ? 'updated' : 'unchanged',
+                    'message' => $stateChanged ? null : 'El estado local es igual o tiene mayor avance.',
+                ]);
             }
         }
+
+        $run->forceFill([
+            'status' => 'completed',
+            'opportunities_checked' => $opportunitiesChecked,
+            'leads_updated' => $leadsUpdated,
+            'leads_not_found' => $leadsNotFound,
+            'completed_at' => now(),
+        ])->save();
     }
 
     private function processKommoLeadUpdates(

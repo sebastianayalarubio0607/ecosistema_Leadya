@@ -18,7 +18,12 @@ class LeadCrmStateProgressionService
 
     public function __construct(private readonly LeadFunnelHistoryService $historyService) {}
 
-    public function transition(Lead $lead, string $newCrmState, ?int $gohighlevelSyncLogId = null): bool
+    public function transition(
+        Lead $lead,
+        string $newCrmState,
+        ?int $gohighlevelSyncLogId = null,
+        bool $onlyAdvance = false
+    ): bool
     {
         $newCrmState = trim($newCrmState);
         if ($newCrmState === '') {
@@ -27,7 +32,7 @@ class LeadCrmStateProgressionService
 
         $conversionJobs = [];
         $channels = [];
-        $leadChanged = DB::transaction(function () use ($lead, $newCrmState, $gohighlevelSyncLogId, &$conversionJobs, &$channels): bool {
+        $leadChanged = DB::transaction(function () use ($lead, $newCrmState, $gohighlevelSyncLogId, $onlyAdvance, &$conversionJobs, &$channels): bool {
             $lockedLead = Lead::query()->lockForUpdate()->find($lead->id);
             if (! $lockedLead || (string) $lockedLead->crm_state === $newCrmState) {
                 return false;
@@ -36,6 +41,10 @@ class LeadCrmStateProgressionService
             $previousCrmState = (string) ($lockedLead->crm_state ?? '');
             $targetState = CrmState::query()->find($newCrmState);
             if (! $targetState) {
+                return false;
+            }
+
+            if ($onlyAdvance && ! $this->isForwardProgression($lockedLead, $previousCrmState, $targetState)) {
                 return false;
             }
 
@@ -79,6 +88,35 @@ class LeadCrmStateProgressionService
         }
 
         return true;
+    }
+
+    private function isForwardProgression(Lead $lead, string $previousCrmState, CrmState $targetState): bool
+    {
+        $targetProgress = $targetState->progress_percentage;
+        if ($targetProgress === null) {
+            return false;
+        }
+
+        $customerId = (int) $lead->customer_id;
+        $targetIntegration = $this->resolveStateIntegration($targetState, $customerId);
+        if (! $targetIntegration || ! $this->stateBelongsToIntegration($targetState, $targetIntegration, $customerId)) {
+            return false;
+        }
+
+        $previousCrmState = trim($previousCrmState);
+        if ($previousCrmState === '') {
+            return (float) $targetProgress > 0;
+        }
+
+        $previousState = CrmState::query()->find($previousCrmState);
+
+        return $previousState !== null
+            && $previousState->pipeline_id !== null
+            && $targetState->pipeline_id !== null
+            && (int) $previousState->pipeline_id === (int) $targetState->pipeline_id
+            && $previousState->progress_percentage !== null
+            && $this->stateBelongsToIntegration($previousState, $targetIntegration, $customerId)
+            && (float) $targetProgress > (float) $previousState->progress_percentage;
     }
 
     private function statesToApply(Lead $lead, string $previousCrmState, CrmState $targetState): array

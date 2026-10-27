@@ -29,6 +29,8 @@ class Integration extends Model
         'tokent',
         'location_id',
         'gohighlevel_return_mode',
+        'hubspot_return_mode',
+        'hubspot_pipeline_id',
         'status',
         'priority',
         'crm_Id_phone',
@@ -88,6 +90,11 @@ class Integration extends Model
     public function gohighlevelOpportunitySyncRuns(): HasMany
     {
         return $this->hasMany(GohighlevelOpportunitySyncRun::class);
+    }
+
+    public function hubspotOpportunitySyncRuns(): HasMany
+    {
+        return $this->hasMany(HubspotOpportunitySyncRun::class);
     }
 
     public function pipelines(): HasMany

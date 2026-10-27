@@ -13,6 +13,8 @@ use App\Jobs\SyncMetaAssetStatusesJob;
 use App\Jobs\SyncMetaFormsJob;
 use App\Jobs\SyncMetaLeadsJob;
 use App\Jobs\QueueGohighlevelOpportunitySyncRunsJob;
+use App\Jobs\QueueHubspotOpportunitySyncRunsJob;
+use App\Jobs\PruneHubspotOpportunitySyncLogsJob;
 use App\Jobs\SyncMetaPagesJob;
 use Illuminate\Support\Facades\Schedule;
 use Illuminate\Foundation\Inspiring;
@@ -108,6 +110,16 @@ Schedule::job(new SyncMetaLeadsJob())
 
 Schedule::job(new QueueGohighlevelOpportunitySyncRunsJob('scheduled'))
     ->everyTwoHours()
+    ->timezone('America/Bogota')
+    ->withoutOverlapping();
+
+Schedule::job(new QueueHubspotOpportunitySyncRunsJob('scheduled'))
+    ->everyTwoHours()
+    ->timezone('America/Bogota')
+    ->withoutOverlapping();
+
+Schedule::job(new PruneHubspotOpportunitySyncLogsJob())
+    ->dailyAt('02:45')
     ->timezone('America/Bogota')
     ->withoutOverlapping();
 

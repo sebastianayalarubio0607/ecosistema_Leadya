@@ -50,15 +50,6 @@
         </form>
     @endif
 
-    @if($canSyncHubspotDealStages)
-        <form method="POST" action="{{ route('integrations.hubspot.sync-deal-stages', $integration) }}">
-            @csrf
-            <button class="px-4 py-2 rounded-xl bg-indigo-500/30 hover:bg-indigo-500/40 text-white border border-white/10" type="submit">
-                Sincronizar etapas HubSpot
-            </button>
-        </form>
-    @endif
-
     @if(filled($integration->urldestino ?? null))
         <a href="{{ $integration->urldestino }}"
            target="_blank"
@@ -135,6 +126,18 @@
                     <livewire:gohighlevel-opportunity-sync-panel
                         :integration-id="$integration->id"
                         :key="'gohighlevel-sync-panel-'.$integration->id"
+                    />
+                @endif
+
+                @if($canSyncHubspotDealStages)
+                    <livewire:hubspot-pipeline-catalog
+                        :integration-id="$integration->id"
+                        :sync-url="route('integrations.hubspot.sync-deal-stages', $integration)"
+                        :key="'hubspot-pipeline-catalog-'.$integration->id"
+                    />
+                    <livewire:hubspot-opportunity-sync-panel
+                        :integration-id="$integration->id"
+                        :key="'hubspot-sync-panel-'.$integration->id"
                     />
                 @endif
 
