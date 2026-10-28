@@ -46,6 +46,9 @@ class LeadIntegrationContextService
             'platform_name',
             'platform_relation',
             'attribution_relation',
+            'lead_created_at_iso',
+            'lead_updated_at_iso',
+            'current_datetime_iso',
         ];
     }
 
@@ -56,6 +59,10 @@ class LeadIntegrationContextService
 
     public function value(Lead $lead, string $name): mixed
     {
+        if (trim($name) === 'current_datetime_iso') {
+            return $this->iso8601(now());
+        }
+
         return $this->context($lead)[$name] ?? '';
     }
 
@@ -106,11 +113,23 @@ class LeadIntegrationContextService
                 'source' => $source,
                 'platform' => $platform,
             ],
+            'lead_created_at_iso' => $this->iso8601($lead->created_at),
+            'lead_updated_at_iso' => $this->iso8601($lead->updated_at),
+            'current_datetime_iso' => $this->iso8601(now()),
         ];
 
         $lead->setRelation(self::RELATION_CACHE_KEY, $context);
 
         return $context;
+    }
+
+    private function iso8601($date): string
+    {
+        if (! $date) {
+            return '';
+        }
+
+        return $date->copy()->setTimezone(config('app.timezone', 'America/Bogota'))->format('Y-m-d\\TH:i:sP');
     }
 
     /**

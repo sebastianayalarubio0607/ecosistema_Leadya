@@ -23,6 +23,9 @@
                 'ad_group_relation' => 'JSON con la relación del grupo de anuncios.',
                 'ad_relation' => 'JSON con la relación del anuncio.',
                 'attribution_relation' => 'JSON completo con campaña, origen, fuente y plataforma. origin_relation incluye sus relaciones source y platform.',
+                'lead_created_at_iso' => 'Fecha de creación del lead en formato ISO 8601 con zona horaria.',
+                'lead_updated_at_iso' => 'Fecha de última actualización del lead en formato ISO 8601 con zona horaria.',
+                'current_datetime_iso' => 'Fecha y hora del envío en formato ISO 8601 con zona horaria.',
             ] as $name => $description)
                 <div class="rounded-lg border border-sky-200/10 bg-slate-950/25 p-2">
                     <code class="font-mono text-xs text-sky-200">&#123;&#123;{{ $name }}&#125;&#125;</code>

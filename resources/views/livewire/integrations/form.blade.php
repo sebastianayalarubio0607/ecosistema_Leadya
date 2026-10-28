@@ -365,9 +365,9 @@ new class extends Component {
     $inputClass = 'w-full rounded-xl border border-white/10 bg-slate-900/60 px-3 py-2.5 text-white placeholder-white/40 shadow-sm shadow-black/10 transition focus:border-indigo-400 focus:ring-2 focus:ring-indigo-400/30';
     $labelClass = 'mb-1.5 block text-sm font-medium text-white/75';
     $typeChanged = $isEdit && (int) $form['integrationtype_id'] !== (int) $originalTypeId;
-    $supportsPrefix = in_array($typeKey, ['kommo', 'kommopipeline', 'freshworks', 'freshworks_oportunidad', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad'], true);
-    $supportsVariables = in_array($typeKey, ['kommopipeline', 'atom', 'zoho', 'freshworks', 'freshworks_oportunidad', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'], true);
-    $supportsMappings = in_array($typeKey, ['atom', 'zoho', 'freshworks_oportunidad', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'], true);
+    $supportsPrefix = in_array($typeKey, ['kommo', 'kommopipeline', 'freshworks', 'freshworks_oportunidad', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'markix'], true);
+    $supportsVariables = in_array($typeKey, ['kommopipeline', 'atom', 'zoho', 'freshworks', 'freshworks_oportunidad', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion', 'markix'], true);
+    $supportsMappings = in_array($typeKey, ['atom', 'zoho', 'freshworks_oportunidad', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion', 'markix'], true);
 @endphp
 
 <div data-integration-form-version="2026-09-11-livewire" class="rounded-2xl border border-white/10 bg-zinc-950/25 p-5 text-white/80 shadow-xl shadow-black/10 backdrop-blur sm:p-6">

@@ -33,6 +33,7 @@ class IntegrationService
     private $HubspotIntegrationService;
     private $GohighlevelService;
     private $ZapnitoInvitationIntegrationService;
+    private $MarkixIntegrationService;
 
     public function __construct(
         GoogleSheetsIntegrationService $GooglesheetsIntegrationService,
@@ -46,7 +47,8 @@ class IntegrationService
         MondayIntegrationService $MondayIntegrationService,
         HubspotIntegrationService $HubspotIntegrationService,
         GohighlevelService $GohighlevelService,
-        ZapnitoInvitationIntegrationService $ZapnitoInvitationIntegrationService
+        ZapnitoInvitationIntegrationService $ZapnitoInvitationIntegrationService,
+        MarkixIntegrationService $MarkixIntegrationService
     ) {
         $this->GooglesheetsIntegrationService = $GooglesheetsIntegrationService;
         $this->KommoIntegrationService = $KommoIntegrationService;
@@ -60,6 +62,7 @@ class IntegrationService
         $this->HubspotIntegrationService = $HubspotIntegrationService;
         $this->GohighlevelService = $GohighlevelService;
         $this->ZapnitoInvitationIntegrationService = $ZapnitoInvitationIntegrationService;
+        $this->MarkixIntegrationService = $MarkixIntegrationService;
     }
 
     public function getActiveIntegrations($customer_id)
@@ -110,6 +113,7 @@ class IntegrationService
                 'gohighlevel' => fn() => $this->GohighlevelService->sendToGohighlevel($lead, $integration),
                 'gohighlevel_oportunidad' => fn() => $this->GohighlevelService->sendToGohighlevelOportunidad($lead, $integration),
                 'zapnito_invitacion' => fn() => $this->ZapnitoInvitationIntegrationService->sendToZapnitoInvitation($lead, $integration),
+                'markix' => fn() => $this->MarkixIntegrationService->sendToMarkix($lead, $integration),
             ];
 
             $serviceMap = [
@@ -126,6 +130,7 @@ class IntegrationService
                 'gohighlevel' => $this->GohighlevelService::class,
                 'gohighlevel_oportunidad' => $this->GohighlevelService::class,
                 'zapnito_invitacion' => $this->ZapnitoInvitationIntegrationService::class,
+                'markix' => $this->MarkixIntegrationService::class,
             ];
 
             $handler = $handlers[$type] ?? null;

@@ -27,11 +27,12 @@ class FreshworksOpportunityAwareIntegrationService extends IntegrationService
         HubspotIntegrationService $hubspot,
         GohighlevelService $gohighlevel,
         ZapnitoInvitationIntegrationService $zapnito,
+        MarkixIntegrationService $markix,
         private readonly FreshworksOpportunityIntegrationService $freshworksOpportunity,
     ) {
         parent::__construct(
             $googleSheets, $kommo, $kommoPipeline, $atom, $lety, $zoho, $freshworks,
-            $salesforce, $monday, $hubspot, $gohighlevel, $zapnito
+            $salesforce, $monday, $hubspot, $gohighlevel, $zapnito, $markix
         );
     }
 

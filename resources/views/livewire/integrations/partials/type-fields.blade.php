@@ -18,12 +18,12 @@
         @unless(in_array($typeKey, ['atom', 'lety'], true))
             <div>
                 <label class="{{ $labelClass }}">
-                    {{ $typeKey === 'hubspot' ? 'URL base HubSpot' : ($typeKey === 'freshworks_oportunidad' ? 'URL principal Freshworks' : ($typeKey === 'zapnito_invitacion' ? 'URL base Zapnito' : 'URL')) }}
+                    {{ $typeKey === 'markix' ? 'URL del endpoint Markix' : ($typeKey === 'hubspot' ? 'URL base HubSpot' : ($typeKey === 'freshworks_oportunidad' ? 'URL principal Freshworks' : ($typeKey === 'zapnito_invitacion' ? 'URL base Zapnito' : 'URL'))) }}
                     {{ in_array($typeKey, ['gohighlevel', 'gohighlevel_oportunidad'], true) ? '' : '*' }}
                 </label>
                 <input name="url" type="url" wire:model.blur="typeData.{{ $typeKey }}.url"
                        class="{{ $inputClass }}"
-                       placeholder="{{ $typeKey === 'hubspot' ? 'https://api.hubapi.com' : ($typeKey === 'zapnito_invitacion' ? 'https://comunidad.flar.com' : 'https://...') }}"
+                       placeholder="{{ $typeKey === 'markix' ? 'https://leads.markix.ai/v1/leads/...' : ($typeKey === 'hubspot' ? 'https://api.hubapi.com' : ($typeKey === 'zapnito_invitacion' ? 'https://comunidad.flar.com' : 'https://...')) }}"
                        @required(!in_array($typeKey, ['gohighlevel', 'gohighlevel_oportunidad'], true))>
                 @error('url') <p class="mt-1 text-sm text-rose-300">{{ $message }}</p> @enderror
             </div>
@@ -221,6 +221,13 @@
                 <div class="space-y-4">
                     <div><label class="{{ $labelClass }}">Token Zapnito *</label><input name="tokent" type="password" wire:model="typeData.zapnito_invitacion.tokent" autocomplete="new-password" class="{{ $inputClass }}" placeholder="{{ $tokenStored ? 'Token guardado; deja vacio para conservarlo' : '' }}" @required(!$tokenStored)></div>
                     <div><label class="{{ $labelClass }}">Body JSON invitation *</label><textarea name="body" rows="12" wire:model.blur="typeData.zapnito_invitacion.body" class="{{ $inputClass }} font-mono text-sm" required></textarea></div>
+                </div>
+                @break
+
+            @case('markix')
+                <div class="space-y-4 rounded-2xl border border-white/10 bg-white/5 p-5 text-white/80">
+                    <div class="rounded-xl border border-white/10 bg-slate-900/40 p-4"><label class="{{ $labelClass }}">Token Bearer *</label><input name="tokent" type="password" wire:model="typeData.markix.tokent" autocomplete="new-password" class="{{ $inputClass }}" placeholder="{{ $tokenStored ? 'Token guardado; deja vacío para conservarlo' : 'Token de Markix' }}" @required(!$tokenStored)></div>
+                    <div class="rounded-xl border border-white/10 bg-slate-900/40 p-4"><label class="{{ $labelClass }}">Body JSON *</label><textarea name="body" rows="12" wire:model.blur="typeData.markix.body" class="{{ $inputClass }} min-h-56 font-mono text-sm leading-6" required placeholder='{"lead_id":"@{{lead->id}}","fecha_captura":"@{{current_datetime_iso}}"}'></textarea><p class="mt-2 text-xs text-white/50">Se envía como POST con Authorization: Bearer. El markix_id de la respuesta se guarda en el ID CRM del lead.</p></div>
                 </div>
                 @break
 

@@ -23,9 +23,9 @@ class IntegrationWebController extends Controller
 {
     private const DEFAULT_GOHIGHLEVEL_URL = 'https://services.leadconnectorhq.com/contacts/upsert';
 
-    private const VARIABLE_MAPPING_INTEGRATION_TYPES = ['atom', 'zoho', 'freshworks_oportunidad', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'];
+    private const VARIABLE_MAPPING_INTEGRATION_TYPES = ['atom', 'zoho', 'freshworks_oportunidad', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion', 'markix'];
 
-    private const CUSTOM_VARIABLE_INTEGRATION_TYPES = ['kommopipeline', 'atom', 'zoho', 'freshworks', 'freshworks_oportunidad', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion'];
+    private const CUSTOM_VARIABLE_INTEGRATION_TYPES = ['kommopipeline', 'atom', 'zoho', 'freshworks', 'freshworks_oportunidad', 'salesforce', 'monday', 'lety', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'zapnito_invitacion', 'markix'];
 
     private const CUSTOM_VARIABLE_TYPES = ['text', 'number', 'boolean', 'binary', 'url', 'json', 'any'];
 
@@ -500,6 +500,11 @@ class IntegrationWebController extends Controller
             $rules['body'] = ['required', 'string'];
         }
 
+        if ($typeName === 'markix') {
+            $rules['tokent'] = $this->sensitiveValueRule($updating, $integration, $typeName, 'tokent');
+            $rules['body'] = ['required', 'string'];
+        }
+
         if ($typeName === 'salesforce') {
             $rules['url_credenciales'] = ['required', 'url', 'max:255'];
             $rules['username'] = ['required', 'string', 'max:255'];
@@ -648,6 +653,16 @@ class IntegrationWebController extends Controller
             $validated = $this->validateCrmIdPrefixPayload($validated, 'Freshworks-Oportunidad');
         }
 
+        if ($typeName === 'markix') {
+            $validated = $this->clearKommoFields($validated);
+            $validated = $this->clearZohoFieldsPreservingToken($validated);
+            $validated = $this->clearFreshworksFields($validated);
+            $validated = $this->clearSalesforceCredentialFields($validated);
+            $validated = $this->clearHubspotFields($validated);
+            $validated = $this->validateMarkixPayload($validated);
+            $validated = $this->validateCrmIdPrefixPayload($validated, 'Markix');
+        }
+
         if ($typeName === 'zapnito_invitacion') {
             $validated = $this->clearKommoFields($validated);
             $validated = $this->clearZohoFieldsPreservingToken($validated);
@@ -718,7 +733,7 @@ class IntegrationWebController extends Controller
             $validated = $this->validateCrmIdPrefixPayload($validated, 'GoHighLevel');
         }
 
-        if (! in_array($typeName, ['google_sheets', 'kommo', 'kommopipeline', 'atom', 'lety', 'zoho', 'freshworks', 'freshworks_oportunidad', 'zapnito_invitacion', 'salesforce', 'monday', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad'], true)) {
+        if (! in_array($typeName, ['google_sheets', 'kommo', 'kommopipeline', 'atom', 'lety', 'zoho', 'freshworks', 'freshworks_oportunidad', 'zapnito_invitacion', 'salesforce', 'monday', 'hubspot', 'gohighlevel', 'gohighlevel_oportunidad', 'markix'], true)) {
             $validated = $this->clearHubspotFields($validated);
             $validated = $this->clearCrmIdPrefixFields($validated);
         }
@@ -882,6 +897,34 @@ class IntegrationWebController extends Controller
             if (filled($payload[$field] ?? null) && ! $this->isValidFreshworksOpportunityTemplate((string) $payload[$field], $field === 'body_oportunidad', $customVariables)) {
                 $messages[$field] = "El body JSON de {$label} debe ser un objeto válido y solo acepta {{lead->campo}}, {{lead.campo}}, variables configuradas".($field === 'body_oportunidad' ? ' o {{contactId}}.' : '.');
             }
+        }
+
+        if ($messages !== []) {
+            throw ValidationException::withMessages($messages);
+        }
+
+        return $payload;
+    }
+
+    private function validateMarkixPayload(array $payload): array
+    {
+        $messages = [];
+        foreach (['url' => 'URL del endpoint', 'tokent' => 'token Bearer', 'body' => 'Body JSON'] as $field => $label) {
+            if (blank($payload[$field] ?? null)) {
+                $messages[$field] = "Para Markix el campo {$label} es obligatorio.";
+            }
+        }
+
+        $url = trim((string) ($payload['url'] ?? ''));
+        $parts = parse_url($url);
+        if (($parts['scheme'] ?? null) !== 'https' || empty($parts['host']) || isset($parts['user']) || isset($parts['pass'])) {
+            $messages['url'] = 'La URL de Markix debe ser un endpoint HTTPS válido.';
+        }
+
+        $customVariables = $this->customVariableNamesFromPayload($payload);
+        $attributionVariables = LeadIntegrationContextService::variableNames();
+        if (filled($payload['body'] ?? null) && ! $this->isValidGohighlevelJsonTemplate((string) $payload['body'], $attributionVariables, $customVariables)) {
+            $messages['body'] = 'El Body JSON de Markix debe ser un objeto válido y solo aceptar campos del lead, variables de atribución o variables configuradas.';
         }
 
         if ($messages !== []) {
